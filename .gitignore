@@ -1,0 +1,8 @@
+@"
+.venv/
+.env
+__pycache__/
+*.pyc
+"@ | Set-Content .gitignoreoauth_client.json
+
+oauth_client.json

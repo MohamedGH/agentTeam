@@ -1,0 +1,2791 @@
+{
+  "models": {
+    "gemini-embedding-1.0": {
+      "tiers": {
+        "tier_1": {
+          "metric": "generativelanguage.googleapis.com/embed_content_paid_tier_tokens",
+          "displayName": "Embed Content API tokens per model for paid tier 1",
+          "rpd": -1,
+          "rpm": 1000000
+        },
+        "tier_2": {
+          "metric": "generativelanguage.googleapis.com/embed_content_paid_tier_2_tokens",
+          "displayName": "Embed Content API tokens per model for paid tier 2",
+          "rpm": 5000000,
+          "rpd": -1
+        },
+        "tier_3": {
+          "metric": "generativelanguage.googleapis.com/embed_content_paid_tier_3_tokens",
+          "displayName": "Embed Content API tokens per model for paid tier 3",
+          "rpm": 20000000,
+          "rpd": -1
+        },
+        "free": {
+          "rpd": 1000,
+          "metric": "generativelanguage.googleapis.com/embed_content_free_tier_tokens",
+          "displayName": "Embed Content API tokens per model for free tier",
+          "rpm": 30000
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemini-embedding-2": {
+      "tiers": {
+        "tier_1": {
+          "metric": "generativelanguage.googleapis.com/embed_content_paid_tier_tokens",
+          "displayName": "Embed Content API tokens per model for paid tier 1",
+          "rpd": -1,
+          "rpm": 1000000
+        },
+        "tier_2": {
+          "metric": "generativelanguage.googleapis.com/embed_content_paid_tier_2_tokens",
+          "displayName": "Embed Content API tokens per model for paid tier 2",
+          "rpm": 5000000,
+          "rpd": -1
+        },
+        "tier_3": {
+          "metric": "generativelanguage.googleapis.com/embed_content_paid_tier_3_tokens",
+          "displayName": "Embed Content API tokens per model for paid tier 3",
+          "rpm": 20000000,
+          "rpd": -1
+        },
+        "free": {
+          "rpd": 1000,
+          "metric": "generativelanguage.googleapis.com/embed_content_free_tier_tokens",
+          "displayName": "Embed Content API tokens per model for free tier",
+          "rpm": 30000
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemini-embedding-2-exp": {
+      "tiers": {
+        "free": {
+          "rpd": 1000,
+          "metric": "generativelanguage.googleapis.com/embed_content_free_tier_tokens",
+          "displayName": "Embed Content API tokens per model for free tier",
+          "rpm": 30000
+        },
+        "tier_2": {
+          "rpm": 5000000,
+          "metric": "generativelanguage.googleapis.com/embed_content_paid_tier_2_tokens",
+          "displayName": "Embed Content API tokens per model for paid tier 2",
+          "rpd": -1
+        },
+        "tier_3": {
+          "rpm": 20000000,
+          "metric": "generativelanguage.googleapis.com/embed_content_paid_tier_3_tokens",
+          "displayName": "Embed Content API tokens per model for paid tier 3",
+          "rpd": -1
+        },
+        "tier_1": {
+          "rpd": -1,
+          "metric": "generativelanguage.googleapis.com/embed_content_paid_tier_tokens",
+          "displayName": "Embed Content API tokens per model for paid tier 1",
+          "rpm": 1000000
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "embedding-001": {
+      "tiers": {
+        "tier_2": {
+          "rpm": 5000000,
+          "metric": "generativelanguage.googleapis.com/embed_content_paid_tier_2_tokens",
+          "displayName": "Embed Content API tokens per model for paid tier 2",
+          "rpd": -1
+        },
+        "tier_3": {
+          "rpm": 20000000,
+          "metric": "generativelanguage.googleapis.com/embed_content_paid_tier_3_tokens",
+          "displayName": "Embed Content API tokens per model for paid tier 3",
+          "rpd": -1
+        },
+        "tier_1": {
+          "rpd": -1,
+          "metric": "generativelanguage.googleapis.com/embed_content_paid_tier_tokens",
+          "displayName": "Embed Content API tokens per model for paid tier 1",
+          "rpm": 1000000
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "text-embedding-004": {
+      "tiers": {
+        "tier_2": {
+          "rpm": 312500,
+          "metric": "generativelanguage.googleapis.com/embed_content_paid_tier_2_tokens",
+          "displayName": "Embed Content API tokens per model for paid tier 2",
+          "rpd": 125000
+        },
+        "tier_3": {
+          "rpm": 1250000,
+          "metric": "generativelanguage.googleapis.com/embed_content_paid_tier_3_tokens",
+          "displayName": "Embed Content API tokens per model for paid tier 3",
+          "rpd": 125000
+        },
+        "tier_1": {
+          "rpd": 125000,
+          "metric": "generativelanguage.googleapis.com/embed_content_paid_tier_tokens",
+          "displayName": "Embed Content API tokens per model for paid tier 1",
+          "rpm": 62500
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "c4n6t9g1su": {
+      "tiers": {
+        "tier_1": {
+          "metric": "generativelanguage.googleapis.com/generate_content_batch_active_concurrent_tokens_paid_tier_1",
+          "displayName": "Active GenerateContentBatch # of tokens (paid tier 1)"
+        },
+        "tier_2": {
+          "metric": "generativelanguage.googleapis.com/generate_content_batch_active_concurrent_tokens_paid_tier_2",
+          "displayName": "Active GenerateContentBatch # of tokens (paid tier 2)"
+        },
+        "tier_3": {
+          "metric": "generativelanguage.googleapis.com/generate_content_batch_active_concurrent_tokens_paid_tier_3",
+          "displayName": "Active GenerateContentBatch # of tokens (paid tier 3)"
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "k8f2m5p0rw": {
+      "tiers": {
+        "tier_1": {
+          "metric": "generativelanguage.googleapis.com/generate_content_batch_active_concurrent_tokens_paid_tier_1",
+          "displayName": "Active GenerateContentBatch # of tokens (paid tier 1)"
+        },
+        "tier_2": {
+          "metric": "generativelanguage.googleapis.com/generate_content_batch_active_concurrent_tokens_paid_tier_2",
+          "displayName": "Active GenerateContentBatch # of tokens (paid tier 2)"
+        },
+        "tier_3": {
+          "metric": "generativelanguage.googleapis.com/generate_content_batch_active_concurrent_tokens_paid_tier_3",
+          "displayName": "Active GenerateContentBatch # of tokens (paid tier 3)"
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "v7y3b1x9zq": {
+      "tiers": {
+        "tier_1": {
+          "metric": "generativelanguage.googleapis.com/generate_content_batch_active_concurrent_tokens_paid_tier_1",
+          "displayName": "Active GenerateContentBatch # of tokens (paid tier 1)"
+        },
+        "tier_2": {
+          "metric": "generativelanguage.googleapis.com/generate_content_batch_active_concurrent_tokens_paid_tier_2",
+          "displayName": "Active GenerateContentBatch # of tokens (paid tier 2)"
+        },
+        "tier_3": {
+          "metric": "generativelanguage.googleapis.com/generate_content_batch_active_concurrent_tokens_paid_tier_3",
+          "displayName": "Active GenerateContentBatch # of tokens (paid tier 3)"
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemini-2.0-flash-lite": {
+      "tiers": {
+        "tier_1": {
+          "metric": "generativelanguage.googleapis.com/generate_content_batch_active_concurrent_tokens_paid_tier_1",
+          "displayName": "Active GenerateContentBatch # of tokens (paid tier 1)"
+        },
+        "tier_2": {
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpm": 6000,
+          "rpd": -1
+        },
+        "tier_3": {
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpm": 9000,
+          "rpd": -1
+        },
+        "unknown": {
+          "rpm": 4000,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": -1
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemini-2.0-flash-preview-image-generation": {
+      "tiers": {
+        "tier_1": {
+          "metric": "generativelanguage.googleapis.com/generate_content_batch_active_concurrent_tokens_paid_tier_1",
+          "displayName": "Active GenerateContentBatch # of tokens (paid tier 1)"
+        },
+        "tier_2": {
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpm": 600,
+          "rpd": 30000
+        },
+        "tier_3": {
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpm": 1500,
+          "rpd": -1
+        },
+        "unknown": {
+          "rpm": 1000,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": 10000
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemini-2.0-flash": {
+      "tiers": {
+        "tier_1": {
+          "metric": "generativelanguage.googleapis.com/generate_content_batch_active_concurrent_tokens_paid_tier_1",
+          "displayName": "Active GenerateContentBatch # of tokens (paid tier 1)"
+        },
+        "tier_2": {
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpm": 3000,
+          "rpd": -1
+        },
+        "tier_3": {
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpm": 9000,
+          "rpd": -1
+        },
+        "unknown": {
+          "rpm": 2000,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": -1
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemini-2.5-flash-1p": {
+      "tiers": {
+        "tier_1": {
+          "metric": "generativelanguage.googleapis.com/generate_content_batch_active_concurrent_tokens_paid_tier_1",
+          "displayName": "Active GenerateContentBatch # of tokens (paid tier 1)"
+        },
+        "tier_2": {
+          "metric": "generativelanguage.googleapis.com/generate_content_batch_active_concurrent_tokens_paid_tier_2",
+          "displayName": "Active GenerateContentBatch # of tokens (paid tier 2)"
+        },
+        "tier_3": {
+          "metric": "generativelanguage.googleapis.com/generate_content_batch_active_concurrent_tokens_paid_tier_3",
+          "displayName": "Active GenerateContentBatch # of tokens (paid tier 3)"
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemini-2.5-flash-exp": {
+      "tiers": {
+        "tier_1": {
+          "metric": "generativelanguage.googleapis.com/generate_content_batch_active_concurrent_tokens_paid_tier_1",
+          "displayName": "Active GenerateContentBatch # of tokens (paid tier 1)"
+        },
+        "tier_2": {
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpm": 75,
+          "rpd": 15000
+        },
+        "tier_3": {
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpm": 75,
+          "rpd": -1
+        },
+        "free": {
+          "rpm": 250,
+          "metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          "displayName": "Number of requests made to a specific model, in the free tier.",
+          "rpd": 10000
+        },
+        "unknown": {
+          "rpm": 250,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": 10000
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemini-2.5-flash-lite": {
+      "tiers": {
+        "tier_1": {
+          "metric": "generativelanguage.googleapis.com/generate_content_batch_active_concurrent_tokens_paid_tier_1",
+          "displayName": "Active GenerateContentBatch # of tokens (paid tier 1)"
+        },
+        "tier_2": {
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpm": 3000,
+          "rpd": -1
+        },
+        "tier_3": {
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpm": 9000,
+          "rpd": -1
+        },
+        "free": {
+          "rpm": 10,
+          "metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          "displayName": "Number of requests made to a specific model, in the free tier.",
+          "rpd": 20
+        },
+        "unknown": {
+          "rpm": 4000,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": -1
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemini-2.5-flash-preview-image": {
+      "tiers": {
+        "tier_1": {
+          "metric": "generativelanguage.googleapis.com/generate_content_batch_active_concurrent_tokens_paid_tier_1",
+          "displayName": "Active GenerateContentBatch # of tokens (paid tier 1)"
+        },
+        "tier_2": {
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpm": 600,
+          "rpd": 15000
+        },
+        "tier_3": {
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpm": 1500,
+          "rpd": -1
+        },
+        "unknown": {
+          "rpm": 500,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": 2000
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemini-2.5-flash-tts": {
+      "tiers": {
+        "tier_1": {
+          "metric": "generativelanguage.googleapis.com/generate_content_batch_active_concurrent_tokens_paid_tier_1",
+          "displayName": "Active GenerateContentBatch # of tokens (paid tier 1)"
+        },
+        "tier_2": {
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpm": 300,
+          "rpd": 3000
+        },
+        "tier_3": {
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpm": 300,
+          "rpd": -1
+        },
+        "free": {
+          "rpm": 3,
+          "metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          "displayName": "Number of requests made to a specific model, in the free tier.",
+          "rpd": 10
+        },
+        "unknown": {
+          "rpm": 10,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": 100
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemini-2.5-flash": {
+      "tiers": {
+        "tier_1": {
+          "metric": "generativelanguage.googleapis.com/generate_content_batch_active_concurrent_tokens_paid_tier_1",
+          "displayName": "Active GenerateContentBatch # of tokens (paid tier 1)"
+        },
+        "tier_2": {
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpm": 600,
+          "rpd": 30000
+        },
+        "tier_3": {
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpm": 6000,
+          "rpd": -1
+        },
+        "free": {
+          "rpm": 5,
+          "metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          "displayName": "Number of requests made to a specific model, in the free tier.",
+          "rpd": 20
+        },
+        "unknown": {
+          "rpm": 1000,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": 10000
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemini-2.5-pro-tts": {
+      "tiers": {
+        "tier_1": {
+          "metric": "generativelanguage.googleapis.com/generate_content_batch_active_concurrent_tokens_paid_tier_1",
+          "displayName": "Active GenerateContentBatch # of tokens (paid tier 1)"
+        },
+        "tier_2": {
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpm": 75,
+          "rpd": 750
+        },
+        "tier_3": {
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpm": 75,
+          "rpd": -1
+        },
+        "unknown": {
+          "rpm": 10,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": 50
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemini-2.5-pro": {
+      "tiers": {
+        "tier_1": {
+          "metric": "generativelanguage.googleapis.com/generate_content_batch_active_concurrent_tokens_paid_tier_1",
+          "displayName": "Active GenerateContentBatch # of tokens (paid tier 1)"
+        },
+        "tier_2": {
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpm": 300,
+          "rpd": 15000
+        },
+        "tier_3": {
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpm": 600,
+          "rpd": -1
+        },
+        "unknown": {
+          "rpm": 150,
+          "metric": "generativelanguage.googleapis.com/map_grounding_request_paid",
+          "displayName": "Map grounding request per project per day (paid tier)",
+          "rpd": -1
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemini-3-flash": {
+      "tiers": {
+        "tier_1": {
+          "metric": "generativelanguage.googleapis.com/generate_content_batch_active_concurrent_tokens_paid_tier_1",
+          "displayName": "Active GenerateContentBatch # of tokens (paid tier 1)"
+        },
+        "tier_2": {
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpm": 600,
+          "rpd": 30000
+        },
+        "tier_3": {
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpm": 6000,
+          "rpd": -1
+        },
+        "free": {
+          "rpm": 5,
+          "metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          "displayName": "Number of requests made to a specific model, in the free tier.",
+          "rpd": 20
+        },
+        "unknown": {
+          "rpm": 1000,
+          "metric": "generativelanguage.googleapis.com/map_grounding_request_paid",
+          "displayName": "Map grounding request per project per day (paid tier)",
+          "rpd": -1
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemini-3-pro-image": {
+      "tiers": {
+        "tier_1": {
+          "metric": "generativelanguage.googleapis.com/generate_content_batch_active_concurrent_tokens_paid_tier_1",
+          "displayName": "Active GenerateContentBatch # of tokens (paid tier 1)"
+        },
+        "tier_2": {
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpm": 150,
+          "rpd": 4500
+        },
+        "tier_3": {
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpm": 600,
+          "rpd": -1
+        },
+        "unknown": {
+          "rpm": 20,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": 250
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemini-3-pro": {
+      "tiers": {
+        "tier_1": {
+          "metric": "generativelanguage.googleapis.com/generate_content_batch_active_concurrent_tokens_paid_tier_1",
+          "displayName": "Active GenerateContentBatch # of tokens (paid tier 1)"
+        },
+        "tier_2": {
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpm": 300,
+          "rpd": 15000
+        },
+        "tier_3": {
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpm": 600,
+          "rpd": -1
+        },
+        "unknown": {
+          "rpm": 25,
+          "metric": "generativelanguage.googleapis.com/map_grounding_request_paid",
+          "displayName": "Map grounding request per project per day (paid tier)",
+          "rpd": -1
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemini-3.1-flash-image": {
+      "tiers": {
+        "tier_1": {
+          "metric": "generativelanguage.googleapis.com/generate_content_batch_active_concurrent_tokens_paid_tier_1",
+          "displayName": "Active GenerateContentBatch # of tokens (paid tier 1)"
+        },
+        "tier_2": {
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpm": 150,
+          "rpd": 3000
+        },
+        "tier_3": {
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpm": 1500,
+          "rpd": 15000
+        },
+        "unknown": {
+          "rpm": 100,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": 1000
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemini-3.1-flash-lite-image": {
+      "tiers": {
+        "tier_1": {
+          "metric": "generativelanguage.googleapis.com/generate_content_batch_active_concurrent_tokens_paid_tier_1",
+          "displayName": "Active GenerateContentBatch # of tokens (paid tier 1)"
+        },
+        "tier_2": {
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpm": 150,
+          "rpd": 4500
+        },
+        "tier_3": {
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpm": 1500,
+          "rpd": -1
+        },
+        "unknown": {
+          "rpm": 150,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": 1000
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemini-3.1-flash-lite": {
+      "tiers": {
+        "tier_1": {
+          "metric": "generativelanguage.googleapis.com/generate_content_batch_active_concurrent_tokens_paid_tier_1",
+          "displayName": "Active GenerateContentBatch # of tokens (paid tier 1)"
+        },
+        "tier_2": {
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpm": 3000,
+          "rpd": 105000
+        },
+        "tier_3": {
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpm": 9000,
+          "rpd": -1
+        },
+        "free": {
+          "rpm": 15,
+          "metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          "displayName": "Number of requests made to a specific model, in the free tier.",
+          "rpd": 500
+        },
+        "unknown": {
+          "rpm": 4000,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": 150000
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemini-3.1-flash-tts": {
+      "tiers": {
+        "tier_1": {
+          "metric": "generativelanguage.googleapis.com/generate_content_batch_active_concurrent_tokens_paid_tier_1",
+          "displayName": "Active GenerateContentBatch # of tokens (paid tier 1)"
+        },
+        "tier_2": {
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpm": 300,
+          "rpd": 3000
+        },
+        "tier_3": {
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpm": 300,
+          "rpd": -1
+        },
+        "free": {
+          "rpm": 3,
+          "metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          "displayName": "Number of requests made to a specific model, in the free tier.",
+          "rpd": 10
+        },
+        "unknown": {
+          "rpm": 10,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": 100
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemini-3.1-pro": {
+      "tiers": {
+        "tier_1": {
+          "metric": "generativelanguage.googleapis.com/generate_content_batch_active_concurrent_tokens_paid_tier_1",
+          "displayName": "Active GenerateContentBatch # of tokens (paid tier 1)"
+        },
+        "tier_2": {
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpm": 300,
+          "rpd": 15000
+        },
+        "tier_3": {
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpm": 600,
+          "rpd": -1
+        },
+        "unknown": {
+          "rpm": 25,
+          "metric": "generativelanguage.googleapis.com/map_grounding_request_paid",
+          "displayName": "Map grounding request per project per day (paid tier)",
+          "rpd": -1
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemini-3.5-flash-lite": {
+      "tiers": {
+        "tier_1": {
+          "metric": "generativelanguage.googleapis.com/generate_content_batch_active_concurrent_tokens_paid_tier_1",
+          "displayName": "Active GenerateContentBatch # of tokens (paid tier 1)"
+        },
+        "tier_2": {
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpm": 3000,
+          "rpd": 105000
+        },
+        "tier_3": {
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpm": 9000,
+          "rpd": -1
+        },
+        "free": {
+          "rpm": 15,
+          "metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          "displayName": "Number of requests made to a specific model, in the free tier.",
+          "rpd": 500
+        },
+        "unknown": {
+          "rpm": 4000,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": 150000
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemini-3.5-flash": {
+      "tiers": {
+        "tier_1": {
+          "metric": "generativelanguage.googleapis.com/generate_content_batch_active_concurrent_tokens_paid_tier_1",
+          "displayName": "Active GenerateContentBatch # of tokens (paid tier 1)"
+        },
+        "tier_2": {
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpm": 600,
+          "rpd": 30000
+        },
+        "tier_3": {
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpm": 6000,
+          "rpd": -1
+        },
+        "free": {
+          "rpm": 5,
+          "metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          "displayName": "Number of requests made to a specific model, in the free tier.",
+          "rpd": 20
+        },
+        "unknown": {
+          "rpm": 1000,
+          "metric": "generativelanguage.googleapis.com/map_grounding_request_paid",
+          "displayName": "Map grounding request per project per day (paid tier)",
+          "rpd": -1
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemini-3.6-flash": {
+      "tiers": {
+        "tier_1": {
+          "metric": "generativelanguage.googleapis.com/generate_content_batch_active_concurrent_tokens_paid_tier_1",
+          "displayName": "Active GenerateContentBatch # of tokens (paid tier 1)"
+        },
+        "tier_2": {
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpm": 600,
+          "rpd": 30000
+        },
+        "tier_3": {
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpm": 6000,
+          "rpd": -1
+        },
+        "free": {
+          "rpm": 5,
+          "metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          "displayName": "Number of requests made to a specific model, in the free tier.",
+          "rpd": 20
+        },
+        "unknown": {
+          "rpm": 1000,
+          "metric": "generativelanguage.googleapis.com/map_grounding_request_paid",
+          "displayName": "Map grounding request per project per day (paid tier)",
+          "rpd": -1
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemini-3.7-flash": {
+      "tiers": {
+        "tier_1": {
+          "metric": "generativelanguage.googleapis.com/generate_content_batch_active_concurrent_tokens_paid_tier_1",
+          "displayName": "Active GenerateContentBatch # of tokens (paid tier 1)"
+        },
+        "tier_2": {
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpm": 600,
+          "rpd": 30000
+        },
+        "tier_3": {
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpm": 6000,
+          "rpd": -1
+        },
+        "free": {
+          "rpm": 5,
+          "metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          "displayName": "Number of requests made to a specific model, in the free tier.",
+          "rpd": 20
+        },
+        "unknown": {
+          "rpm": 1000,
+          "metric": "generativelanguage.googleapis.com/map_grounding_request_paid",
+          "displayName": "Map grounding request per project per day (paid tier)",
+          "rpd": -1
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemini-flash-tool-retrieval": {
+      "tiers": {
+        "tier_1": {
+          "metric": "generativelanguage.googleapis.com/generate_content_batch_active_concurrent_tokens_paid_tier_1",
+          "displayName": "Active GenerateContentBatch # of tokens (paid tier 1)"
+        },
+        "tier_2": {
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpm": 90,
+          "rpd": 30000
+        },
+        "tier_3": {
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpm": 90,
+          "rpd": -1
+        },
+        "free": {
+          "rpm": 300,
+          "metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          "displayName": "Number of requests made to a specific model, in the free tier.",
+          "rpd": 20
+        },
+        "unknown": {
+          "rpm": 300,
+          "metric": "generativelanguage.googleapis.com/map_grounding_request_paid",
+          "displayName": "Map grounding request per project per day (paid tier)",
+          "rpd": -1
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemini-robotics-er-1.6-preview": {
+      "tiers": {
+        "tier_1": {
+          "metric": "generativelanguage.googleapis.com/generate_content_batch_active_concurrent_tokens_paid_tier_1",
+          "displayName": "Active GenerateContentBatch # of tokens (paid tier 1)"
+        },
+        "tier_2": {
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpm": 600,
+          "rpd": 30000
+        },
+        "tier_3": {
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpm": 6000,
+          "rpd": -1
+        },
+        "free": {
+          "rpm": 5,
+          "metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          "displayName": "Number of requests made to a specific model, in the free tier.",
+          "rpd": 20
+        },
+        "unknown": {
+          "rpm": 1000,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": 86400
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemini-robotics-er-2-preview": {
+      "tiers": {
+        "tier_1": {
+          "metric": "generativelanguage.googleapis.com/generate_content_batch_active_concurrent_tokens_paid_tier_1",
+          "displayName": "Active GenerateContentBatch # of tokens (paid tier 1)"
+        },
+        "tier_2": {
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpm": 600,
+          "rpd": 30000
+        },
+        "tier_3": {
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpm": 6000,
+          "rpd": -1
+        },
+        "free": {
+          "rpm": 5,
+          "metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          "displayName": "Number of requests made to a specific model, in the free tier.",
+          "rpd": 20
+        },
+        "unknown": {
+          "rpm": 1000,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": 86400
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "antigravity": {
+      "tiers": {
+        "free": {
+          "rpm": 60,
+          "metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          "displayName": "Number of requests made to a specific model, in the free tier.",
+          "rpd": 100
+        },
+        "tier_2": {
+          "rpm": 60,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpd": 3000
+        },
+        "tier_3": {
+          "rpm": 600,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpd": -1
+        },
+        "unknown": {
+          "rpm": 30,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": 1000
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "chat-bard": {
+      "tiers": {
+        "free": {
+          "rpm": 18000,
+          "metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          "displayName": "Number of requests made to a specific model, in the free tier.",
+          "rpd": 2520000
+        },
+        "tier_2": {
+          "rpm": 5400,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpd": 756000
+        },
+        "tier_3": {
+          "rpm": 5400,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpd": 756000
+        },
+        "unknown": {
+          "rpm": 18000,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": 2520000
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "computer-use-exp": {
+      "tiers": {
+        "free": {
+          "rpm": 1000,
+          "metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          "displayName": "Number of requests made to a specific model, in the free tier.",
+          "rpd": -1
+        },
+        "tier_2": {
+          "rpm": 300,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpd": -1
+        },
+        "tier_3": {
+          "rpm": 300,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpd": -1
+        },
+        "unknown": {
+          "rpm": 1000,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": -1
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gdm-eval-model-mow": {
+      "tiers": {
+        "free": {
+          "rpm": 60,
+          "metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          "displayName": "Number of requests made to a specific model, in the free tier.",
+          "rpd": 2400
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemini-2.5-flash-live": {
+      "tiers": {
+        "free": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          "displayName": "Number of requests made to a specific model, in the free tier.",
+          "rpd": -1
+        },
+        "tier_2": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpd": -1
+        },
+        "tier_3": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpd": -1
+        },
+        "unknown": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": -1
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemini-2.5-flash-native-audio-dialog": {
+      "tiers": {
+        "free": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          "displayName": "Number of requests made to a specific model, in the free tier.",
+          "rpd": -1
+        },
+        "tier_2": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpd": -1
+        },
+        "tier_3": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpd": -1
+        },
+        "unknown": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": -1
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemini-2.5-pro-1p-freebie": {
+      "tiers": {
+        "free": {
+          "rpm": 75,
+          "metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          "displayName": "Number of requests made to a specific model, in the free tier.",
+          "rpd": 500
+        },
+        "tier_2": {
+          "rpm": 300,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpd": 15000
+        },
+        "tier_3": {
+          "rpm": 600,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpd": -1
+        },
+        "unknown": {
+          "rpm": 150,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": 10000
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemini-3-flash-live": {
+      "tiers": {
+        "free": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          "displayName": "Number of requests made to a specific model, in the free tier.",
+          "rpd": -1
+        },
+        "tier_2": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpd": -1
+        },
+        "tier_3": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpd": -1
+        },
+        "unknown": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": -1
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemini-3.5-live-translate": {
+      "tiers": {
+        "free": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          "displayName": "Number of requests made to a specific model, in the free tier.",
+          "rpd": -1
+        },
+        "tier_2": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpd": -1
+        },
+        "tier_3": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpd": -1
+        },
+        "unknown": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": -1
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemini-3.5-transcribe-live": {
+      "tiers": {
+        "free": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          "displayName": "Number of requests made to a specific model, in the free tier.",
+          "rpd": -1
+        },
+        "tier_2": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpd": -1
+        },
+        "tier_3": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpd": -1
+        },
+        "unknown": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": -1
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemini-3.5-transcribe": {
+      "tiers": {
+        "free": {
+          "rpm": 3,
+          "metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          "displayName": "Number of requests made to a specific model, in the free tier.",
+          "rpd": 25
+        },
+        "tier_2": {
+          "rpm": 300,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpd": 3000
+        },
+        "tier_3": {
+          "rpm": 300,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpd": -1
+        },
+        "unknown": {
+          "rpm": 10,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": 100
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemini-robotics-er-1.5-preview": {
+      "tiers": {
+        "free": {
+          "rpm": 10,
+          "metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          "displayName": "Number of requests made to a specific model, in the free tier.",
+          "rpd": 20
+        },
+        "tier_2": {
+          "rpm": 600,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpd": 30000
+        },
+        "tier_3": {
+          "rpm": 600,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpd": -1
+        },
+        "unknown": {
+          "rpm": 1000,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": 86400
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemma-3-12b": {
+      "tiers": {
+        "free": {
+          "rpm": 30,
+          "metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          "displayName": "Number of requests made to a specific model, in the free tier.",
+          "rpd": 14400
+        },
+        "tier_2": {
+          "rpm": 9,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpd": 4320
+        },
+        "tier_3": {
+          "rpm": 9,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpd": 4320
+        },
+        "unknown": {
+          "rpm": 30,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": 14400
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemma-3-1b": {
+      "tiers": {
+        "free": {
+          "rpm": 30,
+          "metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          "displayName": "Number of requests made to a specific model, in the free tier.",
+          "rpd": 14400
+        },
+        "tier_2": {
+          "rpm": 9,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpd": 4320
+        },
+        "tier_3": {
+          "rpm": 9,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpd": 4320
+        },
+        "unknown": {
+          "rpm": 30,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": 14400
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemma-3-27b": {
+      "tiers": {
+        "free": {
+          "rpm": 30,
+          "metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          "displayName": "Number of requests made to a specific model, in the free tier.",
+          "rpd": 14400
+        },
+        "tier_2": {
+          "rpm": 9,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpd": 4320
+        },
+        "tier_3": {
+          "rpm": 9,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpd": 4320
+        },
+        "unknown": {
+          "rpm": 30,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": 14400
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemma-3-2b": {
+      "tiers": {
+        "free": {
+          "rpm": 30,
+          "metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          "displayName": "Number of requests made to a specific model, in the free tier.",
+          "rpd": 14400
+        },
+        "tier_2": {
+          "rpm": 9,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpd": 4320
+        },
+        "tier_3": {
+          "rpm": 9,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpd": 4320
+        },
+        "unknown": {
+          "rpm": 30,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": 14400
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemma-3-4b": {
+      "tiers": {
+        "free": {
+          "rpm": 30,
+          "metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          "displayName": "Number of requests made to a specific model, in the free tier.",
+          "rpd": 14400
+        },
+        "tier_2": {
+          "rpm": 9,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpd": 4320
+        },
+        "tier_3": {
+          "rpm": 9,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpd": 4320
+        },
+        "unknown": {
+          "rpm": 30,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": 14400
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemma-4-26b": {
+      "tiers": {
+        "free": {
+          "rpm": 30,
+          "metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          "displayName": "Number of requests made to a specific model, in the free tier.",
+          "rpd": 14400
+        },
+        "tier_2": {
+          "rpm": 9,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpd": 4320
+        },
+        "tier_3": {
+          "rpm": 9,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpd": 4320
+        },
+        "unknown": {
+          "rpm": 30,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": 14400
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemma-4-31b": {
+      "tiers": {
+        "free": {
+          "rpm": 30,
+          "metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          "displayName": "Number of requests made to a specific model, in the free tier.",
+          "rpd": 14400
+        },
+        "tier_2": {
+          "rpm": 9,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpd": 4320
+        },
+        "tier_3": {
+          "rpm": 9,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpd": 4320
+        },
+        "unknown": {
+          "rpm": 30,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": 14400
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gqi-cst-1337ae": {
+      "tiers": {
+        "free": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          "displayName": "Number of requests made to a specific model, in the free tier."
+        },
+        "tier_2": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)"
+        },
+        "tier_3": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)"
+        },
+        "unknown": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model",
+          "displayName": "Generate content requests per model (paid tier)"
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gqi-cst-h34jgm": {
+      "tiers": {
+        "free": {
+          "rpm": 500,
+          "metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          "displayName": "Number of requests made to a specific model, in the free tier.",
+          "rpd": -1
+        },
+        "tier_2": {
+          "rpm": 150,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpd": -1
+        },
+        "tier_3": {
+          "rpm": 150,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpd": -1
+        },
+        "unknown": {
+          "rpm": 500,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": -1
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "k3p9mfl8q2": {
+      "tiers": {
+        "free": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          "displayName": "Number of requests made to a specific model, in the free tier.",
+          "rpd": -1
+        },
+        "tier_2": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpd": -1
+        },
+        "tier_3": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpd": -1
+        },
+        "unknown": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": -1
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "x9q2mfl4yg": {
+      "tiers": {
+        "free": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          "displayName": "Number of requests made to a specific model, in the free tier.",
+          "rpd": -1
+        },
+        "tier_2": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpd": -1
+        },
+        "tier_3": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpd": -1
+        },
+        "unknown": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": -1
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "7s9d0xhwo8": {
+      "tiers": {
+        "free": {
+          "rpm": 3000,
+          "metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          "displayName": "Number of requests made to a specific model, in the free tier."
+        },
+        "tier_2": {
+          "rpm": 900,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)"
+        },
+        "tier_3": {
+          "rpm": 900,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)"
+        },
+        "unknown": {
+          "rpm": 3000,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model",
+          "displayName": "Generate content requests per model (paid tier)"
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "f116dzcgxx": {
+      "tiers": {
+        "free": {
+          "rpm": 30,
+          "metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          "displayName": "Number of requests made to a specific model, in the free tier."
+        },
+        "tier_2": {
+          "rpm": 9,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)"
+        },
+        "tier_3": {
+          "rpm": 9,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)"
+        },
+        "unknown": {
+          "rpm": 30,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model",
+          "displayName": "Generate content requests per model (paid tier)"
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gdm-eval-model-u": {
+      "tiers": {
+        "free": {
+          "rpm": 15,
+          "metric": "generativelanguage.googleapis.com/generate_content_search_request_free",
+          "displayName": "GenerateContent requests with Search tools (free tier)",
+          "rpd": 1500
+        },
+        "tier_2": {
+          "rpm": 4,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)"
+        },
+        "tier_3": {
+          "rpm": 4,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)"
+        },
+        "unknown": {
+          "rpd": 5000,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model",
+          "displayName": "Generate content requests per model (paid tier)",
+          "rpm": 15
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemini-2.0-flash-live": {
+      "tiers": {
+        "free": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          "displayName": "Number of requests made to a specific model, in the free tier.",
+          "rpd": -1
+        },
+        "tier_2": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpd": -1
+        },
+        "tier_3": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpd": -1
+        },
+        "unknown": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": -1
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemini-2.5-flash-exp-native-audio-thinking-dialog": {
+      "tiers": {
+        "free": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          "displayName": "Number of requests made to a specific model, in the free tier."
+        },
+        "tier_2": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpd": 15
+        },
+        "tier_3": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpd": 15
+        },
+        "unknown": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": 50
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "j2ycnyml2h": {
+      "tiers": {
+        "free": {
+          "rpm": 3000,
+          "metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          "displayName": "Number of requests made to a specific model, in the free tier."
+        },
+        "tier_2": {
+          "rpm": 900,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)"
+        },
+        "tier_3": {
+          "rpm": 900,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)"
+        },
+        "unknown": {
+          "rpm": 3000,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": -1
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "learnlm-2.0-flash-experimental": {
+      "tiers": {
+        "free": {
+          "rpm": 15,
+          "metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          "displayName": "Number of requests made to a specific model, in the free tier.",
+          "rpd": 1500
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "med-gemini": {
+      "tiers": {
+        "free": {
+          "rpm": 60,
+          "metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          "displayName": "Number of requests made to a specific model, in the free tier.",
+          "rpd": 50000
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "qgsAKtKtlw": {
+      "tiers": {
+        "free": {
+          "rpm": 3600,
+          "metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          "displayName": "Number of requests made to a specific model, in the free tier.",
+          "rpd": 864000
+        },
+        "tier_2": {
+          "rpm": 1080,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpd": 259200
+        },
+        "tier_3": {
+          "rpm": 1080,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpd": 259200
+        },
+        "unknown": {
+          "rpm": 3600,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": 864000
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "u9x2v8w1z4": {
+      "tiers": {
+        "free": {
+          "rpm": 60,
+          "metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          "displayName": "Number of requests made to a specific model, in the free tier.",
+          "rpd": 10000
+        },
+        "tier_2": {
+          "rpm": 18,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpd": 3000
+        },
+        "tier_3": {
+          "rpm": 18,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpd": 3000
+        },
+        "unknown": {
+          "rpm": 60,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": 10000
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "xyz-1000": {
+      "tiers": {
+        "free": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          "displayName": "Number of requests made to a specific model, in the free tier.",
+          "rpd": -1
+        },
+        "unknown": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": -1
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "xyz-1001": {
+      "tiers": {
+        "free": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          "displayName": "Number of requests made to a specific model, in the free tier.",
+          "rpd": -1
+        },
+        "unknown": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": -1
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "xyz-1002": {
+      "tiers": {
+        "free": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          "displayName": "Number of requests made to a specific model, in the free tier.",
+          "rpd": -1
+        },
+        "unknown": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": -1
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "xyz-1004": {
+      "tiers": {
+        "free": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          "displayName": "Number of requests made to a specific model, in the free tier.",
+          "rpd": -1
+        },
+        "unknown": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": -1
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "xh7Bm2Kp9w": {
+      "tiers": {
+        "free": {
+          "rpd": 1728000,
+          "metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          "displayName": "Number of requests made to a specific model, in the free tier."
+        },
+        "tier_2": {
+          "rpm": 1080,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpd": 259200
+        },
+        "tier_3": {
+          "rpm": 2160,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)"
+        },
+        "unknown": {
+          "rpm": 3600,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": 864000
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "computer-use-preview": {
+      "tiers": {
+        "tier_2": {
+          "rpm": 300,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpd": 15000
+        },
+        "tier_3": {
+          "rpm": 600,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpd": -1
+        },
+        "unknown": {
+          "rpm": 150,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": 10000
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "deep-research-pro-preview": {
+      "tiers": {
+        "tier_2": {
+          "rpm": 3,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpd": 4320
+        },
+        "tier_3": {
+          "rpm": 6,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpd": -1
+        },
+        "unknown": {
+          "rpm": 1,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": 1440
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemini-2.0-exp": {
+      "tiers": {
+        "tier_2": {
+          "rpm": 1,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpd": 30
+        },
+        "tier_3": {
+          "rpm": 1,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpd": 30
+        },
+        "unknown": {
+          "rpm": 5,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": 100
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemini-2.0-flash-exp-audio": {
+      "tiers": {
+        "tier_2": {
+          "rpm": 2,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpd": -1
+        },
+        "tier_3": {
+          "rpm": 2,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpd": -1
+        },
+        "unknown": {
+          "rpm": 2,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": -1
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemini-2.0-flash-exp-image": {
+      "tiers": {
+        "tier_2": {
+          "rpm": 2,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpd": -1
+        },
+        "tier_3": {
+          "rpm": 2,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpd": -1
+        },
+        "unknown": {
+          "rpm": 2,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": -1
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemini-2.0-flash-exp": {
+      "tiers": {
+        "tier_2": {
+          "rpm": 3,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpd": 150
+        },
+        "tier_3": {
+          "rpm": 3,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpd": 150
+        },
+        "unknown": {
+          "rpm": 10,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": 500
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemini-2.5-pro-exp": {
+      "tiers": {
+        "tier_2": {
+          "rpm": 300,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpd": 15000
+        },
+        "tier_3": {
+          "rpm": 600,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpd": -1
+        },
+        "unknown": {
+          "rpm": 150,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": 10000
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemini-omni-1.1-flash": {
+      "tiers": {
+        "tier_2": {
+          "rpm": 2,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpd": 30
+        },
+        "tier_3": {
+          "rpm": 6,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpd": 300
+        },
+        "unknown": {
+          "rpm": 4,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": 20
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemini-omni-flash": {
+      "tiers": {
+        "tier_2": {
+          "rpm": 2,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpd": 30
+        },
+        "tier_3": {
+          "rpm": 6,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpd": 300
+        },
+        "unknown": {
+          "rpm": 4,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": 20
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "lyria-3-clip": {
+      "tiers": {
+        "tier_2": {
+          "rpm": 150,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpd": 3000
+        },
+        "tier_3": {
+          "rpm": 1500,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpd": -1
+        },
+        "unknown": {
+          "rpm": 150,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": 500
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "lyria-3-pro": {
+      "tiers": {
+        "tier_2": {
+          "rpm": 150,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 2) (priority)",
+          "rpd": 3000
+        },
+        "tier_3": {
+          "rpm": 1500,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpd": -1
+        },
+        "unknown": {
+          "rpm": 150,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": 500
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "unreleased-iolr": {
+      "tiers": {
+        "tier_2": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_2_input_token_count_prio",
+          "displayName": "Generate content paid tier 2 input token count (priority)"
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "deep-research-exp-04-2026": {
+      "tiers": {
+        "tier_3": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpd": -1
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "deep-research-exp-10-2025": {
+      "tiers": {
+        "tier_3": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_content_paid_tier_3_requests_prio",
+          "displayName": "Generate content requests per model (paid tier 3) (priority)",
+          "rpd": -1
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gdm-eval-model-stp": {
+      "tiers": {
+        "unknown": {
+          "rpm": 25,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": 250
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gdm-lc-eval-phase-0": {
+      "tiers": {
+        "unknown": {
+          "rpm": 10,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": -1
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gdm-lc-eval-phase-1": {
+      "tiers": {
+        "unknown": {
+          "rpm": 60,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": -1
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemini-2.0": {
+      "tiers": {
+        "free": {
+          "rpd": 1500,
+          "metric": "generativelanguage.googleapis.com/generate_content_search_request_free",
+          "displayName": "GenerateContent requests with Search tools (free tier)"
+        },
+        "unknown": {
+          "rpd": 5000,
+          "metric": "generativelanguage.googleapis.com/generate_content_search_request_paid",
+          "displayName": "GenerateContent requests with Search tools (paid tier)"
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemini-2.5": {
+      "tiers": {
+        "free": {
+          "rpd": 1500,
+          "metric": "generativelanguage.googleapis.com/generate_content_search_request_free",
+          "displayName": "GenerateContent requests with Search tools (free tier)"
+        },
+        "unknown": {
+          "rpd": 5000,
+          "metric": "generativelanguage.googleapis.com/generate_content_search_request_paid",
+          "displayName": "GenerateContent requests with Search tools (paid tier)"
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "gemini-3": {
+      "tiers": {
+        "unknown": {
+          "rpd": 1500,
+          "metric": "generativelanguage.googleapis.com/generate_content_search_request_paid",
+          "displayName": "GenerateContent requests with Search tools (paid tier)"
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "oswk9grrjt": {
+      "tiers": {
+        "unknown": {
+          "rpm": 1000,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model",
+          "displayName": "Generate content requests per model (paid tier)"
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "u3kpjw07gm": {
+      "tiers": {
+        "unknown": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": -1
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "xyz-1003": {
+      "tiers": {
+        "unknown": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/generate_requests_per_model_per_day",
+          "displayName": "Generate requests per model per day",
+          "rpd": -1
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "imagen-3.0-fast-generate": {
+      "tiers": {
+        "free": {
+          "rpd": 25,
+          "metric": "generativelanguage.googleapis.com/predict_requests_free_tier_per_model",
+          "displayName": "Predict requests per model (free tier)"
+        },
+        "tier_1": {
+          "rpm": 5,
+          "metric": "generativelanguage.googleapis.com/predict_requests_per_model",
+          "displayName": "Predict requests per model (paid tier 1)"
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "imagen-3.0-generate": {
+      "tiers": {
+        "free": {
+          "rpd": 25,
+          "metric": "generativelanguage.googleapis.com/predict_requests_free_tier_per_model",
+          "displayName": "Predict requests per model (free tier)"
+        },
+        "tier_1": {
+          "rpd": -1,
+          "metric": "generativelanguage.googleapis.com/predict_requests_per_model_per_day_paid_tier_1",
+          "displayName": "Predict requests per model per day (paid tier 1)",
+          "rpm": 5
+        },
+        "tier_2": {
+          "rpm": 20,
+          "metric": "generativelanguage.googleapis.com/predict_requests_per_model_per_day_paid_tier_2",
+          "displayName": "Predict requests per model per day (paid tier 2)",
+          "rpd": -1
+        },
+        "tier_3": {
+          "rpm": 20,
+          "metric": "generativelanguage.googleapis.com/predict_requests_per_model_per_day_paid_tier_3",
+          "displayName": "Predict requests per model per day (paid tier 3)",
+          "rpd": -1
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "imagen-4.0-fast-generate": {
+      "tiers": {
+        "tier_1": {
+          "rpd": 70,
+          "metric": "generativelanguage.googleapis.com/predict_requests_per_model_per_day_paid_tier_1",
+          "displayName": "Predict requests per model per day (paid tier 1)",
+          "rpm": 10
+        },
+        "tier_2": {
+          "rpm": 15,
+          "metric": "generativelanguage.googleapis.com/predict_requests_per_model_per_day_paid_tier_2",
+          "displayName": "Predict requests per model per day (paid tier 2)",
+          "rpd": 1000
+        },
+        "tier_3": {
+          "rpm": 20,
+          "metric": "generativelanguage.googleapis.com/predict_requests_per_model_per_day_paid_tier_3",
+          "displayName": "Predict requests per model per day (paid tier 3)",
+          "rpd": 15000
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "imagen-4.0-generate": {
+      "tiers": {
+        "tier_1": {
+          "rpd": 70,
+          "metric": "generativelanguage.googleapis.com/predict_requests_per_model_per_day_paid_tier_1",
+          "displayName": "Predict requests per model per day (paid tier 1)",
+          "rpm": 10
+        },
+        "tier_2": {
+          "rpm": 15,
+          "metric": "generativelanguage.googleapis.com/predict_requests_per_model_per_day_paid_tier_2",
+          "displayName": "Predict requests per model per day (paid tier 2)",
+          "rpd": 1000
+        },
+        "tier_3": {
+          "rpm": 20,
+          "metric": "generativelanguage.googleapis.com/predict_requests_per_model_per_day_paid_tier_3",
+          "displayName": "Predict requests per model per day (paid tier 3)",
+          "rpd": 15000
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "imagen-4.0-ultra-generate": {
+      "tiers": {
+        "tier_1": {
+          "rpd": 30,
+          "metric": "generativelanguage.googleapis.com/predict_requests_per_model_per_day_paid_tier_1",
+          "displayName": "Predict requests per model per day (paid tier 1)",
+          "rpm": 5
+        },
+        "tier_2": {
+          "rpm": 10,
+          "metric": "generativelanguage.googleapis.com/predict_requests_per_model_per_day_paid_tier_2",
+          "displayName": "Predict requests per model per day (paid tier 2)",
+          "rpd": 400
+        },
+        "tier_3": {
+          "rpm": 15,
+          "metric": "generativelanguage.googleapis.com/predict_requests_per_model_per_day_paid_tier_3",
+          "displayName": "Predict requests per model per day (paid tier 3)",
+          "rpd": 5000
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "image-verification-001": {
+      "tiers": {
+        "unknown": {
+          "rpm": -1,
+          "metric": "generativelanguage.googleapis.com/predict_image_verification_requests_per_model",
+          "displayName": "Predict requests for image verification per model"
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "veo-001-preview-0815": {
+      "tiers": {
+        "unknown": {
+          "rpm": 4,
+          "metric": "generativelanguage.googleapis.com/predict_long_running_requests_per_model",
+          "displayName": "Predict long running requests per project"
+        },
+        "free": {
+          "rpm": 4,
+          "metric": "generativelanguage.googleapis.com/predict_long_running_requests_per_model_free_tier",
+          "displayName": "Predict long running requests per project (free tier)"
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "veo-2.0-generate-001": {
+      "tiers": {
+        "unknown": {
+          "rpm": 2,
+          "metric": "generativelanguage.googleapis.com/predict_long_running_requests_per_model_per_day",
+          "displayName": "Predict long running requests per project per day",
+          "rpd": 50
+        },
+        "tier_2": {
+          "rpd": 50,
+          "metric": "generativelanguage.googleapis.com/predict_long_running_requests_per_model_per_day_paid_tier_2",
+          "displayName": "Predict long running requests per project per day (paid tier 2)"
+        },
+        "tier_3": {
+          "rpd": 50,
+          "metric": "generativelanguage.googleapis.com/predict_long_running_requests_per_model_per_day_paid_tier_3",
+          "displayName": "Predict long running requests per project per day (paid tier 3)"
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "veo-2.0-generate-exp": {
+      "tiers": {
+        "unknown": {
+          "rpm": 2,
+          "metric": "generativelanguage.googleapis.com/predict_long_running_requests_per_model",
+          "displayName": "Predict long running requests per project"
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "veo-2.0-generate-selfie": {
+      "tiers": {
+        "unknown": {
+          "rpm": 10,
+          "metric": "generativelanguage.googleapis.com/predict_long_running_requests_per_model",
+          "displayName": "Predict long running requests per project"
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "veo-3-fast-generate": {
+      "tiers": {
+        "unknown": {
+          "rpm": 2,
+          "metric": "generativelanguage.googleapis.com/predict_long_running_requests_per_model_per_day",
+          "displayName": "Predict long running requests per project per day",
+          "rpd": 10
+        },
+        "tier_2": {
+          "rpm": 4,
+          "metric": "generativelanguage.googleapis.com/predict_long_running_requests_per_model_per_day_paid_tier_2",
+          "displayName": "Predict long running requests per project per day (paid tier 2)",
+          "rpd": 50
+        },
+        "tier_3": {
+          "rpm": 10,
+          "metric": "generativelanguage.googleapis.com/predict_long_running_requests_per_model_per_day_paid_tier_3",
+          "displayName": "Predict long running requests per project per day (paid tier 3)",
+          "rpd": 500
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "veo-3-generate": {
+      "tiers": {
+        "unknown": {
+          "rpm": 2,
+          "metric": "generativelanguage.googleapis.com/predict_long_running_requests_per_model_per_day",
+          "displayName": "Predict long running requests per project per day",
+          "rpd": 10
+        },
+        "tier_2": {
+          "rpm": 4,
+          "metric": "generativelanguage.googleapis.com/predict_long_running_requests_per_model_per_day_paid_tier_2",
+          "displayName": "Predict long running requests per project per day (paid tier 2)",
+          "rpd": 50
+        },
+        "tier_3": {
+          "rpm": 10,
+          "metric": "generativelanguage.googleapis.com/predict_long_running_requests_per_model_per_day_paid_tier_3",
+          "displayName": "Predict long running requests per project per day (paid tier 3)",
+          "rpd": 500
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "veo-3-lite-generate": {
+      "tiers": {
+        "unknown": {
+          "rpm": 2,
+          "metric": "generativelanguage.googleapis.com/predict_long_running_requests_per_model_per_day",
+          "displayName": "Predict long running requests per project per day",
+          "rpd": 10
+        },
+        "tier_2": {
+          "rpm": 4,
+          "metric": "generativelanguage.googleapis.com/predict_long_running_requests_per_model_per_day_paid_tier_2",
+          "displayName": "Predict long running requests per project per day (paid tier 2)",
+          "rpd": 50
+        },
+        "tier_3": {
+          "rpm": 10,
+          "metric": "generativelanguage.googleapis.com/predict_long_running_requests_per_model_per_day_paid_tier_3",
+          "displayName": "Predict long running requests per project per day (paid tier 3)",
+          "rpd": 500
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "veo-3.0-fast-generate": {
+      "tiers": {
+        "unknown": {
+          "rpm": 2,
+          "metric": "generativelanguage.googleapis.com/predict_long_running_requests_per_model_per_day",
+          "displayName": "Predict long running requests per project per day",
+          "rpd": 10
+        },
+        "tier_2": {
+          "rpm": 4,
+          "metric": "generativelanguage.googleapis.com/predict_long_running_requests_per_model_per_day_paid_tier_2",
+          "displayName": "Predict long running requests per project per day (paid tier 2)",
+          "rpd": 50
+        },
+        "tier_3": {
+          "rpm": 10,
+          "metric": "generativelanguage.googleapis.com/predict_long_running_requests_per_model_per_day_paid_tier_3",
+          "displayName": "Predict long running requests per project per day (paid tier 3)",
+          "rpd": 500
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "veo-3.0-generate": {
+      "tiers": {
+        "unknown": {
+          "rpm": 2,
+          "metric": "generativelanguage.googleapis.com/predict_long_running_requests_per_model_per_day",
+          "displayName": "Predict long running requests per project per day",
+          "rpd": 10
+        },
+        "tier_2": {
+          "rpm": 4,
+          "metric": "generativelanguage.googleapis.com/predict_long_running_requests_per_model_per_day_paid_tier_2",
+          "displayName": "Predict long running requests per project per day (paid tier 2)",
+          "rpd": 50
+        },
+        "tier_3": {
+          "rpm": 10,
+          "metric": "generativelanguage.googleapis.com/predict_long_running_requests_per_model_per_day_paid_tier_3",
+          "displayName": "Predict long running requests per project per day (paid tier 3)",
+          "rpd": 500
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "veo-internal": {
+      "tiers": {
+        "unknown": {
+          "rpm": 10,
+          "metric": "generativelanguage.googleapis.com/predict_long_running_requests_per_model_per_day",
+          "displayName": "Predict long running requests per project per day",
+          "rpd": 1000
+        },
+        "free": {
+          "rpm": 100,
+          "metric": "generativelanguage.googleapis.com/predict_long_running_requests_per_model_free_tier",
+          "displayName": "Predict long running requests per project (free tier)"
+        },
+        "tier_2": {
+          "rpm": 10,
+          "metric": "generativelanguage.googleapis.com/predict_long_running_requests_per_model_per_day_paid_tier_2",
+          "displayName": "Predict long running requests per project per day (paid tier 2)",
+          "rpd": 1000
+        },
+        "tier_3": {
+          "rpm": 30,
+          "metric": "generativelanguage.googleapis.com/predict_long_running_requests_per_model_per_day_paid_tier_3",
+          "displayName": "Predict long running requests per project per day (paid tier 3)",
+          "rpd": 1000
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "kdxlq": {
+      "tiers": {
+        "free": {
+          "rpm": 2,
+          "metric": "generativelanguage.googleapis.com/predict_long_running_requests_per_model_per_day_free_tier",
+          "displayName": "Predict long running requests per project per day (free tier)",
+          "rpd": 10
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    },
+    "ztmpr": {
+      "tiers": {
+        "free": {
+          "rpm": 2,
+          "metric": "generativelanguage.googleapis.com/predict_long_running_requests_per_model_per_day_free_tier",
+          "displayName": "Predict long running requests per project per day (free tier)",
+          "rpd": 10
+        }
+      },
+      "requests": 0,
+      "errors_429": 0
+    }
+  },
+  "requests": []
+}
