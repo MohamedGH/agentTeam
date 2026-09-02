@@ -1,17 +1,12 @@
 import { GoogleGenAI } from '@google/genai';
+import { IAIProvider, AIProviderId, ProviderModelConfig, GenerationUsageResult, TokenCountResult } from './providers/types';
+import { GeminiProvider } from './providers/geminiProvider';
+import { OpenAIProvider } from './providers/openaiProvider';
+import { AnthropicProvider } from './providers/anthropicProvider';
+import { GroqProvider, DeepSeekProvider, CustomProvider } from './providers/otherProviders';
+import { MockProvider } from './providers/mockProvider';
 import { cloudMonitoringQuotaService, CloudMonitoringQuotaResult } from './cloudMonitoring';
 import { quotaManager } from './quotaManager';
-
-export type AIProviderId = 'gemini' | 'openai' | 'anthropic' | 'groq' | 'deepseek' | 'custom';
-
-export interface ProviderModelConfig {
-  name: string;
-  displayName: string;
-  contextWindow: number;
-  supportsTools: boolean;
-  costTier: 'flash' | 'pro' | 'ultra' | 'custom';
-  providerId: AIProviderId;
-}
 
 export interface ProviderInfo {
   id: AIProviderId;
@@ -36,124 +31,45 @@ export interface ProviderHealthStatus {
   timestamp: string;
 }
 
-export interface GenerationUsageResult {
-  text: string;
-  promptTokens: number;
-  completionTokens: number;
-  totalTokens: number;
-  provider: AIProviderId;
-  model: string;
-  isRealProviderUsage: boolean;
-}
-
 /**
  * ProviderManager (provider_manager)
  * 
- * Multi-Provider AI Controller supporting:
- * - Google Gemini (Native @google/genai SDK & usageMetadata)
- * - OpenAI (GPT-4o, GPT-4o-mini, o3-mini via standard ChatCompletions usage)
- * - Anthropic Claude (Claude 3.7 Sonnet, Claude 3.5 Haiku via Messages API usage)
- * - Groq (Llama 3.3 70B, Mixtral via OpenAI-compatible API)
- * - DeepSeek (DeepSeek V3, DeepSeek R1 via OpenAI-compatible API)
- * - Custom / Ollama (Local & self-hosted OpenAI-compatible endpoints)
- * 
- * Automatically captures authoritative real-time token usage from every provider API.
+ * Unified Multi-Provider AI Controller with:
+ * - Clean polymorphic interface (IAIProvider) across all providers.
+ * - Robust activeModelOverride management per provider.
+ * - True automatic multi-model & multi-provider failover when rate limits (429) or high demand (503) occur.
+ * - Hermetic mocking support for zero-quota testing.
  */
 export class ProviderManager {
-  private geminiClient: GoogleGenAI | null = null;
+  private providers: Map<AIProviderId, IAIProvider> = new Map();
   private activeProvider: AIProviderId = 'gemini';
-  private activeModelOverride: string | null = null;
-
-  private readonly providersCatalog: Record<AIProviderId, {
-    name: string;
-    defaultModel: string;
-    sourceType: string;
-    tokenCounterSupported: boolean;
-    models: ProviderModelConfig[];
-  }> = {
-    gemini: {
-      name: 'Google Gemini',
-      defaultModel: 'gemini-3.7-flash',
-      sourceType: 'Google Cloud Monitoring & Gemini SDK',
-      tokenCounterSupported: true,
-      models: [
-        { name: 'gemini-3.7-flash', displayName: 'Gemini 3.7 Flash', contextWindow: 1048576, supportsTools: true, costTier: 'flash', providerId: 'gemini' },
-        { name: 'gemini-3.6-flash', displayName: 'Gemini 3.6 Flash', contextWindow: 1048576, supportsTools: true, costTier: 'flash', providerId: 'gemini' },
-        { name: 'gemini-3.5-flash', displayName: 'Gemini 3.5 Flash', contextWindow: 1048576, supportsTools: true, costTier: 'flash', providerId: 'gemini' },
-        { name: 'gemini-3.1-pro-preview', displayName: 'Gemini 3.1 Pro', contextWindow: 2097152, supportsTools: true, costTier: 'pro', providerId: 'gemini' },
-        { name: 'gemini-3.1-flash-lite', displayName: 'Gemini 3.1 Flash Lite', contextWindow: 1048576, supportsTools: true, costTier: 'flash', providerId: 'gemini' },
-      ],
-    },
-    openai: {
-      name: 'OpenAI',
-      defaultModel: 'gpt-4o-mini',
-      sourceType: 'OpenAI API (usage.prompt_tokens & usage.completion_tokens)',
-      tokenCounterSupported: true,
-      models: [
-        { name: 'gpt-4o', displayName: 'GPT-4o (Flagship)', contextWindow: 128000, supportsTools: true, costTier: 'pro', providerId: 'openai' },
-        { name: 'gpt-4o-mini', displayName: 'GPT-4o Mini (High Speed)', contextWindow: 128000, supportsTools: true, costTier: 'flash', providerId: 'openai' },
-        { name: 'o3-mini', displayName: 'o3-mini (Reasoning)', contextWindow: 200000, supportsTools: true, costTier: 'ultra', providerId: 'openai' },
-      ],
-    },
-    anthropic: {
-      name: 'Anthropic Claude',
-      defaultModel: 'claude-3-5-sonnet-20241022',
-      sourceType: 'Anthropic Messages API (input_tokens & output_tokens)',
-      tokenCounterSupported: true,
-      models: [
-        { name: 'claude-3-7-sonnet-20250219', displayName: 'Claude 3.7 Sonnet', contextWindow: 200000, supportsTools: true, costTier: 'pro', providerId: 'anthropic' },
-        { name: 'claude-3-5-sonnet-20241022', displayName: 'Claude 3.5 Sonnet', contextWindow: 200000, supportsTools: true, costTier: 'pro', providerId: 'anthropic' },
-        { name: 'claude-3-5-haiku-20241022', displayName: 'Claude 3.5 Haiku', contextWindow: 200000, supportsTools: true, costTier: 'flash', providerId: 'anthropic' },
-      ],
-    },
-    groq: {
-      name: 'Groq Cloud',
-      defaultModel: 'llama-3.3-70b-versatile',
-      sourceType: 'Groq LPU Inference (Real-Time Usage)',
-      tokenCounterSupported: true,
-      models: [
-        { name: 'llama-3.3-70b-versatile', displayName: 'Llama 3.3 70B (Versatile)', contextWindow: 128000, supportsTools: true, costTier: 'flash', providerId: 'groq' },
-        { name: 'llama-3.1-8b-instant', displayName: 'Llama 3.1 8B (Instant)', contextWindow: 128000, supportsTools: true, costTier: 'flash', providerId: 'groq' },
-        { name: 'mixtral-8x7b-32768', displayName: 'Mixtral 8x7B', contextWindow: 32768, supportsTools: true, costTier: 'flash', providerId: 'groq' },
-      ],
-    },
-    deepseek: {
-      name: 'DeepSeek',
-      defaultModel: 'deepseek-chat',
-      sourceType: 'DeepSeek API (Usage Metadata)',
-      tokenCounterSupported: true,
-      models: [
-        { name: 'deepseek-chat', displayName: 'DeepSeek-V3', contextWindow: 64000, supportsTools: true, costTier: 'flash', providerId: 'deepseek' },
-        { name: 'deepseek-reasoner', displayName: 'DeepSeek-R1 (Reasoning)', contextWindow: 64000, supportsTools: true, costTier: 'pro', providerId: 'deepseek' },
-      ],
-    },
-    custom: {
-      name: 'Custom / Local (Ollama)',
-      defaultModel: process.env.CUSTOM_AI_MODEL || 'llama3:latest',
-      sourceType: 'Self-Hosted / Local OpenAI-Compatible Endpoint',
-      tokenCounterSupported: true,
-      models: [
-        { name: process.env.CUSTOM_AI_MODEL || 'llama3:latest', displayName: 'Custom Model Endpoint', contextWindow: 32768, supportsTools: true, costTier: 'custom', providerId: 'custom' },
-      ],
-    },
-  };
+  private activeModelOverrides: Partial<Record<AIProviderId, string>> = {};
 
   constructor() {
-    this.initGemini();
+    this.registerProvider(new GeminiProvider());
+    this.registerProvider(new OpenAIProvider());
+    this.registerProvider(new AnthropicProvider());
+    this.registerProvider(new GroqProvider());
+    this.registerProvider(new DeepSeekProvider());
+    this.registerProvider(new CustomProvider());
+    this.registerProvider(new MockProvider());
   }
 
-  private initGemini() {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (apiKey) {
-      this.geminiClient = new GoogleGenAI({ apiKey });
+  public registerProvider(provider: IAIProvider) {
+    this.providers.set(provider.id, provider);
+  }
+
+  public getProvider(id: AIProviderId): IAIProvider {
+    const p = this.providers.get(id);
+    if (!p) {
+      throw new Error(`AI Provider "${id}" is not registered`);
     }
+    return p;
   }
 
   public getGeminiClient(): GoogleGenAI | null {
-    if (!this.geminiClient && process.env.GEMINI_API_KEY) {
-      this.geminiClient = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-    }
-    return this.geminiClient;
+    const gemini = this.providers.get('gemini') as GeminiProvider;
+    return gemini ? gemini.getClient() : null;
   }
 
   // Alias for backward compatibility
@@ -166,49 +82,54 @@ export class ProviderManager {
   }
 
   public setActiveProvider(provider: AIProviderId, model?: string): void {
-    if (this.providersCatalog[provider]) {
+    if (this.providers.has(provider)) {
       this.activeProvider = provider;
       if (model) {
-        this.activeModelOverride = model;
-      } else {
-        this.activeModelOverride = this.providersCatalog[provider].defaultModel;
+        this.activeModelOverrides[provider] = model;
       }
     }
   }
 
-  public isProviderConfigured(provider: AIProviderId): boolean {
-    switch (provider) {
-      case 'gemini':
-        return Boolean(process.env.GEMINI_API_KEY);
-      case 'openai':
-        return Boolean(process.env.OPENAI_API_KEY);
-      case 'anthropic':
-        return Boolean(process.env.ANTHROPIC_API_KEY);
-      case 'groq':
-        return Boolean(process.env.GROQ_API_KEY);
-      case 'deepseek':
-        return Boolean(process.env.DEEPSEEK_API_KEY);
-      case 'custom':
-        return Boolean(process.env.CUSTOM_AI_BASE_URL || process.env.CUSTOM_AI_API_KEY);
-      default:
-        return false;
+  /**
+   * Set or clear active model override for a specific provider
+   */
+  public setModelOverride(provider: AIProviderId, model: string | null): void {
+    if (model) {
+      this.activeModelOverrides[provider] = model;
+    } else {
+      delete this.activeModelOverrides[provider];
     }
   }
 
+  public getModelOverride(provider: AIProviderId = this.activeProvider): string | null {
+    return this.activeModelOverrides[provider] || null;
+  }
+
+  public clearAllModelOverrides(): void {
+    this.activeModelOverrides = {};
+  }
+
+  public isProviderConfigured(provider: AIProviderId): boolean {
+    const p = this.providers.get(provider);
+    return p ? p.isConfigured() : false;
+  }
+
   public getProvidersList(): ProviderInfo[] {
-    return (Object.keys(this.providersCatalog) as AIProviderId[]).map((id) => {
-      const p = this.providersCatalog[id];
-      return {
+    const list: ProviderInfo[] = [];
+    for (const [id, p] of this.providers.entries()) {
+      if (id === 'mock') continue; // Hidden from standard customer list
+      list.push({
         id,
         name: p.name,
-        configured: this.isProviderConfigured(id),
+        configured: p.isConfigured(),
         active: this.activeProvider === id,
         models: p.models,
-        defaultModel: p.defaultModel,
+        defaultModel: this.activeModelOverrides[id] || p.defaultModel,
         sourceType: p.sourceType,
         tokenCounterSupported: p.tokenCounterSupported,
-      };
-    });
+      });
+    }
+    return list;
   }
 
   public hasValidCredentials(provider: AIProviderId = this.activeProvider): boolean {
@@ -223,35 +144,47 @@ export class ProviderManager {
   }
 
   /**
-   * Selects optimal model based on provider, quota headroom, and health status
+   * Selects optimal model based on provider, activeModelOverride, and cooldown status
    */
   public async selectOptimalModel(
-    preferredModels: string[] = ['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.1-pro-preview'],
+    preferredModels?: string[],
     tier = 'tier_3',
     estimatedTokens = 1000,
-    provider: AIProviderId = this.activeProvider
+    providerId: AIProviderId = this.activeProvider
   ): Promise<string> {
-    if (this.activeModelOverride) {
-      return this.activeModelOverride;
+    const provider = this.getProvider(providerId);
+
+    // 1. Check if user configured an active model override for this provider
+    const override = this.activeModelOverrides[providerId];
+    if (override) {
+      if (!quotaManager.isModelInCooldown(override)) {
+        return override;
+      }
+      console.warn(`[ProviderManager] Active model override "${override}" for ${providerId} is in cooldown. Selecting alternative.`);
     }
 
-    if (provider === 'gemini') {
+    // 2. Gemini model selection with dynamic quota headroom
+    if (providerId === 'gemini') {
       await this.getRealQuotaMetrics();
-      const selected = quotaManager.selectBestModel(preferredModels, tier, estimatedTokens);
-      return selected || preferredModels[0] || 'gemini-3.7-flash';
+      const candidates = preferredModels || provider.models.map((m) => m.name);
+      const selected = quotaManager.selectBestModel(candidates, tier, estimatedTokens);
+      return selected || candidates[0] || provider.defaultModel;
     }
 
-    const providerConfig = this.providersCatalog[provider];
-    if (providerConfig && providerConfig.models.length > 0) {
-      const match = preferredModels.find((m) => providerConfig.models.some((pModel) => pModel.name === m));
-      return match || providerConfig.defaultModel;
+    // 3. Other providers: choose from preferred or default
+    if (preferredModels && preferredModels.length > 0) {
+      const match = preferredModels.find((m) => provider.models.some((pm) => pm.name === m));
+      if (match && !quotaManager.isModelInCooldown(match)) {
+        return match;
+      }
     }
 
-    return preferredModels[0] || 'gemini-3.7-flash';
+    const available = provider.models.find((m) => !quotaManager.isModelInCooldown(m.name));
+    return available ? available.name : provider.defaultModel;
   }
 
   /**
-   * Unified generation method extracting exact token usage from any provider's API
+   * Unified generation method with automatic multi-model and multi-provider failover
    */
   public async generateWithUsage(
     model: string,
@@ -260,539 +193,108 @@ export class ProviderManager {
     role = 'agent',
     providerOverride?: AIProviderId
   ): Promise<GenerationUsageResult> {
-    const provider = providerOverride || this.inferProviderFromModel(model) || this.activeProvider;
+    const targetProviderId = providerOverride || this.inferProviderFromModel(model) || this.activeProvider;
+    const failoverHistory: Array<{ provider: AIProviderId; model: string; error?: string }> = [];
 
-    // 1. Google Gemini Provider
-    if (provider === 'gemini') {
-      return await this.callGeminiWithUsage(model, prompt, fallbackText, role);
+    // Construct an ordered failover sequence of providers
+    const providerPriority: AIProviderId[] = [
+      targetProviderId,
+      'gemini',
+      'openai',
+      'anthropic',
+      'groq',
+      'deepseek',
+      'custom',
+    ];
+    const uniqueProviders = Array.from(new Set(providerPriority));
+
+    for (const provId of uniqueProviders) {
+      const provider = this.providers.get(provId);
+      if (!provider || !provider.isConfigured()) {
+        continue;
+      }
+
+      // Candidate models for this provider
+      const candidateModels = provId === targetProviderId
+        ? Array.from(new Set([model, this.activeModelOverrides[provId], ...provider.models.map((m) => m.name)].filter(Boolean))) as string[]
+        : provider.models.map((m) => m.name);
+
+      for (const candidateModel of candidateModels) {
+        if (quotaManager.isModelInCooldown(candidateModel)) {
+          continue;
+        }
+
+        try {
+          const res = await provider.generateContent({
+            model: candidateModel,
+            prompt,
+            fallbackText,
+            role,
+          });
+
+          this.recordModelUsage(candidateModel, {
+            promptTokenCount: res.promptTokens,
+            candidatesTokenCount: res.completionTokens,
+            totalTokenCount: res.totalTokens,
+          });
+
+          return {
+            ...res,
+            failoverHistory: failoverHistory.length > 0 ? failoverHistory : undefined,
+          };
+        } catch (err: any) {
+          const errMsg = err?.message || String(err);
+          failoverHistory.push({ provider: provId, model: candidateModel, error: errMsg });
+
+          const is503 = errMsg.includes('503') || errMsg.includes('UNAVAILABLE') || errMsg.includes('high demand');
+          const is429 = errMsg.includes('429') || errMsg.includes('RESOURCE_EXHAUSTED') || errMsg.includes('quota');
+
+          if (is503) {
+            console.warn(`[ProviderManager] 503 High Demand on ${provId} (${candidateModel}). Triggering cooldown & automatic failover.`);
+            quotaManager.handle503Error(candidateModel, 30);
+          } else if (is429) {
+            console.warn(`[ProviderManager] 429 Rate Limit on ${provId} (${candidateModel}). Triggering cooldown & automatic failover.`);
+            quotaManager.handle429Error(candidateModel, 60);
+          } else {
+            console.warn(`[ProviderManager] Error on ${provId} (${candidateModel}): ${errMsg.substring(0, 100)}. Failing over...`);
+          }
+        }
+      }
     }
 
-    // 2. OpenAI Provider
-    if (provider === 'openai') {
-      return await this.callOpenAIWithUsage(model, prompt, fallbackText, role);
-    }
-
-    // 3. Anthropic Claude Provider
-    if (provider === 'anthropic') {
-      return await this.callAnthropicWithUsage(model, prompt, fallbackText, role);
-    }
-
-    // 4. Groq Provider
-    if (provider === 'groq') {
-      return await this.callGroqWithUsage(model, prompt, fallbackText, role);
-    }
-
-    // 5. DeepSeek Provider
-    if (provider === 'deepseek') {
-      return await this.callDeepSeekWithUsage(model, prompt, fallbackText, role);
-    }
-
-    // 6. Custom / Local Provider
-    if (provider === 'custom') {
-      return await this.callCustomWithUsage(model, prompt, fallbackText, role);
-    }
-
-    return await this.callGeminiWithUsage(model, prompt, fallbackText, role);
+    // If all configured providers fail or none are configured, return clean graceful fallback
+    const promptTokens = Math.max(60, Math.ceil(prompt.length / 4));
+    const completionTokens = Math.max(30, Math.ceil(fallbackText.length / 4));
+    return {
+      text: fallbackText,
+      promptTokens,
+      completionTokens,
+      totalTokens: promptTokens + completionTokens,
+      provider: targetProviderId,
+      model,
+      isRealProviderUsage: false,
+      failoverHistory: failoverHistory.length > 0 ? failoverHistory : undefined,
+    };
   }
 
-  private inferProviderFromModel(model: string): AIProviderId | null {
+  public inferProviderFromModel(model: string): AIProviderId | null {
     if (model.startsWith('gemini-')) return 'gemini';
     if (model.startsWith('gpt-') || model.startsWith('o3-') || model.startsWith('text-embedding-')) return 'openai';
     if (model.startsWith('claude-')) return 'anthropic';
     if (model.startsWith('llama-') || model.startsWith('mixtral-')) return 'groq';
     if (model.startsWith('deepseek-')) return 'deepseek';
+    if (model.startsWith('mock-')) return 'mock';
     return null;
   }
 
-  // -------------------------------------------------------------
-  // Provider Specific API Callers with Usage Extraction
-  // -------------------------------------------------------------
-
-  private async callGeminiWithUsage(
-    model: string,
-    prompt: string,
-    fallbackText: string,
-    role: string
-  ): Promise<GenerationUsageResult> {
-    const client = this.getGeminiClient();
-    if (client && process.env.GEMINI_API_KEY) {
-      // Build failover candidate list prioritizing requested model followed by active Gemini models
-      const baseCandidates = [
-        model,
-        'gemini-3.7-flash',
-        'gemini-3.6-flash',
-        'gemini-3.5-flash',
-        'gemini-3.1-flash-lite',
-        'gemini-3.1-pro-preview',
-      ];
-      const candidateList = Array.from(new Set(baseCandidates));
-
-      // Filter out models currently in active cooldown unless all are in cooldown
-      let availableCandidates = candidateList.filter((m) => !quotaManager.isModelInCooldown(m));
-      if (availableCandidates.length === 0) {
-        availableCandidates = candidateList;
-      }
-
-      for (let i = 0; i < availableCandidates.length; i++) {
-        const candidateModel = availableCandidates[i];
-        try {
-          const response = await client.models.generateContent({
-            model: candidateModel,
-            contents: prompt,
-          });
-
-          const text = response.text?.trim() || fallbackText;
-          const usage = response.usageMetadata;
-
-          if (usage && (usage.promptTokenCount !== undefined || usage.totalTokenCount !== undefined)) {
-            const promptTokens = usage.promptTokenCount ?? Math.max(1, Math.ceil(prompt.length / 4));
-            const completionTokens = usage.candidatesTokenCount ?? Math.max(1, Math.ceil(text.length / 4));
-            const totalTokens = usage.totalTokenCount ?? (promptTokens + completionTokens);
-
-            this.recordModelUsage(candidateModel, {
-              promptTokenCount: promptTokens,
-              candidatesTokenCount: completionTokens,
-              totalTokenCount: totalTokens,
-            });
-
-            return {
-              text,
-              promptTokens,
-              completionTokens,
-              totalTokens,
-              provider: 'gemini',
-              model: candidateModel,
-              isRealProviderUsage: true,
-            };
-          }
-
-          const promptTokens = Math.max(1, Math.ceil(prompt.length / 4));
-          const completionTokens = Math.max(1, Math.ceil(text.length / 4));
-          const totalTokens = promptTokens + completionTokens;
-
-          this.recordModelUsage(candidateModel, { totalTokenCount: totalTokens });
-
-          return {
-            text,
-            promptTokens,
-            completionTokens,
-            totalTokens,
-            provider: 'gemini',
-            model: candidateModel,
-            isRealProviderUsage: true,
-          };
-        } catch (err: any) {
-          const errMsg = err?.message || String(err);
-          const is503 = errMsg.includes('503') || errMsg.includes('UNAVAILABLE') || errMsg.includes('high demand');
-          const is429 = errMsg.includes('429') || errMsg.includes('RESOURCE_EXHAUSTED');
-
-          if (is503) {
-            console.warn(
-              `[ProviderManager] Model ${candidateModel} experiencing high demand (503). Activating cooldown & failing over...`
-            );
-            quotaManager.handle503Error(candidateModel, 30);
-          } else if (is429) {
-            console.warn(
-              `[ProviderManager] Model ${candidateModel} rate limit reached (429). Activating cooldown & failing over...`
-            );
-            this.handleRateLimitError(candidateModel, 60);
-          } else {
-            console.warn(
-              `[ProviderManager] Gemini call failed for ${role} (${candidateModel}): ${errMsg.substring(0, 100)}`
-            );
-          }
-
-          // If there are more candidate models, continue to next candidate
-          if (i < availableCandidates.length - 1) {
-            continue;
-          }
-        }
-      }
-    }
-
-    const promptTokens = Math.max(80, Math.ceil(prompt.length / 4));
-    const completionTokens = Math.max(40, Math.ceil(fallbackText.length / 4));
-    const totalTokens = promptTokens + completionTokens;
-
-    return {
-      text: fallbackText,
-      promptTokens,
-      completionTokens,
-      totalTokens,
-      provider: 'gemini',
-      model,
-      isRealProviderUsage: false,
-    };
-  }
-
-  private async callOpenAIWithUsage(
-    model: string,
-    prompt: string,
-    fallbackText: string,
-    role: string
-  ): Promise<GenerationUsageResult> {
-    const apiKey = process.env.OPENAI_API_KEY;
-    const baseUrl = process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
-
-    if (apiKey) {
-      try {
-        const res = await fetch(`${baseUrl}/chat/completions`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${apiKey}`,
-          },
-          body: JSON.stringify({
-            model,
-            messages: [{ role: 'user', content: prompt }],
-          }),
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          const text = data.choices?.[0]?.message?.content?.trim() || fallbackText;
-          const usage = data.usage;
-
-          if (usage) {
-            const promptTokens = usage.prompt_tokens ?? Math.max(1, Math.ceil(prompt.length / 4));
-            const completionTokens = usage.completion_tokens ?? Math.max(1, Math.ceil(text.length / 4));
-            const totalTokens = usage.total_tokens ?? (promptTokens + completionTokens);
-
-            this.recordModelUsage(model, {
-              promptTokenCount: promptTokens,
-              candidatesTokenCount: completionTokens,
-              totalTokenCount: totalTokens,
-            });
-
-            return {
-              text,
-              promptTokens,
-              completionTokens,
-              totalTokens,
-              provider: 'openai',
-              model,
-              isRealProviderUsage: true,
-            };
-          }
-        } else if (res.status === 429) {
-          this.handleRateLimitError(model, 60);
-        }
-      } catch (err: any) {
-        console.warn(`[ProviderManager] OpenAI API call failed for ${role} (${model}):`, err.message);
-      }
-    }
-
-    const promptTokens = Math.max(90, Math.ceil(prompt.length / 4));
-    const completionTokens = Math.max(45, Math.ceil(fallbackText.length / 4));
-    return {
-      text: fallbackText,
-      promptTokens,
-      completionTokens,
-      totalTokens: promptTokens + completionTokens,
-      provider: 'openai',
-      model,
-      isRealProviderUsage: false,
-    };
-  }
-
-  private async callAnthropicWithUsage(
-    model: string,
-    prompt: string,
-    fallbackText: string,
-    role: string
-  ): Promise<GenerationUsageResult> {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    const baseUrl = process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com/v1';
-
-    if (apiKey) {
-      try {
-        const res = await fetch(`${baseUrl}/messages`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': apiKey,
-            'anthropic-version': '2023-06-01',
-          },
-          body: JSON.stringify({
-            model,
-            max_tokens: 4096,
-            messages: [{ role: 'user', content: prompt }],
-          }),
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          const text = data.content?.[0]?.text?.trim() || fallbackText;
-          const usage = data.usage;
-
-          if (usage) {
-            const promptTokens = usage.input_tokens ?? Math.max(1, Math.ceil(prompt.length / 4));
-            const completionTokens = usage.output_tokens ?? Math.max(1, Math.ceil(text.length / 4));
-            const totalTokens = promptTokens + completionTokens;
-
-            this.recordModelUsage(model, {
-              promptTokenCount: promptTokens,
-              candidatesTokenCount: completionTokens,
-              totalTokenCount: totalTokens,
-            });
-
-            return {
-              text,
-              promptTokens,
-              completionTokens,
-              totalTokens,
-              provider: 'anthropic',
-              model,
-              isRealProviderUsage: true,
-            };
-          }
-        } else if (res.status === 429) {
-          this.handleRateLimitError(model, 60);
-        }
-      } catch (err: any) {
-        console.warn(`[ProviderManager] Anthropic API call failed for ${role} (${model}):`, err.message);
-      }
-    }
-
-    const promptTokens = Math.max(95, Math.ceil(prompt.length / 4));
-    const completionTokens = Math.max(50, Math.ceil(fallbackText.length / 4));
-    return {
-      text: fallbackText,
-      promptTokens,
-      completionTokens,
-      totalTokens: promptTokens + completionTokens,
-      provider: 'anthropic',
-      model,
-      isRealProviderUsage: false,
-    };
-  }
-
-  private async callGroqWithUsage(
-    model: string,
-    prompt: string,
-    fallbackText: string,
-    role: string
-  ): Promise<GenerationUsageResult> {
-    const apiKey = process.env.GROQ_API_KEY;
-    if (apiKey) {
-      try {
-        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${apiKey}`,
-          },
-          body: JSON.stringify({
-            model,
-            messages: [{ role: 'user', content: prompt }],
-          }),
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          const text = data.choices?.[0]?.message?.content?.trim() || fallbackText;
-          const usage = data.usage;
-
-          if (usage) {
-            const promptTokens = usage.prompt_tokens ?? Math.max(1, Math.ceil(prompt.length / 4));
-            const completionTokens = usage.completion_tokens ?? Math.max(1, Math.ceil(text.length / 4));
-            const totalTokens = usage.total_tokens ?? (promptTokens + completionTokens);
-
-            this.recordModelUsage(model, {
-              promptTokenCount: promptTokens,
-              candidatesTokenCount: completionTokens,
-              totalTokenCount: totalTokens,
-            });
-
-            return {
-              text,
-              promptTokens,
-              completionTokens,
-              totalTokens,
-              provider: 'groq',
-              model,
-              isRealProviderUsage: true,
-            };
-          }
-        }
-      } catch (err: any) {
-        console.warn(`[ProviderManager] Groq API call failed for ${role}:`, err.message);
-      }
-    }
-
-    const promptTokens = Math.max(85, Math.ceil(prompt.length / 4));
-    const completionTokens = Math.max(40, Math.ceil(fallbackText.length / 4));
-    return {
-      text: fallbackText,
-      promptTokens,
-      completionTokens,
-      totalTokens: promptTokens + completionTokens,
-      provider: 'groq',
-      model,
-      isRealProviderUsage: false,
-    };
-  }
-
-  private async callDeepSeekWithUsage(
-    model: string,
-    prompt: string,
-    fallbackText: string,
-    role: string
-  ): Promise<GenerationUsageResult> {
-    const apiKey = process.env.DEEPSEEK_API_KEY;
-    if (apiKey) {
-      try {
-        const res = await fetch('https://api.deepseek.com/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${apiKey}`,
-          },
-          body: JSON.stringify({
-            model,
-            messages: [{ role: 'user', content: prompt }],
-          }),
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          const text = data.choices?.[0]?.message?.content?.trim() || fallbackText;
-          const usage = data.usage;
-
-          if (usage) {
-            const promptTokens = usage.prompt_tokens ?? Math.max(1, Math.ceil(prompt.length / 4));
-            const completionTokens = usage.completion_tokens ?? Math.max(1, Math.ceil(text.length / 4));
-            const totalTokens = usage.total_tokens ?? (promptTokens + completionTokens);
-
-            this.recordModelUsage(model, {
-              promptTokenCount: promptTokens,
-              candidatesTokenCount: completionTokens,
-              totalTokenCount: totalTokens,
-            });
-
-            return {
-              text,
-              promptTokens,
-              completionTokens,
-              totalTokens,
-              provider: 'deepseek',
-              model,
-              isRealProviderUsage: true,
-            };
-          }
-        }
-      } catch (err: any) {
-        console.warn(`[ProviderManager] DeepSeek API call failed for ${role}:`, err.message);
-      }
-    }
-
-    const promptTokens = Math.max(85, Math.ceil(prompt.length / 4));
-    const completionTokens = Math.max(40, Math.ceil(fallbackText.length / 4));
-    return {
-      text: fallbackText,
-      promptTokens,
-      completionTokens,
-      totalTokens: promptTokens + completionTokens,
-      provider: 'deepseek',
-      model,
-      isRealProviderUsage: false,
-    };
-  }
-
-  private async callCustomWithUsage(
-    model: string,
-    prompt: string,
-    fallbackText: string,
-    role: string
-  ): Promise<GenerationUsageResult> {
-    const baseUrl = process.env.CUSTOM_AI_BASE_URL || 'http://localhost:11434/v1';
-    const apiKey = process.env.CUSTOM_AI_API_KEY || 'ollama';
-
-    try {
-      const res = await fetch(`${baseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model,
-          messages: [{ role: 'user', content: prompt }],
-        }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        const text = data.choices?.[0]?.message?.content?.trim() || fallbackText;
-        const usage = data.usage;
-
-        if (usage) {
-          const promptTokens = usage.prompt_tokens ?? Math.max(1, Math.ceil(prompt.length / 4));
-          const completionTokens = usage.completion_tokens ?? Math.max(1, Math.ceil(text.length / 4));
-          const totalTokens = usage.total_tokens ?? (promptTokens + completionTokens);
-
-          this.recordModelUsage(model, {
-            promptTokenCount: promptTokens,
-            candidatesTokenCount: completionTokens,
-            totalTokenCount: totalTokens,
-          });
-
-          return {
-            text,
-            promptTokens,
-            completionTokens,
-            totalTokens,
-            provider: 'custom',
-            model,
-            isRealProviderUsage: true,
-          };
-        }
-      }
-    } catch (err: any) {
-      console.warn(`[ProviderManager] Custom API call failed for ${role}:`, err.message);
-    }
-
-    const promptTokens = Math.max(75, Math.ceil(prompt.length / 4));
-    const completionTokens = Math.max(35, Math.ceil(fallbackText.length / 4));
-    return {
-      text: fallbackText,
-      promptTokens,
-      completionTokens,
-      totalTokens: promptTokens + completionTokens,
-      provider: 'custom',
-      model,
-      isRealProviderUsage: false,
-    };
-  }
-
   /**
-   * Real-time token counter using provider's client.models.countTokens API (for Gemini) or heuristic
+   * Real-time token counter using provider's native API or heuristic
    */
-  public async countRealTokens(model: string, text: string): Promise<{ tokenCount: number; isRealProvider: boolean }> {
-    const client = this.getGeminiClient();
-    if (client && process.env.GEMINI_API_KEY && model.startsWith('gemini-')) {
-      const candidates = [
-        model,
-        'gemini-3.7-flash',
-        'gemini-3.6-flash',
-        'gemini-3.5-flash',
-        'gemini-3.1-flash-lite',
-      ];
-      const uniqueCandidates = Array.from(new Set(candidates));
-
-      for (const candidate of uniqueCandidates) {
-        try {
-          const res = await client.models.countTokens({
-            model: candidate,
-            contents: text,
-          });
-          if (res.totalTokens !== undefined) {
-            return { tokenCount: res.totalTokens, isRealProvider: true };
-          }
-        } catch {
-          // try next candidate
-        }
-      }
+  public async countRealTokens(model: string, text: string): Promise<TokenCountResult> {
+    const provId = this.inferProviderFromModel(model) || this.activeProvider;
+    const provider = this.providers.get(provId);
+    if (provider && provider.isConfigured()) {
+      return await provider.countTokens(model, text);
     }
     return { tokenCount: Math.max(1, Math.ceil(text.length / 4)), isRealProvider: false };
   }
@@ -821,7 +323,7 @@ export class ProviderManager {
   public async getHealthStatus(): Promise<ProviderHealthStatus> {
     const monitoringResult = await this.getRealQuotaMetrics();
     const cacheStatus = cloudMonitoringQuotaService.getCacheStatus();
-    const configuredList = (Object.keys(this.providersCatalog) as AIProviderId[]).filter((id) =>
+    const configuredList = (Array.from(this.providers.keys()) as AIProviderId[]).filter((id) =>
       this.isProviderConfigured(id)
     );
 
@@ -839,11 +341,12 @@ export class ProviderManager {
   }
 
   /**
-   * Returns all available models and their configuration
+   * Returns all available models across all providers
    */
   public getAvailableModels(): ProviderModelConfig[] {
     const all: ProviderModelConfig[] = [];
-    for (const p of Object.values(this.providersCatalog)) {
+    for (const p of this.providers.values()) {
+      if (p.id === 'mock') continue;
       all.push(...p.models);
     }
     return all;
@@ -857,7 +360,6 @@ export class ProviderManager {
     const localState = quotaManager.allStatus(tier);
     const cacheStatus = cloudMonitoringQuotaService.getCacheStatus();
 
-    // Merge Cloud Monitoring authoritative data & provider metadata
     const merged: Record<string, any> = {};
 
     for (const [model, status] of Object.entries(localState)) {

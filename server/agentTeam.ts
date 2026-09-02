@@ -55,7 +55,8 @@ Provide your architectural breakdown and delegation plan for the Developer.`;
         chosenModel,
         managerAnalysisPrompt,
         `Task received: "${taskPrompt}".\nAnalyzing project architecture and existing codebase.\nDelegating implementation to Senior Developer with focus on clean modular design and test coverage.`,
-        'manager'
+        'manager',
+        activeProvider
       );
 
       totalTokens += phase1Res.totalTokens;
@@ -103,7 +104,8 @@ Describe how you are patching the code.`;
           chosenModel,
           devPrompt,
           devFallback,
-          'developer'
+          'developer',
+          activeProvider
         );
 
         // Perform actual virtual file operations according to the task
@@ -146,7 +148,8 @@ Provide QA evaluation and regression analysis.`;
           chosenModel,
           testerPrompt,
           testerFallback,
-          'tester'
+          'tester',
+          activeProvider
         );
 
         const testToolCalls = [
@@ -226,7 +229,8 @@ Provide architecture review, code cleanliness audit, and security assessment.`;
           chosenModel,
           reviewPrompt,
           reviewFallback,
-          'reviewer'
+          'reviewer',
+          activeProvider
         );
 
         const reviewToolCalls = [
@@ -271,7 +275,8 @@ Provide architecture review, code cleanliness audit, and security assessment.`;
         chosenModel,
         delivPrompt,
         delivFallback,
-        'manager'
+        'manager',
+        activeProvider
       );
 
       totalTokens += delivRes.totalTokens;
@@ -510,32 +515,6 @@ def test_empty_payload_raises():
     }
 
     return toolCalls;
-  }
-
-  private async callModelOrSimulate(
-    model: string,
-    role: AgentRole,
-    prompt: string,
-    fallbackResponse: string
-  ): Promise<string> {
-    const client = providerManager.getClient();
-    if (client && process.env.GEMINI_API_KEY) {
-      try {
-        const response = await client.models.generateContent({
-          model,
-          contents: prompt,
-        });
-        if (response.text && response.text.trim()) {
-          return response.text;
-        }
-      } catch (err: any) {
-        console.warn(`[AgentTeam] Gemini API call failed for ${role}, using fallback:`, err.message);
-        if (err.message && err.message.includes('429')) {
-          providerManager.handleRateLimitError(model, 60);
-        }
-      }
-    }
-    return fallbackResponse;
   }
 }
 

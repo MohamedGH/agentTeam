@@ -25,6 +25,14 @@ export interface ModelState {
   cooloff_until: number;
 }
 
+/**
+ * QuotaManager
+ * 
+ * Dynamic Quota & Rate-Limit Controller.
+ * - Suppresses assumed/fabricated default limits in favor of authoritative Cloud Monitoring metrics and real-time quota descriptors.
+ * - Tracks rolling 60-second RPM/TPM and daily RPD per model dynamically.
+ * - Enforces backoff cooldowns upon encountering 429 Rate Limits and 503 High Demand spikes.
+ */
 export class QuotaManager {
   private limits: Record<string, ModelLimits> = {};
   private state: Record<string, ModelState> = {};
@@ -36,7 +44,7 @@ export class QuotaManager {
     this.stateFilePath = path.resolve(process.cwd(), stateFile);
 
     this.state = this.loadState();
-    this.loadQuotaLimits();
+    this.loadAuthoritativeLimits();
   }
 
   private loadState(): Record<string, ModelState> {
@@ -44,7 +52,6 @@ export class QuotaManager {
       if (fs.existsSync(this.stateFilePath)) {
         const raw = fs.readFileSync(this.stateFilePath, 'utf-8');
         const parsed = JSON.parse(raw);
-        // Normalize state if it came from the python quota_state.json format
         if (parsed.models) {
           const normalized: Record<string, ModelState> = {};
           const now = Date.now() / 1000;
@@ -79,8 +86,8 @@ export class QuotaManager {
     }
   }
 
-  private loadQuotaLimits() {
-    // 1. Try loading from quota_state.json if it has structured tiers
+  private loadAuthoritativeLimits() {
+    // 1. Try loading from quota_state.json if it has structured authoritative tiers
     try {
       if (fs.existsSync(this.stateFilePath)) {
         const raw = fs.readFileSync(this.stateFilePath, 'utf-8');
@@ -106,7 +113,7 @@ export class QuotaManager {
       console.warn('[QuotaManager] Error loading tiers from quota_state.json:', e);
     }
 
-    // 2. Try loading from raw quota.json if available
+    // 2. Load authoritative Google Service Usage limits from quota.json
     try {
       if (fs.existsSync(this.quotaFilePath)) {
         const raw = fs.readFileSync(this.quotaFilePath, 'utf-8');
@@ -115,139 +122,6 @@ export class QuotaManager {
       }
     } catch (e) {
       console.warn('[QuotaManager] Error loading raw quota.json:', e);
-    }
-
-    // 3. Ensure popular Gemini models have fallback standard quotas if not found
-    this.ensureDefaultModels();
-  }
-
-  private ensureDefaultModels() {
-    const defaults: Record<string, ModelLimits> = {
-      'gemini-3.7-flash': {
-        tier_3: { rpm: 6000, tpm: 4000000, rpd: -1 },
-        tier_2: { rpm: 600, tpm: 1000000, rpd: 30000 },
-        tier_1: { rpm: 300, tpm: 500000, rpd: 15000 },
-        free: { rpm: 15, tpm: 1000000, rpd: 1500 },
-      },
-      'gemini-3.6-flash': {
-        tier_3: { rpm: 6000, tpm: 4000000, rpd: -1 },
-        tier_2: { rpm: 600, tpm: 1000000, rpd: 30000 },
-        tier_1: { rpm: 300, tpm: 500000, rpd: 15000 },
-        free: { rpm: 15, tpm: 1000000, rpd: 1500 },
-      },
-      'gemini-3.5-flash': {
-        tier_3: { rpm: 6000, tpm: 4000000, rpd: -1 },
-        tier_2: { rpm: 600, tpm: 1000000, rpd: 30000 },
-        tier_1: { rpm: 300, tpm: 500000, rpd: 15000 },
-        free: { rpm: 15, tpm: 1000000, rpd: 1500 },
-      },
-      'gemini-3.1-pro-preview': {
-        tier_3: { rpm: 600, tpm: 2000000, rpd: -1 },
-        tier_2: { rpm: 300, tpm: 1000000, rpd: 15000 },
-        tier_1: { rpm: 150, tpm: 500000, rpd: 7500 },
-        free: { rpm: 2, tpm: 32000, rpd: 50 },
-      },
-      'gemini-3.1-flash-lite': {
-        tier_3: { rpm: 6000, tpm: 4000000, rpd: -1 },
-        tier_2: { rpm: 600, tpm: 1000000, rpd: 30000 },
-        tier_1: { rpm: 300, tpm: 500000, rpd: 15000 },
-        free: { rpm: 15, tpm: 1000000, rpd: 1500 },
-      },
-      'gemini-3.1-pro': {
-        tier_3: { rpm: 600, tpm: 2000000, rpd: -1 },
-        tier_2: { rpm: 300, tpm: 1000000, rpd: 15000 },
-        tier_1: { rpm: 150, tpm: 500000, rpd: 7500 },
-        free: { rpm: 2, tpm: 32000, rpd: 50 },
-      },
-      // OpenAI Models
-      'gpt-4o': {
-        tier_3: { rpm: 10000, tpm: 30000000, rpd: -1 },
-        tier_2: { rpm: 5000, tpm: 10000000, rpd: -1 },
-        tier_1: { rpm: 500, tpm: 2000000, rpd: 10000 },
-        free: { rpm: 3, tpm: 40000, rpd: 200 },
-      },
-      'gpt-4o-mini': {
-        tier_3: { rpm: 10000, tpm: 50000000, rpd: -1 },
-        tier_2: { rpm: 5000, tpm: 20000000, rpd: -1 },
-        tier_1: { rpm: 500, tpm: 5000000, rpd: 20000 },
-        free: { rpm: 3, tpm: 40000, rpd: 200 },
-      },
-      'o3-mini': {
-        tier_3: { rpm: 5000, tpm: 10000000, rpd: -1 },
-        tier_2: { rpm: 2000, tpm: 5000000, rpd: -1 },
-        tier_1: { rpm: 200, tpm: 1000000, rpd: 5000 },
-        free: { rpm: 2, tpm: 20000, rpd: 100 },
-      },
-      // Anthropic Claude Models
-      'claude-3-7-sonnet-20250219': {
-        tier_3: { rpm: 4000, tpm: 400000, rpd: -1 },
-        tier_2: { rpm: 2000, tpm: 200000, rpd: -1 },
-        tier_1: { rpm: 1000, tpm: 80000, rpd: 5000 },
-        free: { rpm: 5, tpm: 20000, rpd: 100 },
-      },
-      'claude-3-5-sonnet-20241022': {
-        tier_3: { rpm: 4000, tpm: 400000, rpd: -1 },
-        tier_2: { rpm: 2000, tpm: 200000, rpd: -1 },
-        tier_1: { rpm: 1000, tpm: 80000, rpd: 5000 },
-        free: { rpm: 5, tpm: 20000, rpd: 100 },
-      },
-      'claude-3-5-haiku-20241022': {
-        tier_3: { rpm: 4000, tpm: 400000, rpd: -1 },
-        tier_2: { rpm: 2000, tpm: 200000, rpd: -1 },
-        tier_1: { rpm: 1000, tpm: 100000, rpd: 10000 },
-        free: { rpm: 5, tpm: 25000, rpd: 200 },
-      },
-      // Groq Cloud Models
-      'llama-3.3-70b-versatile': {
-        tier_3: { rpm: 1000, tpm: 3000000, rpd: -1 },
-        tier_2: { rpm: 500, tpm: 1000000, rpd: -1 },
-        tier_1: { rpm: 100, tpm: 300000, rpd: 14400 },
-        free: { rpm: 30, tpm: 6000, rpd: 14400 },
-      },
-      'llama-3.1-8b-instant': {
-        tier_3: { rpm: 1000, tpm: 3000000, rpd: -1 },
-        tier_2: { rpm: 500, tpm: 1000000, rpd: -1 },
-        tier_1: { rpm: 100, tpm: 300000, rpd: 14400 },
-        free: { rpm: 30, tpm: 6000, rpd: 14400 },
-      },
-      'mixtral-8x7b-32768': {
-        tier_3: { rpm: 1000, tpm: 3000000, rpd: -1 },
-        tier_2: { rpm: 500, tpm: 1000000, rpd: -1 },
-        tier_1: { rpm: 100, tpm: 300000, rpd: 14400 },
-        free: { rpm: 30, tpm: 5000, rpd: 14400 },
-      },
-      // DeepSeek Models
-      'deepseek-chat': {
-        tier_3: { rpm: 5000, tpm: 10000000, rpd: -1 },
-        tier_2: { rpm: 2000, tpm: 5000000, rpd: -1 },
-        tier_1: { rpm: 500, tpm: 1000000, rpd: 10000 },
-        free: { rpm: 10, tpm: 50000, rpd: 500 },
-      },
-      'deepseek-reasoner': {
-        tier_3: { rpm: 3000, tpm: 6000000, rpd: -1 },
-        tier_2: { rpm: 1000, tpm: 3000000, rpd: -1 },
-        tier_1: { rpm: 300, tpm: 600000, rpd: 5000 },
-        free: { rpm: 5, tpm: 30000, rpd: 300 },
-      },
-      // Custom / Local Endpoint
-      'llama3:latest': {
-        tier_3: { rpm: -1, tpm: -1, rpd: -1 },
-        tier_2: { rpm: -1, tpm: -1, rpd: -1 },
-        tier_1: { rpm: -1, tpm: -1, rpd: -1 },
-        free: { rpm: -1, tpm: -1, rpd: -1 },
-      },
-    };
-
-    for (const [model, tiers] of Object.entries(defaults)) {
-      if (!this.limits[model]) {
-        this.limits[model] = tiers;
-      } else {
-        for (const [tier, limits] of Object.entries(tiers)) {
-          if (!this.limits[model][tier]) {
-            this.limits[model][tier] = limits;
-          }
-        }
-      }
     }
   }
 
@@ -263,7 +137,7 @@ export class QuotaManager {
         continue;
       }
 
-      let tier = 'unknown';
+      let tier = 'tier_3';
       if (name.includes('paid_tier_3') || display.toLowerCase().includes('paid tier 3')) {
         tier = 'tier_3';
       } else if (name.includes('paid_tier_2') || display.toLowerCase().includes('paid tier 2')) {
@@ -353,39 +227,35 @@ export class QuotaManager {
 
   public canUseModel(model: string, tier = 'tier_3', estimatedTokens = 1000): { ok: boolean; reason: string } {
     this.refresh(model);
-
-    if (!this.limits[model]) {
-      return { ok: false, reason: `Unknown quota for ${model}` };
-    }
-
-    const limits = this.limits[model][tier] || this.limits[model]['tier_3'] || this.limits[model]['free'];
-    if (!limits) {
-      return { ok: false, reason: `Tier ${tier} unavailable for ${model}` };
-    }
-
     const s = this.state[model];
     const now = Date.now() / 1000;
 
+    // Check cooldown state (from 429 or 503)
     if (now < s.cooloff_until) {
       const remainingCooldown = Math.ceil(s.cooloff_until - now);
-      return { ok: false, reason: `Cooldown active (${remainingCooldown}s remaining due to 429)` };
+      return { ok: false, reason: `Cooldown active (${remainingCooldown}s remaining due to 429/503)` };
     }
 
-    if (limits.rpm && limits.rpm > 0) {
-      if (s.rpm_used >= limits.rpm) {
-        return { ok: false, reason: `RPM limit reached (${s.rpm_used}/${limits.rpm})` };
+    const limits = this.limits[model]?.[tier] || this.limits[model]?.['tier_3'];
+
+    // If explicit limits exist from Cloud Monitoring / quota descriptor, enforce them
+    if (limits) {
+      if (limits.rpm && limits.rpm > 0) {
+        if (s.rpm_used >= limits.rpm) {
+          return { ok: false, reason: `RPM limit reached (${s.rpm_used}/${limits.rpm})` };
+        }
       }
-    }
 
-    if (limits.tpm && limits.tpm > 0) {
-      if (s.tpm_used + estimatedTokens > limits.tpm) {
-        return { ok: false, reason: `Estimated TPM limit exceeded (${s.tpm_used + estimatedTokens}/${limits.tpm})` };
+      if (limits.tpm && limits.tpm > 0) {
+        if (s.tpm_used + estimatedTokens > limits.tpm) {
+          return { ok: false, reason: `Estimated TPM limit exceeded (${s.tpm_used + estimatedTokens}/${limits.tpm})` };
+        }
       }
-    }
 
-    if (limits.rpd && limits.rpd > 0) {
-      if (s.rpd_used >= limits.rpd) {
-        return { ok: false, reason: `RPD limit reached (${s.rpd_used}/${limits.rpd})` };
+      if (limits.rpd && limits.rpd > 0) {
+        if (s.rpd_used >= limits.rpd) {
+          return { ok: false, reason: `RPD limit reached (${s.rpd_used}/${limits.rpd})` };
+        }
       }
     }
 
@@ -406,8 +276,8 @@ export class QuotaManager {
     }
 
     if (candidates.length === 0) {
-      // Fallback: return the first preferred model even if unknown
-      return preferredModels[0] || 'gemini-3.7-flash';
+      // Return the first preferred model if all candidates are unconfigured
+      return preferredModels[0] || null;
     }
 
     const score = (item: { model: string; remaining: any }) => {
@@ -415,7 +285,7 @@ export class QuotaManager {
       const values = [q.remaining_rpm, q.remaining_tpm, q.remaining_rpd].filter(
         (x) => x !== null && x !== undefined && x >= 0
       );
-      return values.length > 0 ? Math.min(...values) : 0;
+      return values.length > 0 ? Math.min(...values) : 999999;
     };
 
     candidates.sort((a, b) => score(b) - score(a));
@@ -481,7 +351,7 @@ export class QuotaManager {
   public getRemainingQuota(model: string, tier = 'tier_3') {
     this.refresh(model);
     const s = this.state[model];
-    const limits = (this.limits[model] && this.limits[model][tier]) || {};
+    const limits = this.limits[model]?.[tier] || {};
 
     const calcRemaining = (kind: 'rpm' | 'tpm' | 'rpd', used: number) => {
       const limit = limits[kind];
@@ -499,12 +369,13 @@ export class QuotaManager {
   public allStatus(tier = 'tier_3') {
     const result: Record<string, any> = {};
     const now = Date.now() / 1000;
+    const allModels = new Set([...Object.keys(this.limits), ...Object.keys(this.state)]);
 
-    for (const model of Object.keys(this.limits)) {
+    for (const model of allModels) {
       this.refresh(model);
       const q = this.getRemainingQuota(model, tier);
       const s = this.state[model];
-      const limits = this.limits[model][tier] || this.limits[model]['tier_3'] || {};
+      const limits = this.limits[model]?.[tier] || {};
 
       result[model] = {
         model,
@@ -551,4 +422,3 @@ export class QuotaManager {
 }
 
 export const quotaManager = new QuotaManager();
-

@@ -1,8 +1,8 @@
 {
   "c4n6t9g1su": {
-    "minute_start": 1788274946.132,
-    "day_start": 1788274946.132,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -10,9 +10,9 @@
     "cooloff_until": 0
   },
   "gemini-2.0-flash-lite": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -20,9 +20,9 @@
     "cooloff_until": 0
   },
   "gemini-2.0-flash-preview-image-generation": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -30,9 +30,9 @@
     "cooloff_until": 0
   },
   "gemini-2.0-flash": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -40,9 +40,9 @@
     "cooloff_until": 0
   },
   "gemini-2.5-flash-1p": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -50,9 +50,9 @@
     "cooloff_until": 0
   },
   "gemini-2.5-flash-exp": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -60,9 +60,9 @@
     "cooloff_until": 0
   },
   "gemini-2.5-flash-lite": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -70,9 +70,9 @@
     "cooloff_until": 0
   },
   "gemini-2.5-flash-preview-image": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -80,9 +80,9 @@
     "cooloff_until": 0
   },
   "gemini-2.5-flash-tts": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -90,9 +90,9 @@
     "cooloff_until": 0
   },
   "gemini-2.5-flash": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -100,9 +100,9 @@
     "cooloff_until": 0
   },
   "gemini-2.5-pro-tts": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -110,9 +110,9 @@
     "cooloff_until": 0
   },
   "gemini-2.5-pro": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -120,9 +120,9 @@
     "cooloff_until": 0
   },
   "gemini-3-flash": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -130,9 +130,9 @@
     "cooloff_until": 0
   },
   "gemini-3-pro-image": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -140,9 +140,9 @@
     "cooloff_until": 0
   },
   "gemini-3-pro": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -150,9 +150,9 @@
     "cooloff_until": 0
   },
   "gemini-3.1-flash-image": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -160,9 +160,9 @@
     "cooloff_until": 0
   },
   "gemini-3.1-flash-lite-image": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -170,9 +170,9 @@
     "cooloff_until": 0
   },
   "gemini-3.1-flash-lite": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -180,9 +180,9 @@
     "cooloff_until": 0
   },
   "gemini-3.1-flash-tts": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -190,9 +190,9 @@
     "cooloff_until": 0
   },
   "gemini-3.1-pro": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -200,9 +200,9 @@
     "cooloff_until": 0
   },
   "gemini-3.5-flash-lite": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -210,39 +210,39 @@
     "cooloff_until": 0
   },
   "gemini-3.5-flash": {
-    "minute_start": 1788275006.25,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
-    "rpm_used": 2,
-    "tpm_used": 11635,
-    "rpd_used": 6,
+    "minute_start": 1788347098.706,
+    "day_start": 1788347098.706,
+    "day": "2026-09-02",
+    "rpm_used": 0,
+    "tpm_used": 0,
+    "rpd_used": 0,
     "errors_429": 0,
     "cooloff_until": 0
   },
   "gemini-3.6-flash": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
-    "rpm_used": 1,
-    "tpm_used": 1906,
-    "rpd_used": 1,
-    "errors_429": 0,
-    "cooloff_until": 0
-  },
-  "gemini-3.7-flash": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
     "errors_429": 1,
-    "cooloff_until": 1788274991.134
+    "cooloff_until": 1788347128.706
+  },
+  "gemini-3.7-flash": {
+    "minute_start": 1788347098.706,
+    "day_start": 1788347098.706,
+    "day": "2026-09-02",
+    "rpm_used": 0,
+    "tpm_used": 0,
+    "rpd_used": 0,
+    "errors_429": 0,
+    "cooloff_until": 0
   },
   "gemini-flash-tool-retrieval": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -250,9 +250,9 @@
     "cooloff_until": 0
   },
   "gemini-robotics-er-1.6-preview": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -260,9 +260,9 @@
     "cooloff_until": 0
   },
   "gemini-robotics-er-2-preview": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -270,9 +270,9 @@
     "cooloff_until": 0
   },
   "k8f2m5p0rw": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -280,9 +280,9 @@
     "cooloff_until": 0
   },
   "v7y3b1x9zq": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -290,9 +290,9 @@
     "cooloff_until": 0
   },
   "antigravity": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -300,9 +300,9 @@
     "cooloff_until": 0
   },
   "chat-bard": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -310,9 +310,9 @@
     "cooloff_until": 0
   },
   "computer-use-exp": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -320,9 +320,9 @@
     "cooloff_until": 0
   },
   "gdm-eval-model-mow": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -330,9 +330,9 @@
     "cooloff_until": 0
   },
   "gemini-2.5-flash-live": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -340,9 +340,9 @@
     "cooloff_until": 0
   },
   "gemini-2.5-flash-native-audio-dialog": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -350,9 +350,9 @@
     "cooloff_until": 0
   },
   "gemini-2.5-pro-1p-freebie": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -360,9 +360,9 @@
     "cooloff_until": 0
   },
   "gemini-3-flash-live": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -370,9 +370,9 @@
     "cooloff_until": 0
   },
   "gemini-3.5-live-translate": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -380,9 +380,9 @@
     "cooloff_until": 0
   },
   "gemini-3.5-transcribe-live": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -390,9 +390,9 @@
     "cooloff_until": 0
   },
   "gemini-3.5-transcribe": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -400,9 +400,9 @@
     "cooloff_until": 0
   },
   "gemini-robotics-er-1.5-preview": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -410,9 +410,9 @@
     "cooloff_until": 0
   },
   "gemma-3-12b": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -420,9 +420,9 @@
     "cooloff_until": 0
   },
   "gemma-3-1b": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -430,9 +430,9 @@
     "cooloff_until": 0
   },
   "gemma-3-27b": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -440,9 +440,9 @@
     "cooloff_until": 0
   },
   "gemma-3-2b": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -450,9 +450,9 @@
     "cooloff_until": 0
   },
   "gemma-3-4b": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -460,9 +460,9 @@
     "cooloff_until": 0
   },
   "gemma-4-26b": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -470,9 +470,9 @@
     "cooloff_until": 0
   },
   "gemma-4-31b": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -480,9 +480,9 @@
     "cooloff_until": 0
   },
   "gqi-cst-1337ae": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -490,9 +490,9 @@
     "cooloff_until": 0
   },
   "gqi-cst-h34jgm": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -500,9 +500,9 @@
     "cooloff_until": 0
   },
   "k3p9mfl8q2": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -510,9 +510,9 @@
     "cooloff_until": 0
   },
   "x9q2mfl4yg": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -520,9 +520,9 @@
     "cooloff_until": 0
   },
   "7s9d0xhwo8": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -530,9 +530,9 @@
     "cooloff_until": 0
   },
   "f116dzcgxx": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -540,9 +540,9 @@
     "cooloff_until": 0
   },
   "gdm-eval-model-u": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -550,9 +550,9 @@
     "cooloff_until": 0
   },
   "gemini-2.0-flash-live": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -560,9 +560,9 @@
     "cooloff_until": 0
   },
   "gemini-2.5-flash-exp-native-audio-thinking-dialog": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -570,9 +570,9 @@
     "cooloff_until": 0
   },
   "j2ycnyml2h": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -580,9 +580,9 @@
     "cooloff_until": 0
   },
   "learnlm-2.0-flash-experimental": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -590,9 +590,9 @@
     "cooloff_until": 0
   },
   "med-gemini": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -600,9 +600,9 @@
     "cooloff_until": 0
   },
   "qgsAKtKtlw": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -610,9 +610,9 @@
     "cooloff_until": 0
   },
   "u9x2v8w1z4": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -620,9 +620,9 @@
     "cooloff_until": 0
   },
   "xyz-1000": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -630,9 +630,9 @@
     "cooloff_until": 0
   },
   "xyz-1001": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -640,9 +640,9 @@
     "cooloff_until": 0
   },
   "xyz-1002": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -650,9 +650,9 @@
     "cooloff_until": 0
   },
   "xyz-1004": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -660,9 +660,9 @@
     "cooloff_until": 0
   },
   "xh7Bm2Kp9w": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -670,9 +670,9 @@
     "cooloff_until": 0
   },
   "computer-use-preview": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -680,9 +680,9 @@
     "cooloff_until": 0
   },
   "deep-research-pro-preview": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -690,9 +690,9 @@
     "cooloff_until": 0
   },
   "gemini-2.0-exp": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -700,9 +700,9 @@
     "cooloff_until": 0
   },
   "gemini-2.0-flash-exp-audio": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -710,9 +710,9 @@
     "cooloff_until": 0
   },
   "gemini-2.0-flash-exp-image": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -720,9 +720,9 @@
     "cooloff_until": 0
   },
   "gemini-2.0-flash-exp": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -730,9 +730,9 @@
     "cooloff_until": 0
   },
   "gemini-2.5-pro-exp": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -740,9 +740,9 @@
     "cooloff_until": 0
   },
   "gemini-omni-1.1-flash": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -750,9 +750,9 @@
     "cooloff_until": 0
   },
   "gemini-omni-flash": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -760,9 +760,9 @@
     "cooloff_until": 0
   },
   "lyria-3-clip": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -770,9 +770,9 @@
     "cooloff_until": 0
   },
   "lyria-3-pro": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -780,9 +780,9 @@
     "cooloff_until": 0
   },
   "unreleased-iolr": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -790,9 +790,9 @@
     "cooloff_until": 0
   },
   "deep-research-exp-04-2026": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -800,9 +800,9 @@
     "cooloff_until": 0
   },
   "deep-research-exp-10-2025": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -810,9 +810,9 @@
     "cooloff_until": 0
   },
   "gdm-eval-model-stp": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -820,9 +820,9 @@
     "cooloff_until": 0
   },
   "gdm-lc-eval-phase-0": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -830,9 +830,9 @@
     "cooloff_until": 0
   },
   "gdm-lc-eval-phase-1": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -840,9 +840,9 @@
     "cooloff_until": 0
   },
   "gemini-2.0": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -850,9 +850,9 @@
     "cooloff_until": 0
   },
   "gemini-2.5": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -860,9 +860,9 @@
     "cooloff_until": 0
   },
   "gemini-3": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -870,9 +870,9 @@
     "cooloff_until": 0
   },
   "oswk9grrjt": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -880,9 +880,9 @@
     "cooloff_until": 0
   },
   "u3kpjw07gm": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -890,9 +890,9 @@
     "cooloff_until": 0
   },
   "xyz-1003": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.702,
+    "day_start": 1788347098.702,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
@@ -900,132 +900,42 @@
     "cooloff_until": 0
   },
   "gemini-3.1-pro-preview": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
+    "minute_start": 1788347098.71,
+    "day_start": 1788347098.71,
+    "day": "2026-09-02",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
+    "errors_429": 1,
+    "cooloff_until": 1788347128.71
+  },
+  "test-primary": {
+    "minute_start": 1788347098.712,
+    "day_start": 1788347098.712,
+    "day": "2026-09-02",
+    "rpm_used": 0,
+    "tpm_used": 0,
+    "rpd_used": 0,
+    "errors_429": 1,
+    "cooloff_until": 1788347128.712
+  },
+  "test-secondary": {
+    "minute_start": 1788347098.712,
+    "day_start": 1788347098.712,
+    "day": "2026-09-02",
+    "rpm_used": 1,
+    "tpm_used": 40,
+    "rpd_used": 1,
     "errors_429": 0,
     "cooloff_until": 0
   },
-  "gpt-4o": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
-    "rpm_used": 0,
-    "tpm_used": 0,
-    "rpd_used": 0,
-    "errors_429": 0,
-    "cooloff_until": 0
-  },
-  "gpt-4o-mini": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
-    "rpm_used": 0,
-    "tpm_used": 0,
-    "rpd_used": 0,
-    "errors_429": 0,
-    "cooloff_until": 0
-  },
-  "o3-mini": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
-    "rpm_used": 0,
-    "tpm_used": 0,
-    "rpd_used": 0,
-    "errors_429": 0,
-    "cooloff_until": 0
-  },
-  "claude-3-7-sonnet-20250219": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
-    "rpm_used": 0,
-    "tpm_used": 0,
-    "rpd_used": 0,
-    "errors_429": 0,
-    "cooloff_until": 0
-  },
-  "claude-3-5-sonnet-20241022": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
-    "rpm_used": 0,
-    "tpm_used": 0,
-    "rpd_used": 0,
-    "errors_429": 0,
-    "cooloff_until": 0
-  },
-  "claude-3-5-haiku-20241022": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
-    "rpm_used": 0,
-    "tpm_used": 0,
-    "rpd_used": 0,
-    "errors_429": 0,
-    "cooloff_until": 0
-  },
-  "llama-3.3-70b-versatile": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
-    "rpm_used": 0,
-    "tpm_used": 0,
-    "rpd_used": 0,
-    "errors_429": 0,
-    "cooloff_until": 0
-  },
-  "llama-3.1-8b-instant": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
-    "rpm_used": 0,
-    "tpm_used": 0,
-    "rpd_used": 0,
-    "errors_429": 0,
-    "cooloff_until": 0
-  },
-  "mixtral-8x7b-32768": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
-    "rpm_used": 0,
-    "tpm_used": 0,
-    "rpd_used": 0,
-    "errors_429": 0,
-    "cooloff_until": 0
-  },
-  "deepseek-chat": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
-    "rpm_used": 0,
-    "tpm_used": 0,
-    "rpd_used": 0,
-    "errors_429": 0,
-    "cooloff_until": 0
-  },
-  "deepseek-reasoner": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
-    "rpm_used": 0,
-    "tpm_used": 0,
-    "rpd_used": 0,
-    "errors_429": 0,
-    "cooloff_until": 0
-  },
-  "llama3:latest": {
-    "minute_start": 1788274946.133,
-    "day_start": 1788274946.133,
-    "day": "2026-09-01",
-    "rpm_used": 0,
-    "tpm_used": 0,
-    "rpd_used": 0,
+  "mock-fast-model": {
+    "minute_start": 1788347098.716,
+    "day_start": 1788347098.716,
+    "day": "2026-09-02",
+    "rpm_used": 6,
+    "tpm_used": 1048,
+    "rpd_used": 6,
     "errors_429": 0,
     "cooloff_until": 0
   }

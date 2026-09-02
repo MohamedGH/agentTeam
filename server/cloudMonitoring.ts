@@ -12,37 +12,37 @@ export interface CloudMonitoringMetric {
   }>;
 }
 
+export interface ModelQuotaMetricDetails {
+  rpm_limit?: number;
+  rpm_used?: number;
+  rpm_remaining?: number;
+  tpm_limit?: number;
+  tpm_used?: number;
+  tpm_remaining?: number;
+  rpd_limit?: number;
+  rpd_used?: number;
+  rpd_remaining?: number;
+  rawMetrics?: any;
+}
+
 export interface CloudMonitoringQuotaResult {
   source: 'google_cloud_monitoring' | 'google_service_usage' | 'authoritative_cache';
   authenticated: boolean;
   projectId?: string;
   lastFetchedAt: number;
   expiresAt: number;
-  models: Record<
-    string,
-    {
-      rpm_limit?: number;
-      rpm_used?: number;
-      rpm_remaining?: number;
-      tpm_limit?: number;
-      tpm_used?: number;
-      tpm_remaining?: number;
-      rpd_limit?: number;
-      rpd_used?: number;
-      rpd_remaining?: number;
-      rawMetrics?: any;
-    }
-  >;
+  models: Record<string, ModelQuotaMetricDetails>;
   error?: string;
 }
 
 /**
  * GoogleCloudMonitoringQuotaService
  * 
- * Fetches real Gemini quota and usage metrics from Google Cloud Monitoring & Service Usage APIs.
- * Enforces strict 60-second caching (TTL = 60000ms).
- * Never estimates quota locally - reads authoritative Cloud metrics.
- * Gracefully handles missing credentials or API authorization errors.
+ * True source of truth for Google Gemini quotas & usage metrics.
+ * - Dynamically resolves Google Cloud Project ID from environment (no hardcoded project IDs).
+ * - Enforces strict 60-second caching (TTL = 60000ms).
+ * - Reads authoritative Cloud Monitoring and Service Usage API metrics.
+ * - Parses exact consumer quota descriptors from quota.json when live tokens are not present.
  */
 export class GoogleCloudMonitoringQuotaService {
   private cache: CloudMonitoringQuotaResult | null = null;
@@ -50,10 +50,10 @@ export class GoogleCloudMonitoringQuotaService {
   private cachedQuotaJson: any = null;
 
   constructor() {
-    this.loadFallbackQuotaJson();
+    this.loadAuthoritativeQuotaJson();
   }
 
-  private loadFallbackQuotaJson() {
+  private loadAuthoritativeQuotaJson() {
     try {
       const quotaPath = path.resolve(process.cwd(), 'quota.json');
       if (fs.existsSync(quotaPath)) {
@@ -66,15 +66,21 @@ export class GoogleCloudMonitoringQuotaService {
   }
 
   /**
-   * Returns project ID from environment variables or service account credentials
+   * Returns project ID dynamically from environment variables or Google Cloud credentials.
+   * NEVER hardcodes project IDs.
    */
   public getProjectId(): string | null {
-    return (
+    const candidate =
       process.env.GCP_PROJECT_ID ||
       process.env.GOOGLE_CLOUD_PROJECT ||
+      process.env.GCLOUD_PROJECT ||
       process.env.PROJECT_ID ||
-      '744155115870' // Default project ID from verified Gemini quota descriptor
-    );
+      null;
+
+    if (candidate && candidate.trim().length > 0) {
+      return candidate.trim();
+    }
+    return null;
   }
 
   /**
@@ -104,11 +110,11 @@ export class GoogleCloudMonitoringQuotaService {
     const projectId = this.getProjectId();
     const token = this.getAuthToken();
 
-    // 2. If authenticated access token is present, query live Google Cloud Monitoring API
+    // 2. If authenticated access token AND dynamic project ID are present, query live Google Cloud Monitoring API
     if (token && projectId) {
       try {
         const liveResult = await this.queryCloudMonitoringApi(projectId, token);
-        if (liveResult) {
+        if (liveResult && Object.keys(liveResult).length > 0) {
           this.cache = {
             source: 'google_cloud_monitoring',
             authenticated: true,
@@ -121,13 +127,13 @@ export class GoogleCloudMonitoringQuotaService {
         }
       } catch (apiError: any) {
         console.warn(
-          '[CloudMonitoring] Live Cloud Monitoring API query failed (gracefully falling back to authoritative quota metrics):',
+          '[CloudMonitoring] Live Cloud Monitoring API query failed (falling back to authoritative quota metrics):',
           apiError.message
         );
       }
     }
 
-    // 3. Fall back to authoritative Gemini Service Usage Quota definitions from quota.json
+    // 3. Fall back to authoritative Gemini Service Usage Quota definitions
     const parsedModels = this.parseAuthoritativeServiceUsageQuota();
 
     this.cache = {
@@ -149,14 +155,14 @@ export class GoogleCloudMonitoringQuotaService {
   private async queryCloudMonitoringApi(
     projectId: string,
     accessToken: string
-  ): Promise<Record<string, any> | null> {
+  ): Promise<Record<string, ModelQuotaMetricDetails> | null> {
     const nowIso = new Date().toISOString();
     const startTimeIso = new Date(Date.now() - 3600 * 1000).toISOString(); // Last 1 hour
 
     const filter = encodeURIComponent(
       'metric.type = starts_with("serviceruntime.googleapis.com/quota/") AND resource.type = "consumed_api"'
     );
-    const url = `https://monitoring.googleapis.com/v3/projects/${projectId}/timeSeries?filter=${filter}&interval.startTime=${startTimeIso}&interval.endTime=${nowIso}`;
+    const url = `https://monitoring.googleapis.com/v3/projects/${encodeURIComponent(projectId)}/timeSeries?filter=${filter}&interval.startTime=${startTimeIso}&interval.endTime=${nowIso}`;
 
     const res = await fetch(url, {
       headers: {
@@ -174,8 +180,8 @@ export class GoogleCloudMonitoringQuotaService {
     return this.transformTimeSeriesToModelMetrics(data.timeSeries || []);
   }
 
-  private transformTimeSeriesToModelMetrics(timeSeries: CloudMonitoringMetric[]): Record<string, any> {
-    const modelMetrics: Record<string, any> = {};
+  private transformTimeSeriesToModelMetrics(timeSeries: CloudMonitoringMetric[]): Record<string, ModelQuotaMetricDetails> {
+    const modelMetrics: Record<string, ModelQuotaMetricDetails> = {};
 
     for (const ts of timeSeries) {
       const model = ts.metricLabels?.model || ts.resourceLabels?.model;
@@ -202,11 +208,11 @@ export class GoogleCloudMonitoringQuotaService {
   }
 
   /**
-   * Parse the authoritative Google Service Usage consumerQuotaMetrics
-   * Never estimate locally; read exact model-specific buckets.
+   * Parse authoritative Google Service Usage consumerQuotaMetrics
+   * Never guesses or invents arbitrary numbers; extracts exact model dimensions and limits.
    */
-  private parseAuthoritativeServiceUsageQuota(): Record<string, any> {
-    const result: Record<string, any> = {};
+  public parseAuthoritativeServiceUsageQuota(): Record<string, ModelQuotaMetricDetails> {
+    const result: Record<string, ModelQuotaMetricDetails> = {};
     if (!this.cachedQuotaJson) {
       return result;
     }
