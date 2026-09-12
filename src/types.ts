@@ -64,6 +64,9 @@ export interface FinalReport {
     durationMs: number;
     modelUsed: string;
     providerUsed?: string;
+    codingAgentUsed?: string;
+    prUrl?: string;
+    gitBranch?: string;
     estimatedTokens: number;
     promptTokens?: number;
     completionTokens?: number;
@@ -78,6 +81,9 @@ export interface TeamRunResult {
   taskPrompt: string;
   success: boolean;
   modelUsed: string;
+  codingAgentUsed?: string;
+  prUrl?: string;
+  gitBranch?: string;
   steps: AgentStep[];
   finalReport?: FinalReport;
   virtualFiles: Record<string, string>;
@@ -133,4 +139,61 @@ export interface VirtualFile {
   path: string;
   content: string;
   lastModified: number;
+}
+
+// Autonomous Coding Agent (Google Jules) Types
+export type CodingAgentId = 'jules' | 'mock';
+
+export interface CodingAgentInfo {
+  id: string;
+  name: string;
+  type: 'autonomous_agent';
+  configured: boolean;
+  capabilities: {
+    gitHubIntegration: boolean;
+    autoPullRequests: boolean;
+    multiStepPlanning: boolean;
+    asyncExecution: boolean;
+  };
+  supportedAutomationModes: string[];
+  description: string;
+}
+
+export interface JulesActivity {
+  name?: string;
+  id?: string;
+  originator?: string;
+  description?: string;
+  createTime?: string;
+  planApproved?: boolean;
+  output?: string;
+  prUrl?: string;
+  gitBranch?: string;
+  actionType?: string;
+}
+
+export interface CodingAgentTask {
+  agent?: string;
+  repository: string;
+  branch?: string;
+  task: string;
+  title?: string;
+  automationMode?: 'AUTO_CREATE_PR' | 'MANUAL';
+  requirePlanApproval?: boolean;
+}
+
+export interface CodingAgentResult {
+  agentId: string;
+  sessionId: string;
+  status: string;
+  repository: string;
+  branch: string;
+  title?: string;
+  prompt: string;
+  prUrl?: string;
+  gitBranch?: string;
+  summary: string;
+  activities: JulesActivity[];
+  durationMs: number;
+  error?: string;
 }

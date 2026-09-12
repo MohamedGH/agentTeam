@@ -2,23 +2,37 @@ import { GoogleGenAI } from '@google/genai';
 import { providerManager } from './providerManager';
 import { quotaManager } from './quotaManager';
 import { workspace, VirtualWorkspace } from './virtualWorkspace';
+import { codingAgentManager, CodingAgentTask, CodingAgentResult } from './codingAgents';
 import { AgentStep, FinalReport, TeamRunResult, AgentRole } from '../src/types';
+
+export interface TeamRunOptions {
+  provider?: any;
+  model?: string;
+  codingAgent?: 'jules' | 'mock' | 'none';
+  repository?: string;
+  branch?: string;
+  automationMode?: 'AUTO_CREATE_PR' | 'MANUAL';
+  title?: string;
+}
 
 export class AgentTeamEngine {
   constructor() {}
 
+  /**
+   * Run the Multi-Agent Autonomous Team Workflow.
+   * Can optionally delegate Developer implementation directly to Google Jules (autonomous coding agent).
+   */
   public async runWorkflow(
     taskPrompt: string,
     tier = 'tier_3',
     onStep?: (step: AgentStep) => void,
-    options: { provider?: any; model?: string } = {}
+    options: TeamRunOptions = {}
   ): Promise<TeamRunResult> {
     const startTime = Date.now();
     const taskId = 'task_' + Math.random().toString(36).substring(2, 9);
     const steps: AgentStep[] = [];
 
     const activeProvider = options.provider || providerManager.getActiveProvider();
-    // 1. Quota & Model Selection using ProviderManager
     const chosenModel = options.model || (await providerManager.selectOptimalModel(undefined, tier, 2000, activeProvider));
 
     const addStep = (step: Omit<AgentStep, 'id' | 'timestamp'>): AgentStep => {
@@ -42,19 +56,24 @@ export class AgentTeamEngine {
     const initialFiles = { ...workspace.getFiles() };
     const changedFileList = new Set<string>();
 
+    let julesResult: CodingAgentResult | null = null;
+    const codingAgentToUse = options.codingAgent && options.codingAgent !== 'none' ? options.codingAgent : null;
+
     try {
       // -------------------------------------------------------------
       // PHASE 1: ANALYSIS (Manager)
       // -------------------------------------------------------------
+      const delegationTarget = codingAgentToUse ? `Google Jules (${codingAgentToUse})` : 'Senior Developer';
       const managerAnalysisPrompt = `You are the manager of an autonomous software development team.
 Understand the user's request: "${taskPrompt}".
 Current workspace files: ${Object.keys(workspace.getFiles()).join(', ')}.
-Provide your architectural breakdown and delegation plan for the Developer.`;
+Target Developer: ${delegationTarget}.
+Provide your architectural breakdown and delegation plan.`;
 
       const phase1Res = await providerManager.generateWithUsage(
         chosenModel,
         managerAnalysisPrompt,
-        `Task received: "${taskPrompt}".\nAnalyzing project architecture and existing codebase.\nDelegating implementation to Senior Developer with focus on clean modular design and test coverage.`,
+        `Task received: "${taskPrompt}".\nAnalyzing project architecture and existing codebase.\nDelegating implementation to ${delegationTarget} with focus on clean modular design, test coverage, and repository branch isolation.`,
         'manager',
         activeProvider
       );
@@ -69,8 +88,8 @@ Provide your architectural breakdown and delegation plan for the Developer.`;
         phaseName: 'Analysis & Planning',
         agent: 'manager',
         thought: phase1Res.text,
-        status: 'Delegated to Developer',
-        output: 'Architecture confirmed. Implementation scope outlined.',
+        status: `Delegated to ${delegationTarget}`,
+        output: `Architecture confirmed. Scope dispatched to ${delegationTarget}.`,
         promptTokens: phase1Res.promptTokens,
         completionTokens: phase1Res.completionTokens,
         totalTokens: phase1Res.totalTokens,
@@ -79,7 +98,7 @@ Provide your architectural breakdown and delegation plan for the Developer.`;
       });
 
       // -------------------------------------------------------------
-      // PHASE 2: IMPLEMENTATION (Developer)
+      // PHASE 2: IMPLEMENTATION (Developer / Google Jules)
       // -------------------------------------------------------------
       let developerCycle = 0;
       let testerPassed = false;
@@ -90,47 +109,110 @@ Provide your architectural breakdown and delegation plan for the Developer.`;
         testerCycles++;
         developerCycle++;
 
-        const devPrompt = developerCycle === 1
-          ? `You are a Senior Full-Stack Developer. Implement: "${taskPrompt}".
+        // If autonomous coding agent (Jules) is selected, route via CodingAgentManager
+        if (codingAgentToUse) {
+          const repo = options.repository || 'MohamedGH/agentTeam';
+          const branch = options.branch || 'main';
+
+          addStep({
+            phase: 2,
+            phaseName: `Autonomous Coding Session (${codingAgentToUse === 'jules' ? 'Google Jules' : 'Mock Jules'})`,
+            agent: 'developer',
+            thought: `Initiating autonomous coding session on ${repo} (branch: ${branch}) via Google Jules API...`,
+            status: 'Dispatching to Jules API',
+            output: `Target: ${repo}:${branch} | Mode: ${options.automationMode || 'AUTO_CREATE_PR'}`,
+          });
+
+          julesResult = await codingAgentManager.execute(
+            {
+              agent: codingAgentToUse,
+              repository: repo,
+              branch,
+              task: taskPrompt,
+              title: options.title || `agentTeam: ${taskPrompt.slice(0, 50)}`,
+              automationMode: options.automationMode || 'AUTO_CREATE_PR',
+            },
+            (activity) => {
+              addStep({
+                phase: 2,
+                phaseName: 'Jules Activity',
+                agent: 'developer',
+                thought: `Jules Activity: ${activity.description}`,
+                status: activity.actionType || 'IN_PROGRESS',
+                output: activity.prUrl ? `PR Created: ${activity.prUrl}` : activity.description,
+              });
+            }
+          );
+
+          // Synchronize simulated changes to virtual workspace so tests can validate
+          const toolCalls = this.executeDeveloperActions(taskPrompt, developerCycle, changedFileList);
+
+          addStep({
+            phase: 2,
+            phaseName: 'Implementation (Jules)',
+            agent: 'developer',
+            thought: julesResult.summary,
+            toolCalls: [
+              ...toolCalls,
+              {
+                id: 'tc_jules_session',
+                name: 'jules_session_result',
+                args: { sessionId: julesResult.sessionId, status: julesResult.status },
+                result: julesResult.prUrl ? `PR: ${julesResult.prUrl}` : `Status: ${julesResult.status}`,
+                timestamp: Date.now(),
+              },
+            ],
+            status: julesResult.status === 'COMPLETED' ? 'Jules Coding Complete' : 'Implementation Ready for QA',
+            output: julesResult.prUrl
+              ? `Pull Request created: ${julesResult.prUrl} (Branch: ${julesResult.gitBranch || 'patch'})`
+              : julesResult.summary,
+          });
+        } else {
+          // Standard LLM Developer implementation
+          const devPrompt =
+            developerCycle === 1
+              ? `You are a Senior Full-Stack Developer. Implement: "${taskPrompt}".
 Workspace files: ${Object.keys(workspace.getFiles()).join(', ')}.
 Describe the implementation strategy and modifications.`
-          : `You are a Senior Full-Stack Developer. QA failed with: ${lastTesterFeedback}.
+              : `You are a Senior Full-Stack Developer. QA failed with: ${lastTesterFeedback}.
 Describe how you are patching the code.`;
 
-        const devFallback = developerCycle === 1
-          ? `Inspecting project structure, reading existing modules, and implementing requirements for: "${taskPrompt}".`
-          : `Received QA failure report. Applying targeted patch and fixing edge cases based on: ${lastTesterFeedback}`;
+          const devFallback =
+            developerCycle === 1
+              ? `Inspecting project structure, reading existing modules, and implementing requirements for: "${taskPrompt}".`
+              : `Received QA failure report. Applying targeted patch and fixing edge cases based on: ${lastTesterFeedback}`;
 
-        const devRes = await providerManager.generateWithUsage(
-          chosenModel,
-          devPrompt,
-          devFallback,
-          'developer',
-          activeProvider
-        );
+          const devRes = await providerManager.generateWithUsage(
+            chosenModel,
+            devPrompt,
+            devFallback,
+            'developer',
+            activeProvider
+          );
 
-        // Perform actual virtual file operations according to the task
-        const toolCalls = this.executeDeveloperActions(taskPrompt, developerCycle, changedFileList);
+          // Perform actual virtual file operations according to the task
+          const toolCalls = this.executeDeveloperActions(taskPrompt, developerCycle, changedFileList);
 
-        totalTokens += devRes.totalTokens;
-        totalPromptTokens += devRes.promptTokens;
-        totalCompletionTokens += devRes.completionTokens;
-        if (devRes.isRealProviderUsage) anyRealUsage = true;
+          totalTokens += devRes.totalTokens;
+          totalPromptTokens += devRes.promptTokens;
+          totalCompletionTokens += devRes.completionTokens;
+          if (devRes.isRealProviderUsage) anyRealUsage = true;
 
-        addStep({
-          phase: testerCycles === 1 ? 2 : 4,
-          phaseName: testerCycles === 1 ? 'Implementation' : `Correction Cycle #${testerCycles - 1}`,
-          agent: 'developer',
-          thought: devRes.text,
-          toolCalls,
-          status: 'Implementation Ready for QA',
-          output: `Modified/Created: ${Array.from(changedFileList).join(', ') || 'Code updated'}`,
-          promptTokens: devRes.promptTokens,
-          completionTokens: devRes.completionTokens,
-          totalTokens: devRes.totalTokens,
-          isRealTokenUsage: devRes.isRealProviderUsage,
-          tokenAccountingType: devRes.tokenAccountingType,
-        });
+          addStep({
+            phase: testerCycles === 1 ? 2 : 4,
+            phaseName: testerCycles === 1 ? 'Implementation' : `Correction Cycle #${testerCycles - 1}`,
+            agent: 'developer',
+            thought: devRes.text,
+            toolCalls,
+            status: 'Implementation Ready for QA',
+            output: `Modified/Created: ${Array.from(changedFileList).join(', ') || 'Code updated'}`,
+            promptTokens: devRes.promptTokens,
+            completionTokens: devRes.completionTokens,
+            totalTokens: devRes.totalTokens,
+            isRealTokenUsage: devRes.isRealProviderUsage,
+            tokenAccountingType: devRes.tokenAccountingType,
+          });
+        }
 
         // -------------------------------------------------------------
         // PHASE 3: TESTING (Tester)
@@ -200,8 +282,8 @@ Provide QA evaluation and regression analysis.`;
             agent: 'tester',
             thought: testerRes.text,
             toolCalls: testToolCalls,
-            status: 'STATUS: FAIL',
-            output: `Tests failed. Sending failure context to Developer for patch cycle ${testerCycles}/3.`,
+            status: 'STATUS: FAIL (Regressions Found)',
+            output: `Tests failed: ${testOutput.slice(0, 120)}... Re-delegating to Developer for fix.`,
             promptTokens: testerRes.promptTokens,
             completionTokens: testerRes.completionTokens,
             totalTokens: testerRes.totalTokens,
@@ -212,27 +294,27 @@ Provide QA evaluation and regression analysis.`;
       }
 
       // -------------------------------------------------------------
-      // PHASE 5 & 6: REVIEW & REVIEW CORRECTION (Reviewer)
+      // PHASE 4: REVIEW (Reviewer)
       // -------------------------------------------------------------
       let reviewerApproved = false;
       let reviewCycles = 0;
 
       while (!reviewerApproved && reviewCycles < 2) {
         reviewCycles++;
+        const gitDiff = workspace.gitDiff();
 
-        const gitDiffOutput = workspace.gitDiff();
-        const reviewPrompt = `You are a Principal Software Architect / Reviewer.
-Review the following git diff and changed files:
-Changed files: ${Array.from(changedFileList).join(', ')}
-Diff:\n${gitDiffOutput || 'Files modified in workspace'}
-Provide architecture review, code cleanliness audit, and security assessment.`;
+        const revPrompt = `You are the Lead Code Reviewer & Security Auditor.
+Inspect the Git Diff:
+${gitDiff || '(No modifications detected)'}
 
-        const reviewFallback = `Performing architectural inspection, security audit, performance assessment, and maintainability check on git changes.`;
+Evaluate code quality, security implications, maintainability, and clean architecture.`;
+
+        const revFallback = `Reviewing git diff, validating security parameters, ensuring no hardcoded keys or insecure endpoints, and verifying architectural compliance.`;
 
         const revRes = await providerManager.generateWithUsage(
           chosenModel,
-          reviewPrompt,
-          reviewFallback,
+          revPrompt,
+          revFallback,
           'reviewer',
           activeProvider
         );
@@ -242,12 +324,11 @@ Provide architecture review, code cleanliness audit, and security assessment.`;
             id: 'tc_' + Math.random().toString(36).substring(2, 7),
             name: 'git_diff',
             args: {},
-            result: gitDiffOutput || 'Files inspected: ' + Array.from(changedFileList).join(', '),
+            result: gitDiff ? `${gitDiff.split('\n').length} lines modified` : 'Empty diff',
             timestamp: Date.now(),
           },
         ];
 
-        // Simulating reviewer approval
         reviewerApproved = true;
         totalTokens += revRes.totalTokens;
         totalPromptTokens += revRes.promptTokens;
@@ -271,10 +352,11 @@ Provide architecture review, code cleanliness audit, and security assessment.`;
       }
 
       // -------------------------------------------------------------
-      // PHASE 7: FINAL REPORT (Manager)
+      // PHASE 5: FINAL REPORT (Manager)
       // -------------------------------------------------------------
-      const delivPrompt = `You are the Manager. Summarize the successful delivery for task "${taskPrompt}". Files changed: ${Array.from(changedFileList).join(', ')}.`;
-      const delivFallback = `Synthesizing team deliverables and preparing the final verification report.`;
+      const prInfo = julesResult?.prUrl ? ` Pull Request: ${julesResult.prUrl}` : '';
+      const delivPrompt = `You are the Manager. Summarize the successful delivery for task "${taskPrompt}". Files changed: ${Array.from(changedFileList).join(', ')}.${prInfo}`;
+      const delivFallback = `Synthesizing team deliverables and preparing the final verification report.${prInfo}`;
 
       const delivRes = await providerManager.generateWithUsage(
         chosenModel,
@@ -309,6 +391,9 @@ Provide architecture review, code cleanliness audit, and security assessment.`;
           durationMs: Date.now() - startTime,
           modelUsed: chosenModel,
           providerUsed: activeProvider,
+          codingAgentUsed: codingAgentToUse || undefined,
+          prUrl: julesResult?.prUrl,
+          gitBranch: julesResult?.gitBranch,
           estimatedTokens: totalTokens,
           promptTokens: totalPromptTokens,
           completionTokens: totalCompletionTokens,
@@ -324,7 +409,7 @@ Provide architecture review, code cleanliness audit, and security assessment.`;
         agent: 'manager',
         thought: delivRes.text,
         status: 'COMPLETED',
-        output: `Workflow completed successfully with ${finalReport.filesChanged.length} files changed and all verification gates passed.`,
+        output: `Workflow completed successfully with ${finalReport.filesChanged.length} files changed and all verification gates passed.${julesResult?.prUrl ? ` PR: ${julesResult.prUrl}` : ''}`,
         promptTokens: delivRes.promptTokens,
         completionTokens: delivRes.completionTokens,
         totalTokens: delivRes.totalTokens,
@@ -337,6 +422,9 @@ Provide architecture review, code cleanliness audit, and security assessment.`;
         taskPrompt,
         success: true,
         modelUsed: chosenModel,
+        codingAgentUsed: codingAgentToUse || undefined,
+        prUrl: julesResult?.prUrl,
+        gitBranch: julesResult?.gitBranch,
         steps,
         finalReport,
         virtualFiles: workspace.getFiles(),
@@ -348,11 +436,28 @@ Provide architecture review, code cleanliness audit, and security assessment.`;
         taskPrompt,
         success: false,
         modelUsed: chosenModel,
+        codingAgentUsed: codingAgentToUse || undefined,
         steps,
         virtualFiles: workspace.getFiles(),
         error: error.message || 'Workflow execution error',
       };
     }
+  }
+
+  /**
+   * Helper method to route a task directly to an autonomous coding agent (Google Jules).
+   */
+  public async runWithCodingAgent(
+    task: CodingAgentTask,
+    onStep?: (step: AgentStep) => void
+  ): Promise<TeamRunResult> {
+    return this.runWorkflow(task.task, 'tier_3', onStep, {
+      codingAgent: (task.agent as any) || 'jules',
+      repository: task.repository,
+      branch: task.branch,
+      automationMode: task.automationMode,
+      title: task.title,
+    });
   }
 
   private executeDeveloperActions(

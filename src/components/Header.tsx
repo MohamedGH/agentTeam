@@ -1,10 +1,10 @@
 import React from 'react';
-import { Users, Gauge, FolderTree, Sparkles, Activity, ShieldCheck, Zap, Globe } from 'lucide-react';
+import { Users, Gauge, FolderTree, Sparkles, Activity, ShieldCheck, Zap, Globe, GitPullRequest } from 'lucide-react';
 import { AIProviderId, ProviderInfo } from '../types';
 
 interface HeaderProps {
-  activeTab: 'studio' | 'workspace' | 'quota' | 'roles';
-  setActiveTab: (tab: 'studio' | 'workspace' | 'quota' | 'roles') => void;
+  activeTab: 'studio' | 'workspace' | 'quota' | 'roles' | 'jules';
+  setActiveTab: (tab: 'studio' | 'workspace' | 'quota' | 'roles' | 'jules') => void;
   selectedTier: string;
   setSelectedTier: (tier: string) => void;
   isRunning: boolean;
@@ -106,6 +106,22 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <ShieldCheck className="w-3.5 h-3.5" />
             Team Roles
+          </button>
+
+          <button
+            id="tab-jules"
+            onClick={() => setActiveTab('jules')}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap cursor-pointer ${
+              activeTab === 'jules'
+                ? 'bg-orange-600 text-white shadow-sm'
+                : 'text-orange-400/90 hover:text-orange-300 hover:bg-slate-900'
+            }`}
+          >
+            <GitPullRequest className="w-3.5 h-3.5" />
+            Google Jules
+            <span className="text-[10px] px-1.5 py-0.2 rounded bg-orange-500/20 text-orange-300 font-mono border border-orange-500/30">
+              Agent
+            </span>
           </button>
         </div>
 

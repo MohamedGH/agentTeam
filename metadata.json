@@ -1,6 +1,6 @@
 {
   "name": "agentTeam - Multi-Agent Software Development Studio",
-  "description": "Autonomous software development team with Manager, Developer, Tester, Reviewer agents and Gemini Quota Manager.",
+  "description": "Autonomous software development team with Manager, Developer, Tester, Reviewer agents, Google Jules autonomous coding agent, and Gemini Quota Manager.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

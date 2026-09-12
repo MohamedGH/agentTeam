@@ -6,6 +6,7 @@ import { FinalReportCard } from './components/FinalReportCard';
 import { WorkspaceExplorer } from './components/WorkspaceExplorer';
 import { QuotaDashboard } from './components/QuotaDashboard';
 import { RolesGuide } from './components/RolesGuide';
+import { JulesDashboard } from './components/JulesDashboard';
 import { AgentStep, FinalReport, AgentRole, ModelQuotaStatus, AIProviderId, ProviderInfo } from './types';
 import {
   Play,
@@ -19,9 +20,17 @@ import {
   Square,
   Clock,
   RotateCcw,
+  GitPullRequest,
+  FolderGit2,
+  GitBranch,
 } from 'lucide-react';
 
 const PRESET_TASKS = [
+  {
+    title: 'Fix DeepSeek Provider (Jules)',
+    prompt:
+      'Fix the DeepSeek provider error handling, verify token accounting, and implement retry logic with exponential jitter.',
+  },
   {
     title: 'JWT Auth & Rate Limiter',
     prompt:
@@ -42,21 +51,22 @@ const PRESET_TASKS = [
     prompt:
       'Implement an API key format validator and masking utility in src/security.py with regex checks, sha256 hashing, and complete pytest tests.',
   },
-  {
-    title: 'LRU Cache with TTL Expiry',
-    prompt:
-      'Implement a thread-safe LRU Cache with TTL expiration in src/cache.py and write comprehensive pytest test coverage.',
-  },
 ];
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'studio' | 'workspace' | 'quota' | 'roles'>('studio');
+  const [activeTab, setActiveTab] = useState<'studio' | 'workspace' | 'quota' | 'roles' | 'jules'>('studio');
   const [selectedTier, setSelectedTier] = useState<string>('tier_3');
   const [taskPrompt, setTaskPrompt] = useState<string>(PRESET_TASKS[0].prompt);
 
   // Multi-Provider state
   const [activeProvider, setActiveProvider] = useState<AIProviderId>('gemini');
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
+
+  // Coding Agent Routing state (Google Jules)
+  const [codingAgentOption, setCodingAgentOption] = useState<'none' | 'jules' | 'mock'>('none');
+  const [githubRepo, setGithubRepo] = useState<string>('MohamedGH/agentTeam');
+  const [githubBranch, setGithubBranch] = useState<string>('main');
+  const [automationMode, setAutomationMode] = useState<'AUTO_CREATE_PR' | 'MANUAL'>('AUTO_CREATE_PR');
 
   // Multi-Agent Execution State
   const [isRunning, setIsRunning] = useState<boolean>(false);
@@ -184,17 +194,24 @@ export default function App() {
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
+    const requestPayload = {
+      prompt: taskPrompt.trim(),
+      tier: selectedTier,
+      provider: activeProvider,
+      model: chosenModel,
+      codingAgent: codingAgentOption !== 'none' ? codingAgentOption : undefined,
+      repository: codingAgentOption !== 'none' ? githubRepo.trim() : undefined,
+      branch: codingAgentOption !== 'none' ? githubBranch.trim() : undefined,
+      automationMode: codingAgentOption !== 'none' ? automationMode : undefined,
+      title: codingAgentOption !== 'none' ? `agentTeam: ${taskPrompt.slice(0, 45)}` : undefined,
+    };
+
     try {
       // Attempt Server-Sent Events (SSE) streaming execution
       const streamRes = await fetch('/api/team/run-stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: taskPrompt.trim(),
-          tier: selectedTier,
-          provider: activeProvider,
-          model: chosenModel,
-        }),
+        body: JSON.stringify(requestPayload),
         signal: controller.signal,
       });
 
@@ -245,12 +262,7 @@ export default function App() {
         const res = await fetch('/api/team/run', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            prompt: taskPrompt.trim(),
-            tier: selectedTier,
-            provider: activeProvider,
-            model: chosenModel,
-          }),
+          body: JSON.stringify(requestPayload),
           signal: controller.signal,
         });
 
@@ -382,6 +394,95 @@ export default function App() {
                 </div>
               </div>
 
+              {/* Developer Delegation Routing Mode Selector */}
+              <div className="mb-3 p-2.5 bg-slate-950 rounded-xl border border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2">
+                  <GitPullRequest className="w-3.5 h-3.5 text-orange-400" />
+                  <span className="font-semibold text-slate-300">Developer Delegation Target:</span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCodingAgentOption('none')}
+                    className={`px-3 py-1 rounded-lg font-medium transition-all cursor-pointer ${
+                      codingAgentOption === 'none'
+                        ? 'bg-blue-600 text-white shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    Internal LLM Developer
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCodingAgentOption('jules')}
+                    className={`px-3 py-1 rounded-lg font-medium transition-all cursor-pointer flex items-center gap-1.5 ${
+                      codingAgentOption === 'jules'
+                        ? 'bg-orange-600 text-white shadow-sm'
+                        : 'text-orange-400 hover:text-orange-300'
+                    }`}
+                  >
+                    Google Jules (Cloud)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCodingAgentOption('mock')}
+                    className={`px-3 py-1 rounded-lg font-medium transition-all cursor-pointer ${
+                      codingAgentOption === 'mock'
+                        ? 'bg-purple-600 text-white shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    Mock Jules (Test)
+                  </button>
+                </div>
+              </div>
+
+              {/* Jules GitHub Repository & Branch Options when Jules is active */}
+              {codingAgentOption !== 'none' && (
+                <div className="mb-3 p-3 bg-orange-500/5 rounded-xl border border-orange-500/20 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-semibold text-slate-300 flex items-center gap-1">
+                      <FolderGit2 className="w-3 h-3 text-orange-400" />
+                      Repository
+                    </label>
+                    <input
+                      type="text"
+                      value={githubRepo}
+                      onChange={(e) => setGithubRepo(e.target.value)}
+                      placeholder="owner/repo"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 font-mono focus:outline-none focus:border-orange-500"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-semibold text-slate-300 flex items-center gap-1">
+                      <GitBranch className="w-3 h-3 text-orange-400" />
+                      Branch
+                    </label>
+                    <input
+                      type="text"
+                      value={githubBranch}
+                      onChange={(e) => setGithubBranch(e.target.value)}
+                      placeholder="main"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 font-mono focus:outline-none focus:border-orange-500"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-semibold text-slate-300">Automation Mode</label>
+                    <select
+                      value={automationMode}
+                      onChange={(e) => setAutomationMode(e.target.value as any)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-orange-500 cursor-pointer"
+                    >
+                      <option value="AUTO_CREATE_PR">AUTO_CREATE_PR (Create Pull Request)</option>
+                      <option value="MANUAL">MANUAL (Branch patch only)</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
               {/* Task Input Box */}
               <div className="flex flex-col sm:flex-row items-stretch gap-3 mb-3">
                 <input
@@ -413,10 +514,14 @@ export default function App() {
                       id="btn-dispatch-team"
                       onClick={handleRunWorkflow}
                       disabled={!taskPrompt.trim()}
-                      className="flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs sm:text-sm font-bold shadow-lg shadow-blue-500/20 disabled:opacity-50 transition-all cursor-pointer disabled:cursor-not-allowed whitespace-nowrap"
+                      className={`flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-white text-xs sm:text-sm font-bold shadow-lg disabled:opacity-50 transition-all cursor-pointer disabled:cursor-not-allowed whitespace-nowrap ${
+                        codingAgentOption !== 'none'
+                          ? 'bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 shadow-orange-500/20'
+                          : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-blue-500/20'
+                      }`}
                     >
                       <Play className="w-4 h-4 fill-white" />
-                      Dispatch Team
+                      Dispatch Team {codingAgentOption !== 'none' ? '(with Jules)' : ''}
                     </button>
                   )}
                 </div>
@@ -431,7 +536,12 @@ export default function App() {
                   {PRESET_TASKS.map((preset, idx) => (
                     <button
                       key={idx}
-                      onClick={() => setTaskPrompt(preset.prompt)}
+                      onClick={() => {
+                        setTaskPrompt(preset.prompt);
+                        if (preset.title.includes('Jules')) {
+                          setCodingAgentOption('jules');
+                        }
+                      }}
                       className="text-xs px-2.5 py-1 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-300 border border-slate-800 hover:border-slate-700 transition-all text-left truncate max-w-xs cursor-pointer"
                     >
                       {preset.title}
@@ -512,6 +622,9 @@ export default function App() {
 
         {/* VIEW 4: TEAM ROLES & SPECIFICATION */}
         {activeTab === 'roles' && <RolesGuide />}
+
+        {/* VIEW 5: GOOGLE JULES CODING AGENT DASHBOARD */}
+        {activeTab === 'jules' && <JulesDashboard />}
       </main>
 
       {/* Footer */}
@@ -519,7 +632,7 @@ export default function App() {
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
           <span>agentTeam • Autonomous Software Engineering Orchestrator</span>
           <span className="font-mono text-[11px] text-slate-600">
-            Node.js 22 + TypeScript + Express + React 19 + Tailwind CSS + Multi-Provider AI (Gemini, OpenAI, Claude, Groq, DeepSeek, Ollama)
+            Node.js 22 + TypeScript + Express + React 19 + Tailwind CSS + Google Jules Coding Agent + Multi-AI Providers
           </span>
         </div>
       </footer>

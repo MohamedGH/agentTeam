@@ -6,6 +6,7 @@ import { providerManager } from './server/providerManager';
 import { quotaManager } from './server/quotaManager';
 import { workspace } from './server/virtualWorkspace';
 import { agentTeamEngine } from './server/agentTeam';
+import { codingAgentManager } from './server/codingAgents';
 import { cloudMonitoringQuotaService } from './server/cloudMonitoring';
 
 async function startServer() {
@@ -22,6 +23,8 @@ async function startServer() {
       res.json({
         status: 'ok',
         server: 'agentTeam-server',
+        hasGeminiApiKey: Boolean(process.env.GEMINI_API_KEY),
+        hasJulesApiKey: Boolean(process.env.JULES_API_KEY),
         ...health,
       });
     } catch (err: any) {
@@ -29,6 +32,7 @@ async function startServer() {
         status: 'ok',
         server: 'agentTeam-server',
         hasGeminiApiKey: Boolean(process.env.GEMINI_API_KEY),
+        hasJulesApiKey: Boolean(process.env.JULES_API_KEY),
         timestamp: new Date().toISOString(),
         error: err.message,
       });
@@ -218,15 +222,118 @@ async function startServer() {
     }
   });
 
-  // Multi-Agent Team Execution API
+  // -------------------------------------------------------------
+  // AUTONOMOUS CODING AGENT APIS (Google Jules)
+  // Kept architecturally separate from LLM ProviderManager
+  // -------------------------------------------------------------
+  app.get('/api/coding-agents/list', (req, res) => {
+    try {
+      const agents = codingAgentManager.listAgents();
+      res.json({
+        agents,
+        total: agents.length,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get('/api/coding-agents/sources', async (req, res) => {
+    try {
+      const agentId = (req.query.agent as string) || 'jules';
+      const sources = await codingAgentManager.listSources(agentId);
+      res.json({
+        agent: agentId,
+        sources,
+        total: sources.length,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/coding-agents/execute', async (req, res) => {
+    try {
+      const {
+        agent = 'jules',
+        repository,
+        branch = 'main',
+        task,
+        title,
+        automationMode = 'AUTO_CREATE_PR',
+        requirePlanApproval = false,
+      } = req.body;
+
+      if (!repository || !task) {
+        return res.status(400).json({ error: 'Repository and task are required' });
+      }
+
+      const result = await codingAgentManager.execute({
+        agent,
+        repository,
+        branch,
+        task,
+        title,
+        automationMode,
+        requirePlanApproval,
+      });
+
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get('/api/coding-agents/session/:id', async (req, res) => {
+    try {
+      const sessionId = req.params.id;
+      const agent = (req.query.agent as string) || 'jules';
+      const session = await codingAgentManager.getSession(sessionId, agent);
+      res.json(session);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get('/api/coding-agents/session/:id/activities', async (req, res) => {
+    try {
+      const sessionId = req.params.id;
+      const agent = (req.query.agent as string) || 'jules';
+      const activities = await codingAgentManager.listActivities(sessionId, agent);
+      res.json({ sessionId, activities });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Multi-Agent Team Execution API (with optional Jules delegation)
   app.post('/api/team/run', async (req, res) => {
     try {
-      const { prompt, tier = 'tier_3', provider, model } = req.body;
+      const {
+        prompt,
+        tier = 'tier_3',
+        provider,
+        model,
+        codingAgent,
+        repository,
+        branch,
+        automationMode,
+        title,
+      } = req.body;
+
       if (!prompt || typeof prompt !== 'string') {
         return res.status(400).json({ error: 'Task prompt is required' });
       }
 
-      const result = await agentTeamEngine.runWorkflow(prompt, tier, undefined, { provider, model });
+      const result = await agentTeamEngine.runWorkflow(prompt, tier, undefined, {
+        provider,
+        model,
+        codingAgent,
+        repository,
+        branch,
+        automationMode,
+        title,
+      });
       res.json(result);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -239,6 +346,11 @@ async function startServer() {
     const tier = (req.body?.tier || req.query?.tier || 'tier_3') as string;
     const provider = (req.body?.provider || req.query?.provider) as string | undefined;
     const model = (req.body?.model || req.query?.model) as string | undefined;
+    const codingAgent = (req.body?.codingAgent || req.query?.codingAgent) as any;
+    const repository = (req.body?.repository || req.query?.repository) as string | undefined;
+    const branch = (req.body?.branch || req.query?.branch) as string | undefined;
+    const automationMode = (req.body?.automationMode || req.query?.automationMode) as any;
+    const title = (req.body?.title || req.query?.title) as string | undefined;
 
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -246,9 +358,22 @@ async function startServer() {
     res.flushHeaders();
 
     try {
-      const result = await agentTeamEngine.runWorkflow(prompt, tier, (step) => {
-        res.write(`data: ${JSON.stringify({ type: 'step', step })}\n\n`);
-      }, { provider, model });
+      const result = await agentTeamEngine.runWorkflow(
+        prompt,
+        tier,
+        (step) => {
+          res.write(`data: ${JSON.stringify({ type: 'step', step })}\n\n`);
+        },
+        {
+          provider,
+          model,
+          codingAgent,
+          repository,
+          branch,
+          automationMode,
+          title,
+        }
+      );
 
       res.write(`data: ${JSON.stringify({ type: 'complete', result })}\n\n`);
       res.end();

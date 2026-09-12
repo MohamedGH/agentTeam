@@ -131,6 +131,37 @@ export const FinalReportCard: React.FC<FinalReportCardProps> = ({ report, onView
         </div>
       </div>
 
+      {/* Autonomous Coding Agent (Google Jules) Pull Request Banner */}
+      {(report.metrics.prUrl || report.metrics.codingAgentUsed) && (
+        <div className="mb-4 bg-orange-500/10 p-3.5 rounded-xl border border-orange-500/30 text-xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-orange-300 font-semibold">
+              <span className="px-2 py-0.5 rounded bg-orange-500/20 text-orange-200 border border-orange-500/30 text-[10px] font-mono">
+                {report.metrics.codingAgentUsed === 'jules' ? 'Google Jules Cloud' : 'Mock Jules'}
+              </span>
+              <span>Autonomous GitHub Coding Agent Session</span>
+            </div>
+
+            {report.metrics.prUrl && (
+              <a
+                href={report.metrics.prUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="text-emerald-400 hover:text-emerald-300 font-bold underline text-xs flex items-center gap-1 self-start sm:self-auto"
+              >
+                Pull Request: {report.metrics.prUrl}
+              </a>
+            )}
+          </div>
+
+          {report.metrics.gitBranch && (
+            <div className="mt-1.5 text-slate-300 text-[11px] font-mono">
+              Branch: <span className="text-blue-300 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">{report.metrics.gitBranch}</span>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Files Changed */}
       {report.filesChanged && report.filesChanged.length > 0 && (
         <div className="mb-4 bg-slate-950/60 p-3 rounded-xl border border-slate-800/60">
