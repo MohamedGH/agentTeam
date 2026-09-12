@@ -101,6 +101,21 @@ async function startServer() {
     }
   });
 
+  app.post('/api/quota/simulate-cooldown', (req, res) => {
+    try {
+      const { model = 'gemini-3.7-flash', durationSeconds = 30 } = req.body;
+      quotaManager.handle429Error(model, durationSeconds);
+      res.json({
+        success: true,
+        model,
+        durationSeconds,
+        message: `Simulated 429 rate limit cooldown on ${model} for ${durationSeconds}s. Failover routing is now active.`,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Virtual Workspace APIs
   app.get('/api/workspace/files', (req, res) => {
     try {
@@ -126,6 +141,34 @@ async function startServer() {
       }
       workspace.setFile(filePath, content);
       res.json({ success: true, path: filePath });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete('/api/workspace/file', (req, res) => {
+    try {
+      const { path: filePath } = req.body;
+      if (!filePath) {
+        return res.status(400).json({ error: 'File path is required' });
+      }
+      workspace.deleteFile(filePath);
+      res.json({ success: true, path: filePath });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/workspace/run-command', (req, res) => {
+    try {
+      const { command = 'pytest' } = req.body;
+      const output = workspace.runCommand(command);
+      res.json({
+        success: true,
+        command,
+        output,
+        timestamp: Date.now(),
+      });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -190,12 +233,12 @@ async function startServer() {
     }
   });
 
-  // Server-Sent Events (SSE) Stream for real-time live execution
-  app.get('/api/team/run-stream', async (req, res) => {
-    const prompt = (req.query.prompt as string) || 'Refactor math utilities and add tests';
-    const tier = (req.query.tier as string) || 'tier_3';
-    const provider = req.query.provider as string | undefined;
-    const model = req.query.model as string | undefined;
+  // Server-Sent Events (SSE) Stream for real-time live execution (supports both GET and POST)
+  const handleStreamRequest = async (req: express.Request, res: express.Response) => {
+    const prompt = (req.body?.prompt || req.query?.prompt || 'Refactor math utilities and add tests') as string;
+    const tier = (req.body?.tier || req.query?.tier || 'tier_3') as string;
+    const provider = (req.body?.provider || req.query?.provider) as string | undefined;
+    const model = (req.body?.model || req.query?.model) as string | undefined;
 
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -213,7 +256,10 @@ async function startServer() {
       res.write(`data: ${JSON.stringify({ type: 'error', error: err.message })}\n\n`);
       res.end();
     }
-  });
+  };
+
+  app.get('/api/team/run-stream', handleStreamRequest);
+  app.post('/api/team/run-stream', handleStreamRequest);
 
   // Vite middleware for development vs static files for production
   if (process.env.NODE_ENV !== 'production') {

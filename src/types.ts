@@ -28,6 +28,8 @@ export interface ProviderInfo {
   tokenCounterSupported: boolean;
 }
 
+export type TokenAccountingType = 'real_provider' | 'mock' | 'fallback_unknown';
+
 export interface AgentStep {
   id: string;
   phase: number;
@@ -43,6 +45,7 @@ export interface AgentStep {
   completionTokens?: number;
   totalTokens?: number;
   isRealTokenUsage?: boolean;
+  tokenAccountingType?: TokenAccountingType;
 }
 
 export interface FinalReport {
@@ -66,6 +69,7 @@ export interface FinalReport {
     completionTokens?: number;
     totalTokens?: number;
     isRealTokenUsage?: boolean;
+    tokenAccountingType?: TokenAccountingType;
   };
 }
 
@@ -91,6 +95,9 @@ export interface QuotaLimit {
 export interface ModelQuotaStatus {
   model: string;
   tier: string;
+  isAuthoritative?: boolean;
+  quotaSource?: 'google_cloud_monitoring' | 'google_service_usage' | 'offline_fallback' | 'unmetered';
+  quotaSourceLabel?: string;
   rpm_limit?: number;
   rpm_used: number;
   rpm_remaining?: number;
@@ -106,6 +113,7 @@ export interface ModelQuotaStatus {
   monitoringSource?: string;
   cloudRpmLimit?: number;
   cloudRpdLimit?: number;
+  cloudTpmLimit?: number;
   cacheAgeSeconds?: number;
   cacheTtlSeconds?: number;
 }

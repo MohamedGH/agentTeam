@@ -8,6 +8,8 @@ export interface QuotaLimitData {
   rpd?: number;
   metric?: string;
   displayName?: string;
+  isAuthoritative?: boolean;
+  quotaSource?: 'google_cloud_monitoring' | 'google_service_usage' | 'offline_fallback' | 'unmetered';
 }
 
 export interface ModelLimits {
@@ -25,11 +27,32 @@ export interface ModelState {
   cooloff_until: number;
 }
 
+export interface ModelStatusDetails {
+  model: string;
+  tier: string;
+  isAuthoritative: boolean;
+  quotaSource: 'google_cloud_monitoring' | 'google_service_usage' | 'offline_fallback' | 'unmetered';
+  quotaSourceLabel: string;
+  rpm_limit?: number;
+  rpm_used: number;
+  rpm_remaining?: number | null;
+  tpm_limit?: number;
+  tpm_used: number;
+  tpm_remaining?: number | null;
+  rpd_limit?: number;
+  rpd_used: number;
+  rpd_remaining?: number | null;
+  errors_429: number;
+  blocked: boolean;
+  cooloff_until: number;
+}
+
 /**
  * QuotaManager
  * 
  * Dynamic Quota & Rate-Limit Controller.
  * - Suppresses assumed/fabricated default limits in favor of authoritative Cloud Monitoring metrics and real-time quota descriptors.
+ * - Explicitly tags fallback tiers as advisory non-authoritative references (isAuthoritative = false).
  * - Tracks rolling 60-second RPM/TPM and daily RPD per model dynamically.
  * - Enforces backoff cooldowns upon encountering 429 Rate Limits and 503 High Demand spikes.
  */
@@ -103,6 +126,8 @@ export class QuotaManager {
                   rpd: tData.rpd,
                   metric: tData.metric,
                   displayName: tData.displayName,
+                  isAuthoritative: true,
+                  quotaSource: 'google_service_usage',
                 };
               }
             }
@@ -125,7 +150,18 @@ export class QuotaManager {
     }
   }
 
-  public registerLimits(quotaJson: any) {
+  public registerLimits(modelOrQuotaJson: string | any, explicitLimits?: Record<string, QuotaLimitData>) {
+    if (typeof modelOrQuotaJson === 'string' && explicitLimits) {
+      const model = modelOrQuotaJson;
+      this.limits[model] = {
+        ...(this.limits[model] || {}),
+        ...explicitLimits,
+      };
+      return;
+    }
+
+    const quotaJson = modelOrQuotaJson;
+    if (!quotaJson || typeof quotaJson !== 'object') return;
     const metrics = quotaJson.metrics || quotaJson.consumerQuotaMetrics || [];
 
     for (const metric of metrics) {
@@ -153,28 +189,28 @@ export class QuotaManager {
         const metricName: string = limit.metric || '';
 
         let kind: 'rpm' | 'rpd' | 'tpm' | null = null;
-        if (unit.includes('/min/')) {
+        if (unit.includes('/min/') && !metricName.toLowerCase().includes('token') && !name.includes('input_token')) {
           kind = 'rpm';
         } else if (unit.includes('/d/')) {
           kind = 'rpd';
-        } else if (metricName.toLowerCase().includes('token')) {
+        } else if (metricName.toLowerCase().includes('token') || name.includes('input_token') || display.toLowerCase().includes('token')) {
           kind = 'tpm';
         }
 
         if (!kind) continue;
 
         for (const bucket of limit.quotaBuckets || []) {
-          const value = bucket.effectiveLimit;
+          const value = bucket.effectiveLimit || bucket.defaultLimit;
           if (value === undefined || value === null) continue;
 
           const numValue = parseInt(value, 10);
-          if (isNaN(numValue)) continue;
+          if (isNaN(numValue) || numValue < 0) continue;
 
           const model = bucket.dimensions?.model;
           if (!model) continue;
 
           if (!this.limits[model]) this.limits[model] = {};
-          if (!this.limits[model][tier]) this.limits[model][tier] = {};
+          if (!this.limits[model][tier]) this.limits[model][tier] = { isAuthoritative: true, quotaSource: 'google_service_usage' };
 
           const current = this.limits[model][tier][kind];
           if (current === undefined || numValue > current) {
@@ -351,11 +387,11 @@ export class QuotaManager {
   public getRemainingQuota(model: string, tier = 'tier_3') {
     this.refresh(model);
     const s = this.state[model];
-    const limits = this.limits[model]?.[tier] || {};
+    const limits = this.limits[model]?.[tier] || this.limits[model]?.['tier_3'] || {};
 
     const calcRemaining = (kind: 'rpm' | 'tpm' | 'rpd', used: number) => {
       const limit = limits[kind];
-      if (limit === undefined || limit < 0) return null;
+      if (limit === undefined || limit === null || limit < 0) return null;
       return Math.max(0, limit - used);
     };
 
@@ -366,8 +402,8 @@ export class QuotaManager {
     };
   }
 
-  public allStatus(tier = 'tier_3') {
-    const result: Record<string, any> = {};
+  public allStatus(tier = 'tier_3'): Record<string, ModelStatusDetails> {
+    const result: Record<string, ModelStatusDetails> = {};
     const now = Date.now() / 1000;
     const allModels = new Set([...Object.keys(this.limits), ...Object.keys(this.state)]);
 
@@ -375,11 +411,26 @@ export class QuotaManager {
       this.refresh(model);
       const q = this.getRemainingQuota(model, tier);
       const s = this.state[model];
-      const limits = this.limits[model]?.[tier] || {};
+      const limits = this.limits[model]?.[tier] || this.limits[model]?.['tier_3'] || {};
+
+      const isAuthoritative = Boolean(limits.isAuthoritative);
+      const quotaSource = limits.quotaSource || (isAuthoritative ? 'google_service_usage' : 'unmetered');
+
+      let quotaSourceLabel = 'Unmetered (No Cloud Quota Declared)';
+      if (quotaSource === 'google_cloud_monitoring') {
+        quotaSourceLabel = 'Google Cloud Monitoring (Live API)';
+      } else if (quotaSource === 'google_service_usage') {
+        quotaSourceLabel = 'Google Service Usage API (Authoritative Descriptor)';
+      } else if (quotaSource === 'offline_fallback') {
+        quotaSourceLabel = 'Offline Fallback Reference (Advisory Only)';
+      }
 
       result[model] = {
         model,
         tier,
+        isAuthoritative,
+        quotaSource,
+        quotaSourceLabel,
         rpm_limit: limits.rpm,
         rpm_used: s.rpm_used,
         rpm_remaining: q.remaining_rpm,
@@ -404,13 +455,25 @@ export class QuotaManager {
       if (cloudMetrics && cloudMetrics.models) {
         for (const [model, mData] of Object.entries(cloudMetrics.models)) {
           if (!this.limits[model]) this.limits[model] = {};
-          if (!this.limits[model]['tier_3']) this.limits[model]['tier_3'] = {};
+          if (!this.limits[model]['tier_3']) {
+            this.limits[model]['tier_3'] = {
+              isAuthoritative: true,
+              quotaSource: cloudMetrics.source === 'google_cloud_monitoring' ? 'google_cloud_monitoring' : 'google_service_usage',
+            };
+          }
+
           if (mData.rpm_limit !== undefined && mData.rpm_limit > 0) {
             this.limits[model]['tier_3'].rpm = mData.rpm_limit;
+          }
+          if (mData.tpm_limit !== undefined && mData.tpm_limit > 0) {
+            this.limits[model]['tier_3'].tpm = mData.tpm_limit;
           }
           if (mData.rpd_limit !== undefined && mData.rpd_limit > 0) {
             this.limits[model]['tier_3'].rpd = mData.rpd_limit;
           }
+          this.limits[model]['tier_3'].isAuthoritative = true;
+          this.limits[model]['tier_3'].quotaSource =
+            cloudMetrics.source === 'google_cloud_monitoring' ? 'google_cloud_monitoring' : 'google_service_usage';
         }
       }
       return cloudMetrics;

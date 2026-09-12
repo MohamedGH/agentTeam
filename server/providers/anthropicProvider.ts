@@ -61,6 +61,7 @@ export class AnthropicProvider implements IAIProvider {
       provider: 'anthropic',
       model,
       isRealProviderUsage: Boolean(usage),
+      tokenAccountingType: 'real_provider',
     };
   }
 

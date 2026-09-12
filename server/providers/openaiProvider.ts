@@ -59,6 +59,7 @@ export class OpenAIProvider implements IAIProvider {
       provider: 'openai',
       model,
       isRealProviderUsage: Boolean(usage),
+      tokenAccountingType: 'real_provider',
     };
   }
 

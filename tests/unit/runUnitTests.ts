@@ -1,6 +1,7 @@
 import { runQuotaManagerUnitTests } from './quotaManager.test';
 import { runCloudMonitoringUnitTests } from './cloudMonitoring.test';
 import { runProvidersUnitTests } from './providers.test';
+import { runQuotaAndTokenAccountingUnitTests } from './quotaAndTokenAccounting.test';
 
 export async function runAllUnitTests() {
   console.log('====================================================');
@@ -10,6 +11,7 @@ export async function runAllUnitTests() {
   await runQuotaManagerUnitTests();
   await runCloudMonitoringUnitTests();
   await runProvidersUnitTests();
+  await runQuotaAndTokenAccountingUnitTests();
 
   console.log('\n🎉 ALL UNIT TESTS PASSED (100%)\n');
 }

@@ -22,6 +22,8 @@ export interface ModelQuotaMetricDetails {
   rpd_limit?: number;
   rpd_used?: number;
   rpd_remaining?: number;
+  isAuthoritative?: boolean;
+  quotaSource?: 'google_cloud_monitoring' | 'google_service_usage' | 'offline_fallback' | 'unmetered';
   rawMetrics?: any;
 }
 
@@ -42,7 +44,8 @@ export interface CloudMonitoringQuotaResult {
  * - Dynamically resolves Google Cloud Project ID from environment (no hardcoded project IDs).
  * - Enforces strict 60-second caching (TTL = 60000ms).
  * - Reads authoritative Cloud Monitoring and Service Usage API metrics.
- * - Parses exact consumer quota descriptors from quota.json when live tokens are not present.
+ * - Computes complete RPM, TPM, and RPD (limit, used, and remaining).
+ * - Distinguishes authoritative live metrics from offline fallback configurations.
  */
 export class GoogleCloudMonitoringQuotaService {
   private cache: CloudMonitoringQuotaResult | null = null;
@@ -188,19 +191,53 @@ export class GoogleCloudMonitoringQuotaService {
       if (!model) continue;
 
       if (!modelMetrics[model]) {
-        modelMetrics[model] = {};
+        modelMetrics[model] = {
+          isAuthoritative: true,
+          quotaSource: 'google_cloud_monitoring',
+        };
       }
 
-      const metricType = ts.metricType;
+      const metricType = ts.metricType || '';
+      const quotaMetric = ts.metricLabels?.quota_metric || '';
       const latestPoint = ts.points?.[0]?.value;
       const value = latestPoint?.int64Value ? parseInt(latestPoint.int64Value, 10) : latestPoint?.doubleValue || 0;
 
-      if (metricType.includes('rate/net_usage')) {
-        modelMetrics[model].rpm_used = value;
-      } else if (metricType.includes('limit')) {
-        modelMetrics[model].rpm_limit = value;
-      } else if (metricType.includes('allocation/usage')) {
-        modelMetrics[model].rpd_used = value;
+      const isTokenMetric = metricType.includes('token') || quotaMetric.includes('token') || quotaMetric.includes('input_token');
+      const isDailyMetric = metricType.includes('allocation') || quotaMetric.includes('/d/') || quotaMetric.includes('day') || quotaMetric.includes('per_day');
+
+      if (isTokenMetric) {
+        if (metricType.includes('usage') || metricType.includes('rate/net_usage')) {
+          modelMetrics[model].tpm_used = value;
+        } else if (metricType.includes('limit')) {
+          modelMetrics[model].tpm_limit = value;
+        }
+      } else if (isDailyMetric) {
+        if (metricType.includes('usage') || metricType.includes('allocation/usage')) {
+          modelMetrics[model].rpd_used = value;
+        } else if (metricType.includes('limit') || metricType.includes('allocation/limit')) {
+          modelMetrics[model].rpd_limit = value;
+        }
+      } else {
+        // Request per minute (RPM)
+        if (metricType.includes('rate/net_usage') || metricType.includes('usage')) {
+          modelMetrics[model].rpm_used = value;
+        } else if (metricType.includes('limit')) {
+          modelMetrics[model].rpm_limit = value;
+        }
+      }
+    }
+
+    // Compute remaining headroom
+    for (const model of Object.keys(modelMetrics)) {
+      const m = modelMetrics[model];
+      if (m.rpm_limit !== undefined && m.rpm_limit >= 0) {
+        m.rpm_remaining = Math.max(0, m.rpm_limit - (m.rpm_used || 0));
+      }
+      if (m.tpm_limit !== undefined && m.tpm_limit >= 0) {
+        m.tpm_remaining = Math.max(0, m.tpm_limit - (m.tpm_used || 0));
+      }
+      if (m.rpd_limit !== undefined && m.rpd_limit >= 0) {
+        m.rpd_remaining = Math.max(0, m.rpd_limit - (m.rpd_used || 0));
       }
     }
 
@@ -210,6 +247,7 @@ export class GoogleCloudMonitoringQuotaService {
   /**
    * Parse authoritative Google Service Usage consumerQuotaMetrics
    * Never guesses or invents arbitrary numbers; extracts exact model dimensions and limits.
+   * Computes full TPM, RPM, and RPD with remaining metrics.
    */
   public parseAuthoritativeServiceUsageQuota(): Record<string, ModelQuotaMetricDetails> {
     const result: Record<string, ModelQuotaMetricDetails> = {};
@@ -222,11 +260,15 @@ export class GoogleCloudMonitoringQuotaService {
 
     for (const metric of metrics) {
       const name: string = metric.metric || metric.name || '';
-      if (!name.includes('generate_content') && !name.includes('generate_requests_per_model')) {
+      const display: string = metric.displayName || '';
+      const isGenerateContent = name.includes('generate_content') || name.includes('generate_requests_per_model');
+      if (!isGenerateContent) {
         continue;
       }
 
+      const isTokenMetric = name.includes('input_token') || name.includes('token_count') || display.toLowerCase().includes('token');
       const limits = metric.consumerQuotaLimits || [];
+
       for (const limit of limits) {
         const unit: string = limit.unit || '';
         const isMin = unit.includes('/min/');
@@ -240,15 +282,40 @@ export class GoogleCloudMonitoringQuotaService {
           if (isNaN(limitVal)) continue;
 
           if (!result[model]) {
-            result[model] = {};
+            result[model] = {
+              isAuthoritative: true,
+              quotaSource: 'google_service_usage',
+            };
           }
 
-          if (isMin) {
-            result[model].rpm_limit = limitVal;
+          if (isTokenMetric && isMin) {
+            if (result[model].tpm_limit === undefined || limitVal > (result[model].tpm_limit || 0)) {
+              result[model].tpm_limit = limitVal;
+            }
+          } else if (!isTokenMetric && isMin) {
+            if (result[model].rpm_limit === undefined || limitVal > (result[model].rpm_limit || 0)) {
+              result[model].rpm_limit = limitVal;
+            }
           } else if (isDay) {
-            result[model].rpd_limit = limitVal;
+            if (result[model].rpd_limit === undefined || limitVal > (result[model].rpd_limit || 0)) {
+              result[model].rpd_limit = limitVal;
+            }
           }
         }
+      }
+    }
+
+    // Set remaining metrics where limits are established
+    for (const model of Object.keys(result)) {
+      const m = result[model];
+      if (m.rpm_limit !== undefined && m.rpm_limit >= 0) {
+        m.rpm_remaining = Math.max(0, m.rpm_limit - (m.rpm_used || 0));
+      }
+      if (m.tpm_limit !== undefined && m.tpm_limit >= 0) {
+        m.tpm_remaining = Math.max(0, m.tpm_limit - (m.tpm_used || 0));
+      }
+      if (m.rpd_limit !== undefined && m.rpd_limit >= 0) {
+        m.rpd_remaining = Math.max(0, m.rpd_limit - (m.rpd_used || 0));
       }
     }
 

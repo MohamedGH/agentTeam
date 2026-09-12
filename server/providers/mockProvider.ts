@@ -45,6 +45,7 @@ export class MockProvider implements IAIProvider {
       provider: 'mock',
       model,
       isRealProviderUsage: true,
+      tokenAccountingType: 'mock',
     };
   }
 

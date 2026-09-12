@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ModelQuotaStatus, AIProviderId, ProviderInfo } from '../types';
 import {
   Gauge,
@@ -17,6 +17,7 @@ import {
   Sparkles,
   Server,
   Layers,
+  AlertTriangle,
 } from 'lucide-react';
 
 interface QuotaDashboardProps {
@@ -57,12 +58,45 @@ export const QuotaDashboard: React.FC<QuotaDashboardProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProviderTab, setSelectedProviderTab] = useState<AIProviderId | 'all'>('all');
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [selectedModel, setSelectedModel] = useState<string | null>(null);
+  const [isSimulatingCooldown, setIsSimulatingCooldown] = useState(false);
+
+  // Live cooldown countdown state
+  const [cooldownRemaining, setCooldownRemaining] = useState<Record<string, number>>({});
 
   // Simulation state
   const [estimatedTokens, setEstimatedTokens] = useState<number>(1500);
   const [selectedBestModel, setSelectedBestModel] = useState<string | null>(null);
   const [simulationResult, setSimulationResult] = useState<any>(null);
+
+  // Sync initial cooloff times
+  useEffect(() => {
+    const initial: Record<string, number> = {};
+    Object.entries(models).forEach(([key, val]) => {
+      if (val.cooloff_until && val.cooloff_until > 0) {
+        initial[key] = val.cooloff_until;
+      }
+    });
+    setCooldownRemaining(initial);
+  }, [models]);
+
+  // Tick down cooldown timer every second
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCooldownRemaining((prev) => {
+        const updated: Record<string, number> = {};
+        let hasActive = false;
+        Object.entries(prev).forEach(([key, remaining]) => {
+          if (remaining > 1) {
+            updated[key] = remaining - 1;
+            hasActive = true;
+          }
+        });
+        return hasActive ? updated : {};
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, []);
 
   const modelList = Object.values(models);
   const filteredModels = modelList.filter((m) => {
@@ -75,7 +109,17 @@ export const QuotaDashboard: React.FC<QuotaDashboardProps> = ({
     if (selectedProviderTab === 'anthropic') return m.model.startsWith('claude-');
     if (selectedProviderTab === 'groq') return m.model.startsWith('llama-') || m.model.startsWith('mixtral-');
     if (selectedProviderTab === 'deepseek') return m.model.startsWith('deepseek-');
-    if (selectedProviderTab === 'custom') return m.model.startsWith('llama3:') || (!m.model.startsWith('gemini-') && !m.model.startsWith('gpt-') && !m.model.startsWith('claude-') && !m.model.startsWith('llama-') && !m.model.startsWith('mixtral-') && !m.model.startsWith('deepseek-'));
+    if (selectedProviderTab === 'custom') {
+      return (
+        m.model.startsWith('llama3:') ||
+        (!m.model.startsWith('gemini-') &&
+          !m.model.startsWith('gpt-') &&
+          !m.model.startsWith('claude-') &&
+          !m.model.startsWith('llama-') &&
+          !m.model.startsWith('mixtral-') &&
+          !m.model.startsWith('deepseek-'))
+      );
+    }
 
     return true;
   });
@@ -88,17 +132,45 @@ export const QuotaDashboard: React.FC<QuotaDashboardProps> = ({
     setTimeout(() => setIsRefreshing(false), 500);
   };
 
+  const handleSimulateCooldown = async (targetModel = 'gemini-3.7-flash') => {
+    setIsSimulatingCooldown(true);
+    try {
+      const res = await fetch('/api/quota/simulate-cooldown', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: targetModel, durationSeconds: 30 }),
+      });
+      if (res.ok) {
+        if (onForceRefresh) {
+          await onForceRefresh();
+        }
+        setCooldownRemaining((prev) => ({ ...prev, [targetModel]: 30 }));
+      }
+    } catch (e) {
+      console.warn('Failed to trigger cooldown simulation:', e);
+    } finally {
+      setIsSimulatingCooldown(false);
+    }
+  };
+
   const handleSimulateSelection = () => {
-    const candidates = filteredModels.length > 0
-      ? filteredModels.map((m) => m.model)
-      : ['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.1-pro-preview', 'gemini-3.1-flash-lite'];
+    const candidates =
+      filteredModels.length > 0
+        ? filteredModels.map((m) => m.model)
+        : ['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.1-pro-preview', 'gemini-3.1-flash-lite'];
 
     // Filter available
     const available = candidates.filter((cand) => {
       const data = models[cand];
       if (!data) return true;
-      if (data.blocked) return false;
-      if (data.rpm_limit && data.rpm_remaining !== undefined && data.rpm_remaining !== null && data.rpm_remaining <= 0) return false;
+      if (data.blocked || (cooldownRemaining[cand] && cooldownRemaining[cand] > 0)) return false;
+      if (
+        data.rpm_limit &&
+        data.rpm_remaining !== undefined &&
+        data.rpm_remaining !== null &&
+        data.rpm_remaining <= 0
+      )
+        return false;
       return true;
     });
 
@@ -132,7 +204,7 @@ export const QuotaDashboard: React.FC<QuotaDashboardProps> = ({
               </span>
             </div>
             <p className="text-xs text-slate-400">
-              Authoritative token tracking across Google Gemini, OpenAI, Anthropic Claude, Groq, DeepSeek & Ollama endpoints.
+              Authoritative token tracking and dynamic cooldown failover across Gemini, OpenAI, Claude, Groq, DeepSeek & Ollama endpoints.
             </p>
           </div>
 
@@ -140,8 +212,8 @@ export const QuotaDashboard: React.FC<QuotaDashboardProps> = ({
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-2 bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800 text-xs">
               <Clock className="w-3.5 h-3.5 text-blue-400" />
-              <span className="text-slate-400">Cache TTL:</span>
-              <span className="font-mono font-semibold text-slate-200">60s window ({activeTtl}s left)</span>
+              <span className="text-slate-400">Cache Window:</span>
+              <span className="font-mono font-semibold text-slate-200">60s TTL ({activeTtl}s remaining)</span>
             </div>
 
             <button
@@ -222,7 +294,17 @@ export const QuotaDashboard: React.FC<QuotaDashboardProps> = ({
             </select>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => handleSimulateCooldown('gemini-3.7-flash')}
+              disabled={isSimulatingCooldown}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 text-xs font-semibold border border-amber-500/30 transition-all cursor-pointer"
+              title="Trigger a simulated 429 cooldown on gemini-3.7-flash to test dynamic failover"
+            >
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+              Simulate 429 Test
+            </button>
+
             <button
               onClick={() => onResetQuota()}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700 transition-all cursor-pointer"
@@ -279,13 +361,20 @@ export const QuotaDashboard: React.FC<QuotaDashboardProps> = ({
         {filteredModels.map((m) => {
           const isPro = m.model.includes('pro') || m.model.includes('70b') || m.model.includes('reasoner');
           const isFlash = m.model.includes('flash') || m.model.includes('mini') || m.model.includes('instant');
+          const liveCooloff = cooldownRemaining[m.model] ?? m.cooloff_until ?? 0;
+          const isBlocked = m.blocked || liveCooloff > 0;
+
+          const rpmPercent =
+            m.rpm_limit && m.rpm_limit > 0 ? Math.min(100, (m.rpm_used / m.rpm_limit) * 100) : 0;
+          const tpmPercent =
+            m.tpm_limit && m.tpm_limit > 0 ? Math.min(100, (m.tpm_used / m.tpm_limit) * 100) : 0;
 
           return (
             <div
               key={m.model}
               id={`model-quota-${m.model}`}
               className={`bg-slate-900/90 rounded-2xl border p-4 transition-all flex flex-col justify-between ${
-                m.blocked
+                isBlocked
                   ? 'border-amber-500/50 ring-1 ring-amber-500/20'
                   : selectedBestModel === m.model
                   ? 'border-blue-500 ring-2 ring-blue-500/30 shadow-lg shadow-blue-500/10'
@@ -297,16 +386,31 @@ export const QuotaDashboard: React.FC<QuotaDashboardProps> = ({
                 <div className="flex items-start justify-between gap-2 mb-3">
                   <div>
                     <div className="flex items-center gap-2">
-                      <Cpu className={`w-4 h-4 ${isPro ? 'text-purple-400' : isFlash ? 'text-blue-400' : 'text-slate-400'}`} />
+                      <Cpu
+                        className={`w-4 h-4 ${
+                          isPro ? 'text-purple-400' : isFlash ? 'text-blue-400' : 'text-slate-400'
+                        }`}
+                      />
                       <h3 className="text-sm font-bold text-slate-100 font-mono truncate">{m.model}</h3>
                     </div>
-                    <span className="text-[10px] text-slate-500 capitalize">Tier: {m.tier}</span>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-[10px] text-slate-500 capitalize">Tier: {m.tier}</span>
+                      {m.isAuthoritative ? (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/30 font-medium">
+                          Authoritative
+                        </span>
+                      ) : (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700 font-medium">
+                          Advisory Reference
+                        </span>
+                      )}
+                    </div>
                   </div>
 
-                  {m.blocked ? (
+                  {isBlocked ? (
                     <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/30 flex items-center gap-1 font-bold animate-pulse">
                       <ShieldAlert className="w-3 h-3" />
-                      429 Cooldown ({m.cooloff_until}s)
+                      429 Cooldown ({liveCooloff}s)
                     </span>
                   ) : (
                     <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1 font-medium">
@@ -321,21 +425,25 @@ export const QuotaDashboard: React.FC<QuotaDashboardProps> = ({
                   {/* RPM */}
                   <div>
                     <div className="flex justify-between text-[11px] mb-1">
-                      <span className="text-slate-400">RPM (Requests/Min):</span>
+                      <span className="text-slate-400">RPM (Req/Min):</span>
                       <span className="text-slate-200 font-semibold">
-                        {m.rpm_used} / {m.rpm_limit !== undefined && m.rpm_limit >= 0 ? m.rpm_limit.toLocaleString() : '∞'}
+                        {m.rpm_used} /{' '}
+                        {m.rpm_limit !== undefined && m.rpm_limit >= 0
+                          ? m.rpm_limit.toLocaleString()
+                          : '∞'}
+                        {m.rpm_remaining !== undefined && m.rpm_remaining !== null && (
+                          <span className="text-[10px] text-slate-400 font-normal ml-1">
+                            ({m.rpm_remaining.toLocaleString()} left)
+                          </span>
+                        )}
                       </span>
                     </div>
                     <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
                       <div
-                        className="h-full bg-blue-500 rounded-full transition-all"
-                        style={{
-                          width: `${
-                            m.rpm_limit && m.rpm_limit > 0
-                              ? Math.min(100, (m.rpm_used / m.rpm_limit) * 100)
-                              : 0
-                          }%`,
-                        }}
+                        className={`h-full rounded-full transition-all ${
+                          rpmPercent > 80 ? 'bg-rose-500' : rpmPercent > 50 ? 'bg-amber-500' : 'bg-blue-500'
+                        }`}
+                        style={{ width: `${rpmPercent}%` }}
                       />
                     </div>
                   </div>
@@ -345,19 +453,23 @@ export const QuotaDashboard: React.FC<QuotaDashboardProps> = ({
                     <div className="flex justify-between text-[11px] mb-1">
                       <span className="text-slate-400">TPM (Tokens/Min):</span>
                       <span className="text-slate-200 font-semibold">
-                        {m.tpm_used.toLocaleString()} / {m.tpm_limit !== undefined && m.tpm_limit >= 0 ? m.tpm_limit.toLocaleString() : '∞'}
+                        {m.tpm_used.toLocaleString()} /{' '}
+                        {m.tpm_limit !== undefined && m.tpm_limit >= 0
+                          ? m.tpm_limit.toLocaleString()
+                          : '∞'}
+                        {m.tpm_remaining !== undefined && m.tpm_remaining !== null && (
+                          <span className="text-[10px] text-slate-400 font-normal ml-1">
+                            ({m.tpm_remaining.toLocaleString()} left)
+                          </span>
+                        )}
                       </span>
                     </div>
                     <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
                       <div
-                        className="h-full bg-indigo-500 rounded-full transition-all"
-                        style={{
-                          width: `${
-                            m.tpm_limit && m.tpm_limit > 0
-                              ? Math.min(100, (m.tpm_used / m.tpm_limit) * 100)
-                              : 0
-                          }%`,
-                        }}
+                        className={`h-full rounded-full transition-all ${
+                          tpmPercent > 80 ? 'bg-rose-500' : tpmPercent > 50 ? 'bg-amber-500' : 'bg-indigo-500'
+                        }`}
+                        style={{ width: `${tpmPercent}%` }}
                       />
                     </div>
                   </div>
@@ -365,9 +477,17 @@ export const QuotaDashboard: React.FC<QuotaDashboardProps> = ({
                   {/* RPD */}
                   <div>
                     <div className="flex justify-between text-[11px] mb-1">
-                      <span className="text-slate-400">RPD (Requests/Day):</span>
+                      <span className="text-slate-400">RPD (Req/Day):</span>
                       <span className="text-slate-200 font-semibold">
-                        {m.rpd_used} / {m.rpd_limit !== undefined && m.rpd_limit >= 0 ? m.rpd_limit.toLocaleString() : 'Unlimited'}
+                        {m.rpd_used} /{' '}
+                        {m.rpd_limit !== undefined && m.rpd_limit >= 0
+                          ? m.rpd_limit.toLocaleString()
+                          : 'Unlimited'}
+                        {m.rpd_remaining !== undefined && m.rpd_remaining !== null && (
+                          <span className="text-[10px] text-slate-400 font-normal ml-1">
+                            ({m.rpd_remaining.toLocaleString()} left)
+                          </span>
+                        )}
                       </span>
                     </div>
                     <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
@@ -388,13 +508,24 @@ export const QuotaDashboard: React.FC<QuotaDashboardProps> = ({
 
               {/* Footer */}
               <div className="flex items-center justify-between text-[11px] text-slate-500 pt-2 border-t border-slate-800/80">
-                <span>429 Errors: <strong className="text-slate-300">{m.errors_429}</strong></span>
-                <button
-                  onClick={() => onResetQuota(m.model)}
-                  className="text-blue-400 hover:text-blue-300 font-medium hover:underline text-[11px] cursor-pointer"
-                >
-                  Reset Model
-                </button>
+                <span>
+                  429 Errors: <strong className="text-slate-300">{m.errors_429}</strong>
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleSimulateCooldown(m.model)}
+                    title="Simulate 429 error on this model"
+                    className="text-amber-400 hover:text-amber-300 font-medium text-[11px] cursor-pointer"
+                  >
+                    Simulate 429
+                  </button>
+                  <button
+                    onClick={() => onResetQuota(m.model)}
+                    className="text-blue-400 hover:text-blue-300 font-medium hover:underline text-[11px] cursor-pointer"
+                  >
+                    Reset
+                  </button>
+                </div>
               </div>
             </div>
           );
@@ -403,4 +534,3 @@ export const QuotaDashboard: React.FC<QuotaDashboardProps> = ({
     </div>
   );
 };
-

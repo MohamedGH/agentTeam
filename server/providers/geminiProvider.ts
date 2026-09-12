@@ -68,6 +68,7 @@ export class GeminiProvider implements IAIProvider {
       provider: 'gemini',
       model,
       isRealProviderUsage: Boolean(usage && (usage.promptTokenCount !== undefined || usage.totalTokenCount !== undefined)),
+      tokenAccountingType: 'real_provider',
     };
   }
 

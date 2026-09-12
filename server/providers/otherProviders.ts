@@ -57,6 +57,7 @@ export class GroqProvider implements IAIProvider {
       provider: 'groq',
       model,
       isRealProviderUsage: Boolean(usage),
+      tokenAccountingType: 'real_provider',
     };
   }
 
@@ -121,6 +122,7 @@ export class DeepSeekProvider implements IAIProvider {
       provider: 'deepseek',
       model,
       isRealProviderUsage: Boolean(usage),
+      tokenAccountingType: 'real_provider',
     };
   }
 
@@ -189,6 +191,7 @@ export class CustomProvider implements IAIProvider {
       provider: 'custom',
       model,
       isRealProviderUsage: Boolean(usage),
+      tokenAccountingType: 'real_provider',
     };
   }
 

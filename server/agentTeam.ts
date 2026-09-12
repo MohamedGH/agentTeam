@@ -75,6 +75,7 @@ Provide your architectural breakdown and delegation plan for the Developer.`;
         completionTokens: phase1Res.completionTokens,
         totalTokens: phase1Res.totalTokens,
         isRealTokenUsage: phase1Res.isRealProviderUsage,
+        tokenAccountingType: phase1Res.tokenAccountingType,
       });
 
       // -------------------------------------------------------------
@@ -128,6 +129,7 @@ Describe how you are patching the code.`;
           completionTokens: devRes.completionTokens,
           totalTokens: devRes.totalTokens,
           isRealTokenUsage: devRes.isRealProviderUsage,
+          tokenAccountingType: devRes.tokenAccountingType,
         });
 
         // -------------------------------------------------------------
@@ -188,6 +190,7 @@ Provide QA evaluation and regression analysis.`;
             completionTokens: testerRes.completionTokens,
             totalTokens: testerRes.totalTokens,
             isRealTokenUsage: testerRes.isRealProviderUsage,
+            tokenAccountingType: testerRes.tokenAccountingType,
           });
         } else {
           lastTesterFeedback = testOutput;
@@ -203,6 +206,7 @@ Provide QA evaluation and regression analysis.`;
             completionTokens: testerRes.completionTokens,
             totalTokens: testerRes.totalTokens,
             isRealTokenUsage: testerRes.isRealProviderUsage,
+            tokenAccountingType: testerRes.tokenAccountingType,
           });
         }
       }
@@ -262,6 +266,7 @@ Provide architecture review, code cleanliness audit, and security assessment.`;
           completionTokens: revRes.completionTokens,
           totalTokens: revRes.totalTokens,
           isRealTokenUsage: revRes.isRealProviderUsage,
+          tokenAccountingType: revRes.tokenAccountingType,
         });
       }
 
@@ -284,6 +289,10 @@ Provide architecture review, code cleanliness audit, and security assessment.`;
       totalCompletionTokens += delivRes.completionTokens;
       if (delivRes.isRealProviderUsage) anyRealUsage = true;
 
+      const primaryAccountingType = anyRealUsage
+        ? (activeProvider === 'mock' ? 'mock' : 'real_provider')
+        : 'fallback_unknown';
+
       const finalReport: FinalReport = {
         implementation: 'PASS',
         tests: testerPassed ? 'PASS' : 'FAIL',
@@ -305,6 +314,7 @@ Provide architecture review, code cleanliness audit, and security assessment.`;
           completionTokens: totalCompletionTokens,
           totalTokens: totalTokens,
           isRealTokenUsage: anyRealUsage,
+          tokenAccountingType: primaryAccountingType,
         },
       };
 
@@ -319,10 +329,8 @@ Provide architecture review, code cleanliness audit, and security assessment.`;
         completionTokens: delivRes.completionTokens,
         totalTokens: delivRes.totalTokens,
         isRealTokenUsage: delivRes.isRealProviderUsage,
+        tokenAccountingType: delivRes.tokenAccountingType,
       });
-
-      // Record quota usage via providerManager
-      providerManager.recordModelUsage(chosenModel, { totalTokenCount: totalTokens });
 
       return {
         taskId,

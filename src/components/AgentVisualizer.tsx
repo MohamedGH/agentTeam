@@ -136,6 +136,7 @@ export const AgentVisualizer: React.FC<AgentVisualizerProps> = ({
           const Icon = agent.icon;
           const isActive = isRunning && activeAgent === agent.role;
           const agentSteps = steps.filter((s) => s.agent === agent.role);
+          const totalAgentTokens = agentSteps.reduce((sum, s) => sum + (s.totalTokens || 0), 0);
           const lastStep = agentSteps[agentSteps.length - 1];
 
           return (
@@ -175,7 +176,7 @@ export const AgentVisualizer: React.FC<AgentVisualizerProps> = ({
                         : 'bg-slate-950 text-slate-500 border-slate-800'
                     }`}
                   >
-                    {isActive ? 'Active' : agentSteps.length > 0 ? 'Participated' : 'Idle'}
+                    {isActive ? 'Active' : agentSteps.length > 0 ? `${agentSteps.length} actions` : 'Idle'}
                   </span>
                 </div>
 
@@ -183,6 +184,14 @@ export const AgentVisualizer: React.FC<AgentVisualizerProps> = ({
                 <p className="text-xs text-slate-400 mb-3 line-clamp-3 leading-relaxed">
                   {agent.description}
                 </p>
+
+                {/* Agent Activity Metrics */}
+                {agentSteps.length > 0 && (
+                  <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 bg-slate-950/60 px-2.5 py-1 rounded-lg border border-slate-800/80 mb-3">
+                    <span>{agentSteps.length} step{agentSteps.length > 1 ? 's' : ''}</span>
+                    <span className="text-blue-400 font-semibold">{totalAgentTokens.toLocaleString()} tokens</span>
+                  </div>
+                )}
               </div>
 
               {/* Tools & Latest Status */}

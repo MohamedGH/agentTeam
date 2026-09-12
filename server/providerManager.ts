@@ -197,15 +197,17 @@ export class ProviderManager {
     const failoverHistory: Array<{ provider: AIProviderId; model: string; error?: string }> = [];
 
     // Construct an ordered failover sequence of providers
-    const providerPriority: AIProviderId[] = [
-      targetProviderId,
-      'gemini',
-      'openai',
-      'anthropic',
-      'groq',
-      'deepseek',
-      'custom',
-    ];
+    const providerPriority: AIProviderId[] = targetProviderId === 'mock'
+      ? ['mock']
+      : [
+          targetProviderId,
+          'gemini',
+          'openai',
+          'anthropic',
+          'groq',
+          'deepseek',
+          'custom',
+        ];
     const uniqueProviders = Array.from(new Set(providerPriority));
 
     for (const provId of uniqueProviders) {
@@ -262,17 +264,16 @@ export class ProviderManager {
       }
     }
 
-    // If all configured providers fail or none are configured, return clean graceful fallback
-    const promptTokens = Math.max(60, Math.ceil(prompt.length / 4));
-    const completionTokens = Math.max(30, Math.ceil(fallbackText.length / 4));
+    // If all configured providers fail or none are configured, return clean graceful fallback with 0/unknown tokens
     return {
       text: fallbackText,
-      promptTokens,
-      completionTokens,
-      totalTokens: promptTokens + completionTokens,
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
       provider: targetProviderId,
       model,
       isRealProviderUsage: false,
+      tokenAccountingType: 'fallback_unknown',
       failoverHistory: failoverHistory.length > 0 ? failoverHistory : undefined,
     };
   }

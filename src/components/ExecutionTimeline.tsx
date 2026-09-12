@@ -37,25 +37,17 @@ const AGENT_META: Record<
 /**
  * Calculates prompt and completion tokens for a step with fallback heuristics
  */
-function getStepTokens(step: AgentStep): { prompt: number; completion: number; total: number } {
-  if (step.promptTokens !== undefined && step.completionTokens !== undefined) {
-    const total = step.totalTokens ?? step.promptTokens + step.completionTokens;
-    return { prompt: step.promptTokens, completion: step.completionTokens, total };
+function getStepTokens(step: AgentStep): { prompt: number; completion: number; total: number; isFallback: boolean } {
+  if (step.tokenAccountingType === 'fallback_unknown' || (!step.isRealTokenUsage && step.totalTokens === 0 && (step.promptTokens === 0 || step.promptTokens === undefined))) {
+    return { prompt: 0, completion: 0, total: 0, isFallback: true };
   }
 
-  // Content-based heuristic estimation if explicit tokens are not attached
-  const thoughtChars = (step.thought || '').length;
-  const outputChars = (step.output || '').length;
-  const toolChars = (step.toolCalls || []).reduce(
-    (acc, tc) => acc + (tc.name.length + JSON.stringify(tc.args).length + (tc.result || '').length),
-    0
-  );
+  if (step.promptTokens !== undefined && step.completionTokens !== undefined) {
+    const total = step.totalTokens ?? step.promptTokens + step.completionTokens;
+    return { prompt: step.promptTokens, completion: step.completionTokens, total, isFallback: false };
+  }
 
-  const estimatedPrompt = Math.max(120, Math.round((thoughtChars * 0.4 + toolChars * 0.5 + 400) / 4));
-  const estimatedComp = Math.max(60, Math.round((outputChars + thoughtChars * 0.6) / 4));
-  const total = estimatedPrompt + estimatedComp;
-
-  return { prompt: estimatedPrompt, completion: estimatedComp, total };
+  return { prompt: 0, completion: 0, total: 0, isFallback: true };
 }
 
 export const ExecutionTimeline: React.FC<ExecutionTimelineProps> = ({ steps, isRunning }) => {
@@ -314,21 +306,36 @@ export const ExecutionTimeline: React.FC<ExecutionTimelineProps> = ({ steps, isR
                       {step.provider}
                     </span>
                   )}
-                  <span
-                    title={
-                      step.isRealTokenUsage
-                        ? `Live from ${step.provider || 'AI'} API: ${stepPrompt} prompt tokens, ${stepComp} completion tokens`
-                        : `Estimated: ${stepPrompt} prompt tokens, ${stepComp} completion tokens`
-                    }
-                    className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-950 text-slate-300 border border-slate-800 flex items-center gap-1 font-medium"
-                  >
-                    <Zap className={`w-2.5 h-2.5 ${step.isRealTokenUsage ? 'text-emerald-400' : 'text-amber-400'}`} />
-                    <span>{step.isRealTokenUsage ? '' : '~'}{stepTotal} tok</span>
-                    <span className="text-slate-500">({stepPrompt}p / {stepComp}c)</span>
-                    {step.isRealTokenUsage && (
-                      <span className="text-[9px] text-emerald-400 font-semibold uppercase">Live</span>
-                    )}
-                  </span>
+                  {getStepTokens(step).isFallback ? (
+                    <span
+                      title="Graceful fallback execution - unmetered"
+                      className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-950 text-slate-400 border border-slate-800 flex items-center gap-1 font-medium"
+                    >
+                      <Zap className="w-2.5 h-2.5 text-slate-500" />
+                      <span>Fallback (Unmetered)</span>
+                    </span>
+                  ) : (
+                    <span
+                      title={
+                        step.tokenAccountingType === 'real_provider'
+                          ? `Live from ${step.provider || 'AI'} API: ${stepPrompt} prompt tokens, ${stepComp} completion tokens`
+                          : step.tokenAccountingType === 'mock'
+                          ? `Mock execution tokens: ${stepPrompt} prompt, ${stepComp} completion`
+                          : `Tokens: ${stepPrompt} prompt, ${stepComp} completion`
+                      }
+                      className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-950 text-slate-300 border border-slate-800 flex items-center gap-1 font-medium"
+                    >
+                      <Zap className={`w-2.5 h-2.5 ${step.tokenAccountingType === 'real_provider' ? 'text-emerald-400' : 'text-blue-400'}`} />
+                      <span>{stepTotal} tok</span>
+                      <span className="text-slate-500">({stepPrompt}p / {stepComp}c)</span>
+                      {step.tokenAccountingType === 'real_provider' && (
+                        <span className="text-[9px] text-emerald-400 font-semibold uppercase">Live</span>
+                      )}
+                      {step.tokenAccountingType === 'mock' && (
+                        <span className="text-[9px] text-blue-400 font-semibold uppercase">Mock</span>
+                      )}
+                    </span>
+                  )}
 
                   {step.status && (
                     <span

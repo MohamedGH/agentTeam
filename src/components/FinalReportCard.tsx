@@ -168,14 +168,24 @@ export const FinalReportCard: React.FC<FinalReportCardProps> = ({ report, onView
           </span>
           <span className="flex items-center gap-1.5">
             <Sparkles className="w-3.5 h-3.5 text-slate-500" />
-            Tokens: <strong className="text-slate-200">{report.metrics.totalTokens ?? report.metrics.estimatedTokens}</strong>
-            {report.metrics.promptTokens !== undefined && (
-              <span className="text-[10px] text-slate-500">
-                ({report.metrics.promptTokens}p / {report.metrics.completionTokens}c)
-              </span>
-            )}
-            {report.metrics.isRealTokenUsage && (
-              <span className="text-[9px] text-emerald-400 font-semibold uppercase">Live</span>
+            Tokens: {' '}
+            {report.metrics.tokenAccountingType === 'fallback_unknown' || (!report.metrics.isRealTokenUsage && report.metrics.totalTokens === 0) ? (
+              <span className="text-slate-400 font-mono text-[11px]">N/A (Unmetered Fallback)</span>
+            ) : (
+              <>
+                <strong className="text-slate-200">{report.metrics.totalTokens ?? report.metrics.estimatedTokens}</strong>
+                {report.metrics.promptTokens !== undefined && (
+                  <span className="text-[10px] text-slate-500">
+                    ({report.metrics.promptTokens}p / {report.metrics.completionTokens}c)
+                  </span>
+                )}
+                {report.metrics.tokenAccountingType === 'real_provider' && (
+                  <span className="text-[9px] text-emerald-400 font-semibold uppercase px-1 rounded bg-emerald-500/10 border border-emerald-500/20">Live API</span>
+                )}
+                {report.metrics.tokenAccountingType === 'mock' && (
+                  <span className="text-[9px] text-blue-400 font-semibold uppercase px-1 rounded bg-blue-500/10 border border-blue-500/20">Mock</span>
+                )}
+              </>
             )}
           </span>
         </div>

@@ -1,5 +1,7 @@
 export type AIProviderId = 'gemini' | 'openai' | 'anthropic' | 'groq' | 'deepseek' | 'custom' | 'mock';
 
+export type TokenAccountingType = 'real_provider' | 'mock' | 'fallback_unknown';
+
 export interface ProviderModelConfig {
   name: string;
   displayName: string;
@@ -17,6 +19,7 @@ export interface GenerationUsageResult {
   provider: AIProviderId;
   model: string;
   isRealProviderUsage: boolean;
+  tokenAccountingType: TokenAccountingType;
   failoverHistory?: Array<{ provider: AIProviderId; model: string; error?: string }>;
 }
 
