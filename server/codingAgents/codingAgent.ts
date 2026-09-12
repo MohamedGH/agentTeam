@@ -30,8 +30,11 @@ export interface ICodingAgent {
   /** Retrieve current session status */
   getSession(sessionId: string): Promise<JulesSession>;
 
-  /** Retrieve activities / execution log for a given session */
-  listActivities(sessionId: string): Promise<JulesActivity[]>;
+  /** Retrieve activities / execution log for a given session, with optional incremental filtering */
+  listActivities(
+    sessionId: string,
+    options?: { lastActivityTime?: string; pageSize?: number }
+  ): Promise<JulesActivity[]>;
 
   /** Send a message/prompt to an ongoing session */
   sendMessage(sessionId: string, message: string): Promise<void>;

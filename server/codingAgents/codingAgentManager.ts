@@ -9,6 +9,11 @@ import {
   JulesSession,
   JulesSource,
 } from './types';
+import {
+  ICodingAgentSessionStore,
+  FileBackedCodingAgentSessionStore,
+  StoredCodingSession,
+} from './sessionStore';
 
 /**
  * CodingAgentManager
@@ -22,10 +27,16 @@ import {
 export class CodingAgentManager {
   private agents: Map<string, ICodingAgent> = new Map();
   private defaultAgentId: string = 'jules';
+  private sessionStore: ICodingAgentSessionStore;
 
-  constructor() {
+  constructor(sessionStore?: ICodingAgentSessionStore) {
+    this.sessionStore = sessionStore || new FileBackedCodingAgentSessionStore();
     this.registerAgent(new JulesAgent());
     this.registerAgent(new MockCodingAgent());
+  }
+
+  public getSessionStore(): ICodingAgentSessionStore {
+    return this.sessionStore;
   }
 
   public registerAgent(agent: ICodingAgent): void {
@@ -46,6 +57,10 @@ export class CodingAgentManager {
     return this.getAgent('jules') as JulesAgent;
   }
 
+  public getMock(): MockCodingAgent {
+    return this.getAgent('mock') as MockCodingAgent;
+  }
+
   public listAgents(): CodingAgentInfo[] {
     return Array.from(this.agents.values()).map((a) => a.getInfo());
   }
@@ -57,15 +72,7 @@ export class CodingAgentManager {
 
   /**
    * Main entry point to execute an autonomous coding task.
-   * 
-   * Example:
-   * await codingAgentManager.execute({
-   *   agent: "jules",
-   *   repository: "MohamedGH/agentTeam",
-   *   branch: "main",
-   *   task: "Fix the DeepSeek provider",
-   *   automationMode: "AUTO_CREATE_PR"
-   * });
+   * By default, delegates to startSession for immediate asynchronous execution.
    */
   public async execute(
     task: CodingAgentTask,
@@ -74,19 +81,40 @@ export class CodingAgentManager {
     const agentId = task.agent || this.defaultAgentId;
     const agent = this.getAgent(agentId);
 
-    console.log(`[CodingAgentManager] Dispatching task to autonomous coding agent "${agentId}":`, {
+    console.log(`[CodingAgentManager] Executing task with agent "${agentId}":`, {
       repository: task.repository,
       branch: task.branch || 'main',
       task: task.task.slice(0, 80),
       automationMode: task.automationMode || 'AUTOMATION_MODE_UNSPECIFIED',
     });
 
-    return agent.executeTask(task, onProgress);
+    const result = await agent.executeTask(task, onProgress);
+
+    // Save session snapshot into sessionStore
+    if (result.sessionId) {
+      await this.sessionStore.saveSession({
+        sessionId: result.sessionId,
+        agentId,
+        repository: task.repository,
+        branch: task.branch || 'main',
+        task: task.task,
+        status: result.status,
+        createdAt: new Date(Date.now() - (result.durationMs || 0)).toISOString(),
+        updatedAt: new Date().toISOString(),
+        prUrl: result.prUrl,
+        gitBranch: result.gitBranch,
+        title: result.title,
+        summary: result.summary,
+        activities: result.activities,
+      }).catch((err) => console.warn('[CodingAgentManager] Store save warning:', err.message));
+    }
+
+    return result;
   }
 
   /**
    * Start an autonomous coding session asynchronously without blocking.
-   * Returns immediately with the newly created session.
+   * Returns immediately with the newly created session and persists it in sessionStore.
    */
   public async startSession(task: CodingAgentTask): Promise<JulesSession> {
     const agentId = task.agent || this.defaultAgentId;
@@ -99,43 +127,190 @@ export class CodingAgentManager {
       automationMode: task.automationMode || 'AUTOMATION_MODE_UNSPECIFIED',
     });
 
-    return agent.startSession(task);
+    const session = await agent.startSession(task);
+
+    // Persist immediately to the durable session store
+    await this.sessionStore.saveSession({
+      sessionId: session.id,
+      agentId,
+      repository: task.repository,
+      branch: task.branch || 'main',
+      task: task.task,
+      status: session.state,
+      createdAt: session.createTime || new Date().toISOString(),
+      updatedAt: session.updateTime || new Date().toISOString(),
+      prUrl: session.prUrl,
+      gitBranch: session.gitBranch,
+      title: session.title || task.title,
+      summary: session.resultSummary,
+    }).catch((err) => console.warn('[CodingAgentManager] Failed to persist session to store:', err.message));
+
+    // Persist initial activities from agent if available
+    try {
+      const initialActs = await agent.listActivities(session.id);
+      if (initialActs && initialActs.length > 0) {
+        await this.sessionStore.saveActivities(session.id, initialActs).catch(() => {});
+      }
+    } catch {}
+
+    return session;
   }
 
   /**
-   * Send a message to an active session
+   * Send an interactive message to an active session.
+   * Guards against sending messages to terminal sessions.
    */
   public async sendMessage(sessionId: string, message: string, agentId?: string): Promise<void> {
-    const resolvedAgentId = agentId || (sessionId.startsWith('mock_sess_') ? 'mock' : this.defaultAgentId);
+    const cleanId = sessionId.replace(/^sessions\//, '');
+    const stored = await this.sessionStore.getSession(cleanId);
+    const resolvedAgentId = agentId || stored?.agentId || (cleanId.startsWith('mock_sess_') ? 'mock' : this.defaultAgentId);
     const agent = this.getAgent(resolvedAgentId);
-    return agent.sendMessage(sessionId, message);
+
+    await agent.sendMessage(cleanId, message);
+
+    try {
+      const updatedActs = await agent.listActivities(cleanId);
+      if (updatedActs && updatedActs.length > 0) {
+        await this.sessionStore.saveActivities(cleanId, updatedActs).catch(() => {});
+      }
+    } catch {
+      // Append fallback user activity in sessionStore
+      const userAct: JulesActivity = {
+        id: `act_${cleanId}_user_${Date.now()}`,
+        originator: 'USER',
+        actionType: 'USER_MESSAGE',
+        description: message,
+        createTime: new Date().toISOString(),
+      };
+      await this.sessionStore.saveActivities(cleanId, [userAct]).catch(() => {});
+    }
   }
 
   /**
    * Approve plan for a session awaiting approval
    */
   public async approvePlan(sessionId: string, agentId?: string): Promise<void> {
-    const resolvedAgentId = agentId || (sessionId.startsWith('mock_sess_') ? 'mock' : this.defaultAgentId);
+    const cleanId = sessionId.replace(/^sessions\//, '');
+    const stored = await this.sessionStore.getSession(cleanId);
+    const resolvedAgentId = agentId || stored?.agentId || (cleanId.startsWith('mock_sess_') ? 'mock' : this.defaultAgentId);
     const agent = this.getAgent(resolvedAgentId);
-    return agent.approvePlan(sessionId);
+
+    await agent.approvePlan(cleanId);
+
+    const approveAct: JulesActivity = {
+      id: `act_${cleanId}_apprv_${Date.now()}`,
+      originator: 'USER',
+      actionType: 'PLAN_APPROVED',
+      planApproved: true,
+      description: 'Plan approved by operator.',
+      createTime: new Date().toISOString(),
+    };
+    await this.sessionStore.saveActivities(cleanId, [approveAct]).catch(() => {});
+
+    // Refresh and update stored session state
+    try {
+      const updated = await agent.getSession(cleanId);
+      await this.sessionStore.updateSession(cleanId, {
+        status: updated.state,
+        prUrl: updated.prUrl,
+        updatedAt: new Date().toISOString(),
+      });
+    } catch {}
   }
 
   /**
-   * Retrieve session status
+   * Retrieve session status on-demand.
+   * 
+   * Durability across server restarts:
+   * If the local agent throws (e.g. process rebooted or network partition),
+   * the persistent sessionStore returns the session record intact.
    */
   public async getSession(sessionId: string, agentId?: string): Promise<JulesSession> {
-    const resolvedAgentId = agentId || (sessionId.startsWith('mock_sess_') ? 'mock' : this.defaultAgentId);
-    const agent = this.getAgent(resolvedAgentId);
-    return agent.getSession(sessionId);
+    const cleanId = sessionId.replace(/^sessions\//, '');
+    const stored = await this.sessionStore.getSession(cleanId);
+    const resolvedAgentId = agentId || stored?.agentId || (cleanId.startsWith('mock_sess_') ? 'mock' : this.defaultAgentId);
+
+    try {
+      const agent = this.getAgent(resolvedAgentId);
+      const liveSession = await agent.getSession(cleanId);
+
+      // Sync latest live status to durable store
+      await this.sessionStore.updateSession(cleanId, {
+        status: liveSession.state,
+        prUrl: liveSession.prUrl,
+        gitBranch: liveSession.gitBranch,
+        summary: liveSession.resultSummary,
+        updatedAt: liveSession.updateTime || new Date().toISOString(),
+      }).catch(() => {});
+
+      return liveSession;
+    } catch (agentErr: any) {
+      // If agent call failed but session was saved in store (e.g. server restart test)
+      if (stored) {
+        console.warn(`[CodingAgentManager] Live agent poll failed for ${cleanId}, serving durable stored session.`);
+        return {
+          name: `sessions/${stored.sessionId}`,
+          id: stored.sessionId,
+          prompt: stored.task,
+          title: stored.title || `Task on ${stored.repository}`,
+          state: stored.status,
+          sourceContext: {
+            source: `sources/github/${stored.repository}`,
+            githubRepoContext: {
+              startingBranch: stored.branch,
+            },
+          },
+          createTime: stored.createdAt,
+          updateTime: stored.updatedAt,
+          gitBranch: stored.gitBranch,
+          prUrl: stored.prUrl,
+          resultSummary: stored.summary,
+        };
+      }
+      throw agentErr;
+    }
   }
 
   /**
-   * Retrieve session activities
+   * Retrieve session activities on-demand.
+   * Supports incremental polling via options.lastActivityTime.
    */
-  public async listActivities(sessionId: string, agentId?: string): Promise<JulesActivity[]> {
-    const resolvedAgentId = agentId || (sessionId.startsWith('mock_sess_') ? 'mock' : this.defaultAgentId);
-    const agent = this.getAgent(resolvedAgentId);
-    return agent.listActivities(sessionId);
+  public async listActivities(
+    sessionId: string,
+    agentId?: string,
+    options?: { lastActivityTime?: string; pageSize?: number }
+  ): Promise<JulesActivity[]> {
+    const cleanId = sessionId.replace(/^sessions\//, '');
+    const stored = await this.sessionStore.getSession(cleanId);
+    const resolvedAgentId = agentId || stored?.agentId || (cleanId.startsWith('mock_sess_') ? 'mock' : this.defaultAgentId);
+
+    try {
+      const agent = this.getAgent(resolvedAgentId);
+      const activities = await agent.listActivities(cleanId, options);
+
+      if (activities.length > 0) {
+        await this.sessionStore.saveActivities(cleanId, activities).catch(() => {});
+        return activities;
+      }
+
+      // If live agent returns empty array (e.g. rebooted process with mock agent), consult durable store
+      const storedActivities = await this.sessionStore.getActivities(cleanId, options?.lastActivityTime);
+      if (storedActivities.length > 0) {
+        return storedActivities;
+      }
+
+      return activities;
+    } catch (err: any) {
+      console.warn(`[CodingAgentManager] Could not fetch live activities for ${cleanId}, using store:`, err.message);
+      return this.sessionStore.getActivities(cleanId, options?.lastActivityTime);
+    }
+  }
+
+  /**
+   * List all stored sessions across agents
+   */
+  public async listStoredSessions(agentId?: string): Promise<StoredCodingSession[]> {
+    return this.sessionStore.listSessions(agentId);
   }
 
   /**
@@ -151,3 +326,4 @@ export class CodingAgentManager {
 }
 
 export const codingAgentManager = new CodingAgentManager();
+

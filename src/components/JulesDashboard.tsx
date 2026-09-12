@@ -623,7 +623,7 @@ export const JulesDashboard: React.FC<JulesDashboardProps> = ({ onNotify }) => {
                     rel="noreferrer noopener"
                     className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow transition-colors shrink-0"
                   >
-                    <span>View PR</span>
+                    <span>Open Pull Request</span>
                     <ExternalLink className="w-3 h-3" />
                   </a>
                 </div>

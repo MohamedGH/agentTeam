@@ -259,26 +259,57 @@ async function startServer() {
         repository,
         branch = 'main',
         task,
+        prompt,
         title,
         automationMode = 'AUTO_CREATE_PR',
         requirePlanApproval = false,
+        waitForCompletion = false,
+        timeoutSeconds,
       } = req.body;
 
-      if (!repository || !task) {
+      const taskPrompt = task || prompt;
+      if (!repository || !taskPrompt) {
         return res.status(400).json({ error: 'Repository and task are required' });
       }
 
-      const result = await codingAgentManager.execute({
+      // If client explicitly requests synchronous waiting (e.g. CLI script), use executeTask
+      if (waitForCompletion && timeoutSeconds && timeoutSeconds > 0) {
+        const result = await codingAgentManager.execute({
+          agent,
+          repository,
+          branch,
+          task: taskPrompt,
+          title,
+          automationMode,
+          requirePlanApproval,
+          timeoutSeconds,
+        });
+        return res.json(result);
+      }
+
+      // Default asynchronous flow: startSession immediately returns sessionId and status
+      const session = await codingAgentManager.startSession({
         agent,
         repository,
         branch,
-        task,
+        task: taskPrompt,
         title,
         automationMode,
         requirePlanApproval,
       });
 
-      res.json(result);
+      res.status(200).json({
+        success: true,
+        sessionId: session.id,
+        status: session.state || 'QUEUED',
+        repository,
+        branch,
+        title: session.title || title,
+        prompt: taskPrompt,
+        prUrl: session.prUrl,
+        gitBranch: session.gitBranch,
+        session,
+      });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -323,6 +354,17 @@ async function startServer() {
         session,
         status: session.state,
       });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // List all stored historical sessions
+  app.get('/api/coding-agents/sessions/history', async (req, res) => {
+    try {
+      const agentId = req.query.agent as string | undefined;
+      const sessions = await codingAgentManager.listStoredSessions(agentId);
+      res.json({ success: true, sessions });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -389,11 +431,16 @@ async function startServer() {
     }
   });
 
-  // 3. Get Jules session activities
+  // 3. Get Jules session activities (supports incremental ?lastActivityTime=...)
   app.get('/api/coding-agents/jules/sessions/:sessionId/activities', async (req, res) => {
     try {
       const { sessionId } = req.params;
-      const activities = await codingAgentManager.listActivities(sessionId, 'jules');
+      const lastActivityTime = req.query.lastActivityTime as string | undefined;
+      const pageSize = req.query.pageSize ? Number(req.query.pageSize) : undefined;
+      const activities = await codingAgentManager.listActivities(sessionId, 'jules', {
+        lastActivityTime,
+        pageSize,
+      });
       res.json({
         success: true,
         sessionId,
@@ -421,7 +468,7 @@ async function startServer() {
         message,
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(400).json({ error: err.message });
     }
   });
 
@@ -436,7 +483,7 @@ async function startServer() {
         status: 'PLAN_APPROVED',
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(400).json({ error: err.message });
     }
   });
 
@@ -455,7 +502,12 @@ async function startServer() {
     try {
       const sessionId = req.params.id;
       const agent = (req.query.agent as string) || 'jules';
-      const activities = await codingAgentManager.listActivities(sessionId, agent);
+      const lastActivityTime = req.query.lastActivityTime as string | undefined;
+      const pageSize = req.query.pageSize ? Number(req.query.pageSize) : undefined;
+      const activities = await codingAgentManager.listActivities(sessionId, agent, {
+        lastActivityTime,
+        pageSize,
+      });
       res.json({ sessionId, activities });
     } catch (err: any) {
       res.status(500).json({ error: err.message });

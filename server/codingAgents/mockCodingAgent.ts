@@ -5,8 +5,17 @@ import {
   CodingAgentTask,
   JulesActivity,
   JulesSession,
+  JulesSessionState,
   JulesSource,
 } from './types';
+
+export interface MockTimelineStep {
+  elapsedSeconds: number;
+  state: JulesSessionState;
+  description?: string;
+  prUrl?: string;
+  actionType?: string;
+}
 
 /**
  * MockCodingAgent
@@ -19,9 +28,79 @@ export class MockCodingAgent implements ICodingAgent {
   public readonly name = 'Hermetic Mock Coding Agent';
   private sessions: Map<string, JulesSession> = new Map();
   private sessionActivities: Map<string, JulesActivity[]> = new Map();
+  private simulatedTimelines: Map<string, MockTimelineStep[]> = new Map();
+  private simulatedElapsedSeconds: Map<string, number> = new Map();
 
   public isConfigured(): boolean {
     return true;
+  }
+
+  /** Allow hermetic test suites to inject pre-existing sessions */
+  public registerSession(session: JulesSession, activities: JulesActivity[] = []): void {
+    const cleanId = session.id.replace(/^sessions\//, '');
+    this.sessions.set(cleanId, session);
+    this.sessionActivities.set(cleanId, activities);
+  }
+
+  /** Configure timeline steps for test simulation */
+  public setSimulatedTimeline(sessionId: string, timeline: MockTimelineStep[]): void {
+    const cleanId = sessionId.replace(/^sessions\//, '');
+    this.simulatedTimelines.set(
+      cleanId,
+      [...timeline].sort((a, b) => a.elapsedSeconds - b.elapsedSeconds)
+    );
+    if (!this.simulatedElapsedSeconds.has(cleanId)) {
+      this.simulatedElapsedSeconds.set(cleanId, 0);
+    }
+  }
+
+  /** Advance virtual time for testing asynchronous transitions */
+  public advanceSimulatedTime(sessionId: string, seconds: number): JulesSessionState {
+    const cleanId = sessionId.replace(/^sessions\//, '');
+    const current = this.simulatedElapsedSeconds.get(cleanId) || 0;
+    return this.setSimulatedElapsedSeconds(cleanId, current + seconds);
+  }
+
+  /** Set exact virtual elapsed seconds for a session */
+  public setSimulatedElapsedSeconds(sessionId: string, elapsedSeconds: number): JulesSessionState {
+    const cleanId = sessionId.replace(/^sessions\//, '');
+    this.simulatedElapsedSeconds.set(cleanId, elapsedSeconds);
+
+    const session = this.sessions.get(cleanId);
+    const timeline = this.simulatedTimelines.get(cleanId);
+
+    if (session && timeline && timeline.length > 0) {
+      let matchedStep = timeline[0];
+      for (const step of timeline) {
+        if (step.elapsedSeconds <= elapsedSeconds) {
+          matchedStep = step;
+        }
+      }
+
+      session.state = matchedStep.state;
+      if (matchedStep.prUrl) {
+        session.prUrl = matchedStep.prUrl;
+      }
+      if (matchedStep.description) {
+        session.resultSummary = matchedStep.description;
+        const activities = this.sessionActivities.get(cleanId) || [];
+        const actId = `act_${cleanId}_t${matchedStep.elapsedSeconds}`;
+        if (!activities.some((a) => a.id === actId)) {
+          activities.push({
+            id: actId,
+            originator: 'AGENT',
+            actionType: matchedStep.actionType || 'UPDATE',
+            description: matchedStep.description,
+            prUrl: matchedStep.prUrl,
+            createTime: new Date(Date.now() + matchedStep.elapsedSeconds * 1000).toISOString(),
+          });
+          this.sessionActivities.set(cleanId, activities);
+        }
+      }
+      return matchedStep.state;
+    }
+
+    return session ? session.state : 'QUEUED';
   }
 
   public getInfo(): CodingAgentInfo {
@@ -126,7 +205,7 @@ export class MockCodingAgent implements ICodingAgent {
 
   /**
    * Start an asynchronous coding session without blocking.
-   * Immediately returns the initial session in IN_PROGRESS or AWAITING_PLAN_APPROVAL.
+   * Immediately returns the initial session in QUEUED (or AWAITING_PLAN_APPROVAL).
    */
   public async startSession(task: CodingAgentTask): Promise<JulesSession> {
     const sessionId = 'mock_sess_' + Math.random().toString(36).substring(2, 9);
@@ -134,7 +213,16 @@ export class MockCodingAgent implements ICodingAgent {
     const isAutoPr = task.automationMode === 'AUTO_CREATE_PR';
     const requiresApproval = Boolean(task.requirePlanApproval);
 
-    const initialState: any = requiresApproval ? 'AWAITING_PLAN_APPROVAL' : 'IN_PROGRESS';
+    const isFailureTrigger = task.task.includes('TASK_TRIGGER_FAILURE');
+    const failureReason = isFailureTrigger
+      ? task.task.split('TASK_TRIGGER_FAILURE:')[1]?.trim() || 'Simulated task execution failure'
+      : undefined;
+
+    const initialState: any = isFailureTrigger
+      ? 'FAILED'
+      : requiresApproval
+      ? 'AWAITING_PLAN_APPROVAL'
+      : 'QUEUED';
 
     const session: JulesSession = {
       name: `sessions/${sessionId}`,
@@ -154,9 +242,11 @@ export class MockCodingAgent implements ICodingAgent {
       updateTime: new Date().toISOString(),
       gitBranch: `jules/patch-${sessionId.slice(-4)}`,
       prUrl: undefined,
-      resultSummary: requiresApproval
+      resultSummary: isFailureTrigger
+        ? failureReason
+        : requiresApproval
         ? 'Formulated execution plan. Awaiting human plan approval.'
-        : 'Autonomous coding session running in cloud environment.',
+        : 'Session queued and ready for autonomous cloud execution.',
     };
 
     const activities: JulesActivity[] = [
@@ -164,7 +254,7 @@ export class MockCodingAgent implements ICodingAgent {
         id: `act_${sessionId}_1`,
         originator: 'AGENT',
         actionType: 'PLANNING',
-        description: `Analyzed repository ${task.repository} on branch ${branch} and formulated multi-step patch plan.`,
+        description: `Session initialized on ${task.repository} (branch: ${branch}).`,
         createTime: new Date().toISOString(),
       },
     ];
@@ -175,14 +265,6 @@ export class MockCodingAgent implements ICodingAgent {
         originator: 'SYSTEM',
         actionType: 'PLAN_APPROVAL_REQUIRED',
         description: 'Session is paused awaiting plan approval from operator.',
-        createTime: new Date().toISOString(),
-      });
-    } else {
-      activities.push({
-        id: `act_${sessionId}_2`,
-        originator: 'AGENT',
-        actionType: 'CODE_MODIFICATION',
-        description: `Applying changes for: "${task.task}".`,
         createTime: new Date().toISOString(),
       });
     }
@@ -203,8 +285,16 @@ export class MockCodingAgent implements ICodingAgent {
       throw new Error(`Mock session not found: ${cleanId}`);
     }
 
+    if (session.state === 'COMPLETED' || session.state === 'FAILED' || session.state === 'CANCELLED') {
+      throw new Error(`Cannot send message to session in terminal state ${session.state}: session ${cleanId} is finished.`);
+    }
+
     const activities = this.sessionActivities.get(cleanId) || [];
-    const timestamp = new Date().toISOString();
+    let timestamp = new Date().toISOString();
+    const lastAct = activities[activities.length - 1];
+    if (lastAct?.createTime && new Date(lastAct.createTime).getTime() >= Date.now()) {
+      timestamp = new Date(new Date(lastAct.createTime).getTime() + 10).toISOString();
+    }
 
     activities.push({
       id: `act_${cleanId}_user_${Date.now()}`,
@@ -219,7 +309,7 @@ export class MockCodingAgent implements ICodingAgent {
       originator: 'AGENT',
       actionType: 'AGENT_REPLY',
       description: `Acknowledged instruction: "${message.slice(0, 80)}". Updating execution context.`,
-      createTime: timestamp,
+      createTime: new Date(new Date(timestamp).getTime() + 5).toISOString(),
     });
 
     this.sessionActivities.set(cleanId, activities);
@@ -234,6 +324,10 @@ export class MockCodingAgent implements ICodingAgent {
     const session = this.sessions.get(cleanId);
     if (!session) {
       throw new Error(`Mock session not found: ${cleanId}`);
+    }
+
+    if (session.state === 'COMPLETED' || session.state === 'FAILED' || session.state === 'CANCELLED') {
+      throw new Error(`Cannot approve plan for session in terminal state ${session.state}: session ${cleanId} is finished.`);
     }
 
     const activities = this.sessionActivities.get(cleanId) || [];
@@ -271,12 +365,32 @@ export class MockCodingAgent implements ICodingAgent {
     if (!session) {
       throw new Error(`Mock session not found: ${cleanId}`);
     }
+
+    // If a timeline is registered, sync session state with virtual elapsed time
+    if (this.simulatedTimelines.has(cleanId)) {
+      const elapsed = this.simulatedElapsedSeconds.get(cleanId) || 0;
+      this.setSimulatedElapsedSeconds(cleanId, elapsed);
+    }
+
     return session;
   }
 
-  public async listActivities(sessionId: string): Promise<JulesActivity[]> {
+  public async listActivities(
+    sessionId: string,
+    options?: { lastActivityTime?: string; pageSize?: number }
+  ): Promise<JulesActivity[]> {
     const cleanId = sessionId.replace(/^sessions\//, '');
-    return this.sessionActivities.get(cleanId) || [];
+    const activities = this.sessionActivities.get(cleanId) || [];
+
+    if (options?.lastActivityTime) {
+      const since = new Date(options.lastActivityTime).getTime();
+      return activities.filter((a) => {
+        if (!a.createTime) return true;
+        return new Date(a.createTime).getTime() > since;
+      });
+    }
+
+    return activities;
   }
 
   public async executeTask(

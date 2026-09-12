@@ -34,15 +34,16 @@ export class JulesAgent implements ICodingAgent {
 
   constructor(options: JulesAgentOptions = {}) {
     this.baseUrl = options.baseUrl || 'https://jules.googleapis.com/v1alpha';
-    this.defaultTimeoutMs = options.defaultTimeoutMs || 60000;
+    this.apiKey = options.apiKey?.trim() || null;
+    this.defaultTimeoutMs = options.defaultTimeoutMs || 30000;
   }
 
   /**
-   * Lazily resolve API key from process.env.JULES_API_KEY.
-   * Never hardcodes keys and avoids throwing on import when key is missing.
+   * Lazily resolve API key from options or process.env.JULES_API_KEY.
+   * Never hardcodes keys and ensures key stays strictly server-side.
    */
   private getApiKey(): string | null {
-    return process.env.JULES_API_KEY?.trim() || null;
+    return this.apiKey || process.env.JULES_API_KEY?.trim() || null;
   }
 
   public isConfigured(): boolean {
@@ -259,15 +260,28 @@ export class JulesAgent implements ICodingAgent {
 
   /**
    * List activities for a session via GET /v1alpha/sessions/{id}/activities
+   *
+   * Incremental Activities Support:
+   * Google's Jules v1alpha REST API provides the activity stream for a session.
+   * If `options.lastActivityTime` is provided, we filter for activities created strictly after that ISO timestamp,
+   * avoiding re-transmitting duplicate historic events to callers.
    */
-  public async listActivities(sessionId: string): Promise<JulesActivity[]> {
+  public async listActivities(
+    sessionId: string,
+    options?: { lastActivityTime?: string; pageSize?: number }
+  ): Promise<JulesActivity[]> {
     const cleanId = sessionId.replace(/^sessions\//, '');
     try {
-      const res = await this.fetchJules<{ activities?: any[] }>(`/sessions/${cleanId}/activities`);
+      let endpoint = `/sessions/${cleanId}/activities`;
+      if (options?.pageSize) {
+        endpoint += `?pageSize=${encodeURIComponent(options.pageSize)}`;
+      }
+
+      const res = await this.fetchJules<{ activities?: any[] }>(endpoint);
       if (!res.activities || !Array.isArray(res.activities)) {
         return [];
       }
-      return res.activities.map((act) => ({
+      const mapped = res.activities.map((act) => ({
         name: act.name,
         id: act.id || act.name?.split('/').pop(),
         originator: act.originator || 'AGENT',
@@ -279,6 +293,16 @@ export class JulesAgent implements ICodingAgent {
         gitBranch: act.gitBranch,
         actionType: act.actionType,
       }));
+
+      if (options?.lastActivityTime) {
+        const since = new Date(options.lastActivityTime).getTime();
+        return mapped.filter((a) => {
+          if (!a.createTime) return true;
+          return new Date(a.createTime).getTime() > since;
+        });
+      }
+
+      return mapped;
     } catch (err: any) {
       console.warn(`[JulesAgent] Failed to fetch activities for session ${cleanId}:`, err.message);
       return [];
@@ -287,17 +311,23 @@ export class JulesAgent implements ICodingAgent {
 
   /**
    * Start an asynchronous coding session without blocking the caller.
-   * Returns immediately with the newly created JulesSession resource.
+   * Returns immediately with the newly created JulesSession resource (e.g. state: QUEUED).
    */
   public async startSession(task: CodingAgentTask): Promise<JulesSession> {
     return this.createSession(task);
   }
 
   /**
-   * Send a message to an active Jules session
+   * Send a message to an active Jules session.
+   * Guards against sending messages to sessions that have already reached terminal state.
    */
   public async sendMessage(sessionId: string, message: string): Promise<void> {
     const cleanId = sessionId.replace(/^sessions\//, '');
+    const session = await this.getSession(cleanId).catch(() => null);
+    if (session && (session.state === 'COMPLETED' || session.state === 'FAILED' || session.state === 'CANCELLED')) {
+      throw new Error(`Cannot send message: Jules session ${cleanId} is in terminal state (${session.state}).`);
+    }
+
     await this.fetchJules<any>(`/sessions/${cleanId}:sendMessage`, {
       method: 'POST',
       body: { prompt: message, message },
@@ -305,10 +335,16 @@ export class JulesAgent implements ICodingAgent {
   }
 
   /**
-   * Approve plan for sessions that require plan approval
+   * Approve plan for sessions that require plan approval.
+   * Guards against approving plans for sessions that have already completed or failed.
    */
   public async approvePlan(sessionId: string): Promise<void> {
     const cleanId = sessionId.replace(/^sessions\//, '');
+    const session = await this.getSession(cleanId).catch(() => null);
+    if (session && (session.state === 'COMPLETED' || session.state === 'FAILED' || session.state === 'CANCELLED')) {
+      throw new Error(`Cannot approve plan: Jules session ${cleanId} is in terminal state (${session.state}).`);
+    }
+
     await this.fetchJules<any>(`/sessions/${cleanId}:approvePlan`, {
       method: 'POST',
       body: {},
@@ -317,7 +353,12 @@ export class JulesAgent implements ICodingAgent {
 
   /**
    * Execute task against Google Jules with asynchronous, non-blocking tolerance.
-   * Remote sessions taking longer than the local wait window are NOT marked as failed.
+   *
+   * ARCHITECTURAL DIRECTIVE:
+   * HTTP timeout ≠ Jules session lifetime.
+   * If task.timeoutSeconds is not specified or 0, this returns immediately (non-blocking).
+   * If a wait window is provided, it monitors progress up to that window.
+   * CRITICAL: Remote cloud sessions taking longer than the local wait window are NEVER marked as failed.
    */
   public async executeTask(
     task: CodingAgentTask,
@@ -360,8 +401,8 @@ export class JulesAgent implements ICodingAgent {
       let activities: JulesActivity[] = [];
       const seenActivityIds = new Set<string>();
 
-      // Immediate return if non-blocking mode (timeoutSeconds === 0)
-      if (task.timeoutSeconds === 0) {
+      // Immediate return if non-blocking mode (timeoutSeconds === 0 or undefined)
+      if (!task.timeoutSeconds || task.timeoutSeconds <= 0) {
         return {
           agentId: this.id,
           sessionId,
@@ -380,11 +421,9 @@ export class JulesAgent implements ICodingAgent {
       }
 
       const pollIntervalMs = Math.max(1000, (task.pollIntervalSeconds || 3) * 1000);
-      // Wait window (default 120s if not specified).
-      // IMPORTANT: If this window expires, we do NOT consider the session failed!
-      const waitWindowMs = (task.timeoutSeconds !== undefined ? task.timeoutSeconds : 120) * 1000;
+      const waitWindowMs = task.timeoutSeconds * 1000;
 
-      // 2. Poll while active and within wait window
+      // 2. Poll while active and within requested wait window
       while (
         currentStatus !== 'COMPLETED' &&
         currentStatus !== 'FAILED' &&
@@ -424,7 +463,7 @@ export class JulesAgent implements ICodingAgent {
         }
       }
 
-      // CRITICAL: A session still running in Google Jules cloud is NOT a failure.
+      // CRITICAL: A session still running in Google Jules cloud is NEVER marked as failed.
       const isStillRunning = currentStatus !== 'COMPLETED' && currentStatus !== 'FAILED';
 
       const summary =
@@ -432,7 +471,7 @@ export class JulesAgent implements ICodingAgent {
         (currentStatus === 'COMPLETED'
           ? `Google Jules autonomously completed task on ${task.repository} (${branch}).${session.prUrl ? ` Pull Request created: ${session.prUrl}` : ''}`
           : isStillRunning
-          ? `Google Jules session is active and executing in the cloud (State: ${currentStatus}). Session ID: ${sessionId}. You can monitor progress, inspect activities, or approve plans asynchronously.`
+          ? `Google Jules session is active and executing in the cloud (State: ${currentStatus}). Session ID: ${sessionId}. Execution continues beyond local HTTP wait window (${task.timeoutSeconds}s). Session remains active and can be monitored asynchronously via getSession.`
           : `Google Jules session status: ${currentStatus}`);
 
       return {

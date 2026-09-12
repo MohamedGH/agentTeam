@@ -1,0 +1,1766 @@
+[
+  {
+    "sessionId": "mock_sess_xx7k33z",
+    "agentId": "mock",
+    "repository": "MohamedGH/agentTeam",
+    "branch": "main",
+    "task": "Fix the DeepSeek provider",
+    "status": "COMPLETED",
+    "createdAt": "2026-09-12T07:58:19.752Z",
+    "updatedAt": "2026-09-12T07:58:19.754Z",
+    "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+    "gitBranch": "jules/patch-k33z",
+    "title": "Task on MohamedGH/agentTeam",
+    "summary": "Autonomous patch verified. Created branch jules/patch-k33z and PR https://github.com/MohamedGH/agentTeam/pull/42.",
+    "activities": [
+      {
+        "id": "act_mock_sess_xx7k33z_1",
+        "originator": "AGENT",
+        "actionType": "PLANNING",
+        "description": "Analyzed repository MohamedGH/agentTeam and formulated execution plan.",
+        "createTime": "2026-09-12T07:58:19.753Z"
+      },
+      {
+        "id": "act_mock_sess_xx7k33z_2",
+        "originator": "AGENT",
+        "actionType": "CODE_MODIFICATION",
+        "description": "Applied required changes to resolve: \"Fix the DeepSeek provider\".",
+        "createTime": "2026-09-12T07:58:19.753Z"
+      },
+      {
+        "id": "act_mock_sess_xx7k33z_3",
+        "originator": "AGENT",
+        "actionType": "TEST_RUN",
+        "description": "Ran repository automated test suite: 100% tests passing.",
+        "createTime": "2026-09-12T07:58:19.753Z"
+      },
+      {
+        "id": "act_mock_sess_xx7k33z_4",
+        "originator": "AGENT",
+        "actionType": "CREATE_PR",
+        "description": "Created Pull Request: https://github.com/MohamedGH/agentTeam/pull/42",
+        "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+        "createTime": "2026-09-12T07:58:19.753Z"
+      }
+    ],
+    "lastActivityAt": "2026-09-12T07:58:19.754Z"
+  },
+  {
+    "sessionId": "mock_sess_1gzvm33",
+    "agentId": "mock",
+    "repository": "MohamedGH/agentTeam",
+    "branch": "main",
+    "task": "Refactor rate limiter and add unit tests",
+    "status": "COMPLETED",
+    "createdAt": "2026-09-12T07:58:19.754Z",
+    "updatedAt": "2026-09-12T07:58:19.756Z",
+    "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+    "gitBranch": "jules/patch-vm33",
+    "title": "Task on MohamedGH/agentTeam",
+    "summary": "Plan approved and executed. Pull request created: https://github.com/MohamedGH/agentTeam/pull/42",
+    "activities": [
+      {
+        "id": "act_mock_sess_1gzvm33_1",
+        "originator": "AGENT",
+        "actionType": "PLANNING",
+        "description": "Session initialized on MohamedGH/agentTeam (branch: main).",
+        "createTime": "2026-09-12T07:58:19.754Z"
+      },
+      {
+        "id": "act_mock_sess_1gzvm33_plan_req",
+        "originator": "SYSTEM",
+        "actionType": "PLAN_APPROVAL_REQUIRED",
+        "description": "Session is paused awaiting plan approval from operator.",
+        "createTime": "2026-09-12T07:58:19.754Z"
+      },
+      {
+        "id": "act_mock_sess_1gzvm33_user_1789199899755",
+        "originator": "USER",
+        "actionType": "USER_MESSAGE",
+        "description": "Please make sure to handle 429 Retry-After headers in the rate limiter",
+        "createTime": "2026-09-12T07:58:19.755Z"
+      },
+      {
+        "id": "act_mock_sess_1gzvm33_agent_reply_1789199899755",
+        "originator": "AGENT",
+        "actionType": "AGENT_REPLY",
+        "description": "Acknowledged instruction: \"Please make sure to handle 429 Retry-After headers in the rate limiter\". Updating execution context.",
+        "createTime": "2026-09-12T07:58:19.755Z"
+      },
+      {
+        "id": "act_mock_sess_1gzvm33_apprv_1789199899755",
+        "originator": "USER",
+        "actionType": "PLAN_APPROVED",
+        "planApproved": true,
+        "description": "Plan approved by operator.",
+        "createTime": "2026-09-12T07:58:19.755Z"
+      }
+    ],
+    "lastActivityAt": "2026-09-12T07:58:19.756Z"
+  },
+  {
+    "sessionId": "mock_sess_2w6yu8h",
+    "agentId": "mock",
+    "repository": "MohamedGH/agentTeam",
+    "branch": "main",
+    "task": "Fix the DeepSeek provider and implement token streaming",
+    "status": "COMPLETED",
+    "createdAt": "2026-09-12T07:58:19.763Z",
+    "updatedAt": "2026-09-12T07:58:19.763Z",
+    "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+    "gitBranch": "jules/patch-yu8h",
+    "title": "agentTeam: Fix the DeepSeek provider and implement token stre",
+    "summary": "Autonomous patch verified. Created branch jules/patch-yu8h and PR https://github.com/MohamedGH/agentTeam/pull/42.",
+    "activities": [
+      {
+        "id": "act_mock_sess_2w6yu8h_1",
+        "originator": "AGENT",
+        "actionType": "PLANNING",
+        "description": "Analyzed repository MohamedGH/agentTeam and formulated execution plan.",
+        "createTime": "2026-09-12T07:58:19.763Z"
+      },
+      {
+        "id": "act_mock_sess_2w6yu8h_2",
+        "originator": "AGENT",
+        "actionType": "CODE_MODIFICATION",
+        "description": "Applied required changes to resolve: \"Fix the DeepSeek provider and implement token streaming\".",
+        "createTime": "2026-09-12T07:58:19.763Z"
+      },
+      {
+        "id": "act_mock_sess_2w6yu8h_3",
+        "originator": "AGENT",
+        "actionType": "TEST_RUN",
+        "description": "Ran repository automated test suite: 100% tests passing.",
+        "createTime": "2026-09-12T07:58:19.763Z"
+      },
+      {
+        "id": "act_mock_sess_2w6yu8h_4",
+        "originator": "AGENT",
+        "actionType": "CREATE_PR",
+        "description": "Created Pull Request: https://github.com/MohamedGH/agentTeam/pull/42",
+        "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+        "createTime": "2026-09-12T07:58:19.763Z"
+      }
+    ]
+  },
+  {
+    "sessionId": "mock_sess_njtvlph",
+    "agentId": "mock",
+    "repository": "MohamedGH/agentTeam",
+    "branch": "main",
+    "task": "Enhance rate limiting and add retry with jitter",
+    "status": "COMPLETED",
+    "createdAt": "2026-09-12T07:58:19.765Z",
+    "updatedAt": "2026-09-12T07:58:19.765Z",
+    "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+    "gitBranch": "jules/patch-vlph",
+    "title": "agentTeam: Enhance rate limiting and add retry with jitter",
+    "summary": "Autonomous patch verified. Created branch jules/patch-vlph and PR https://github.com/MohamedGH/agentTeam/pull/42.",
+    "activities": [
+      {
+        "id": "act_mock_sess_njtvlph_1",
+        "originator": "AGENT",
+        "actionType": "PLANNING",
+        "description": "Analyzed repository MohamedGH/agentTeam and formulated execution plan.",
+        "createTime": "2026-09-12T07:58:19.765Z"
+      },
+      {
+        "id": "act_mock_sess_njtvlph_2",
+        "originator": "AGENT",
+        "actionType": "CODE_MODIFICATION",
+        "description": "Applied required changes to resolve: \"Enhance rate limiting and add retry with jitter\".",
+        "createTime": "2026-09-12T07:58:19.765Z"
+      },
+      {
+        "id": "act_mock_sess_njtvlph_3",
+        "originator": "AGENT",
+        "actionType": "TEST_RUN",
+        "description": "Ran repository automated test suite: 100% tests passing.",
+        "createTime": "2026-09-12T07:58:19.765Z"
+      },
+      {
+        "id": "act_mock_sess_njtvlph_4",
+        "originator": "AGENT",
+        "actionType": "CREATE_PR",
+        "description": "Created Pull Request: https://github.com/MohamedGH/agentTeam/pull/42",
+        "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+        "createTime": "2026-09-12T07:58:19.765Z"
+      }
+    ]
+  },
+  {
+    "sessionId": "mock_sess_0xbgfsq",
+    "agentId": "mock",
+    "repository": "MohamedGH/agentTeam",
+    "branch": "main",
+    "task": "Upgrade error telemetry and implement exponential backoff in providers",
+    "status": "COMPLETED",
+    "createdAt": "2026-09-12T07:58:19.767Z",
+    "updatedAt": "2026-09-12T07:58:19.768Z",
+    "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+    "gitBranch": "jules/patch-gfsq",
+    "title": "Provider Telemetry & Backoff",
+    "summary": "Plan approved and executed. Pull request created: https://github.com/MohamedGH/agentTeam/pull/42",
+    "activities": [
+      {
+        "id": "act_mock_sess_0xbgfsq_1",
+        "originator": "AGENT",
+        "actionType": "PLANNING",
+        "description": "Session initialized on MohamedGH/agentTeam (branch: main).",
+        "createTime": "2026-09-12T07:58:19.767Z"
+      },
+      {
+        "id": "act_mock_sess_0xbgfsq_plan_req",
+        "originator": "SYSTEM",
+        "actionType": "PLAN_APPROVAL_REQUIRED",
+        "description": "Session is paused awaiting plan approval from operator.",
+        "createTime": "2026-09-12T07:58:19.767Z"
+      },
+      {
+        "id": "act_mock_sess_0xbgfsq_user_1789199899768",
+        "originator": "USER",
+        "actionType": "USER_MESSAGE",
+        "description": "Ensure backoff includes ±20% randomized jitter to prevent thundering herd",
+        "createTime": "2026-09-12T07:58:19.768Z"
+      },
+      {
+        "id": "act_mock_sess_0xbgfsq_agent_reply_1789199899768",
+        "originator": "AGENT",
+        "actionType": "AGENT_REPLY",
+        "description": "Acknowledged instruction: \"Ensure backoff includes ±20% randomized jitter to prevent thundering herd\". Updating execution context.",
+        "createTime": "2026-09-12T07:58:19.768Z"
+      },
+      {
+        "id": "act_mock_sess_0xbgfsq_apprv_1789199899768",
+        "originator": "USER",
+        "actionType": "PLAN_APPROVED",
+        "planApproved": true,
+        "description": "Plan approved by operator.",
+        "createTime": "2026-09-12T07:58:19.768Z"
+      },
+      {
+        "id": "act_mock_sess_0xbgfsq_approved_1789199899768",
+        "originator": "USER",
+        "actionType": "PLAN_APPROVED",
+        "planApproved": true,
+        "description": "Plan approved by user. Jules resuming execution.",
+        "createTime": "2026-09-12T07:58:19.768Z"
+      },
+      {
+        "id": "act_mock_sess_0xbgfsq_pr_1789199899768",
+        "originator": "AGENT",
+        "actionType": "CREATE_PR",
+        "description": "Created Pull Request: https://github.com/MohamedGH/agentTeam/pull/42",
+        "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+        "createTime": "2026-09-12T07:58:19.768Z"
+      }
+    ],
+    "lastActivityAt": "2026-09-12T07:58:19.768Z"
+  },
+  {
+    "sessionId": "mock_sess_b9porgb",
+    "agentId": "mock",
+    "repository": "MohamedGH/agentTeam",
+    "branch": "main",
+    "task": "Long running simulation",
+    "status": "COMPLETED",
+    "createdAt": "2026-09-12T07:58:19.769Z",
+    "updatedAt": "2026-09-12T07:58:19.769Z",
+    "gitBranch": "jules/patch-orgb",
+    "title": "Task on MohamedGH/agentTeam",
+    "summary": "Autonomous patch verified. Created branch jules/patch-orgb.",
+    "activities": [
+      {
+        "id": "act_mock_sess_b9porgb_1",
+        "originator": "AGENT",
+        "actionType": "PLANNING",
+        "description": "Analyzed repository MohamedGH/agentTeam and formulated execution plan.",
+        "createTime": "2026-09-12T07:58:19.769Z"
+      },
+      {
+        "id": "act_mock_sess_b9porgb_2",
+        "originator": "AGENT",
+        "actionType": "CODE_MODIFICATION",
+        "description": "Applied required changes to resolve: \"Long running simulation\".",
+        "createTime": "2026-09-12T07:58:19.769Z"
+      },
+      {
+        "id": "act_mock_sess_b9porgb_3",
+        "originator": "AGENT",
+        "actionType": "TEST_RUN",
+        "description": "Ran repository automated test suite: 100% tests passing.",
+        "createTime": "2026-09-12T07:58:19.769Z"
+      }
+    ]
+  },
+  {
+    "sessionId": "mock_sess_zriofrt",
+    "agentId": "mock",
+    "repository": "MohamedGH/agentTeam",
+    "branch": "main",
+    "task": "Fix the DeepSeek provider",
+    "status": "COMPLETED",
+    "createdAt": "2026-09-12T07:59:02.878Z",
+    "updatedAt": "2026-09-12T07:59:02.880Z",
+    "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+    "gitBranch": "jules/patch-ofrt",
+    "title": "Task on MohamedGH/agentTeam",
+    "summary": "Autonomous patch verified. Created branch jules/patch-ofrt and PR https://github.com/MohamedGH/agentTeam/pull/42.",
+    "activities": [
+      {
+        "id": "act_mock_sess_zriofrt_1",
+        "originator": "AGENT",
+        "actionType": "PLANNING",
+        "description": "Analyzed repository MohamedGH/agentTeam and formulated execution plan.",
+        "createTime": "2026-09-12T07:59:02.878Z"
+      },
+      {
+        "id": "act_mock_sess_zriofrt_2",
+        "originator": "AGENT",
+        "actionType": "CODE_MODIFICATION",
+        "description": "Applied required changes to resolve: \"Fix the DeepSeek provider\".",
+        "createTime": "2026-09-12T07:59:02.878Z"
+      },
+      {
+        "id": "act_mock_sess_zriofrt_3",
+        "originator": "AGENT",
+        "actionType": "TEST_RUN",
+        "description": "Ran repository automated test suite: 100% tests passing.",
+        "createTime": "2026-09-12T07:59:02.878Z"
+      },
+      {
+        "id": "act_mock_sess_zriofrt_4",
+        "originator": "AGENT",
+        "actionType": "CREATE_PR",
+        "description": "Created Pull Request: https://github.com/MohamedGH/agentTeam/pull/42",
+        "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+        "createTime": "2026-09-12T07:59:02.878Z"
+      }
+    ],
+    "lastActivityAt": "2026-09-12T07:59:02.880Z"
+  },
+  {
+    "sessionId": "mock_sess_0gckyb2",
+    "agentId": "mock",
+    "repository": "MohamedGH/agentTeam",
+    "branch": "main",
+    "task": "Refactor rate limiter and add unit tests",
+    "status": "COMPLETED",
+    "createdAt": "2026-09-12T07:59:02.880Z",
+    "updatedAt": "2026-09-12T07:59:02.882Z",
+    "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+    "gitBranch": "jules/patch-kyb2",
+    "title": "Task on MohamedGH/agentTeam",
+    "summary": "Plan approved and executed. Pull request created: https://github.com/MohamedGH/agentTeam/pull/42",
+    "activities": [
+      {
+        "id": "act_mock_sess_0gckyb2_1",
+        "originator": "AGENT",
+        "actionType": "PLANNING",
+        "description": "Session initialized on MohamedGH/agentTeam (branch: main).",
+        "createTime": "2026-09-12T07:59:02.880Z"
+      },
+      {
+        "id": "act_mock_sess_0gckyb2_plan_req",
+        "originator": "SYSTEM",
+        "actionType": "PLAN_APPROVAL_REQUIRED",
+        "description": "Session is paused awaiting plan approval from operator.",
+        "createTime": "2026-09-12T07:59:02.880Z"
+      },
+      {
+        "id": "act_mock_sess_0gckyb2_user_1789199942881",
+        "originator": "USER",
+        "actionType": "USER_MESSAGE",
+        "description": "Please make sure to handle 429 Retry-After headers in the rate limiter",
+        "createTime": "2026-09-12T07:59:02.881Z"
+      },
+      {
+        "id": "act_mock_sess_0gckyb2_agent_reply_1789199942881",
+        "originator": "AGENT",
+        "actionType": "AGENT_REPLY",
+        "description": "Acknowledged instruction: \"Please make sure to handle 429 Retry-After headers in the rate limiter\". Updating execution context.",
+        "createTime": "2026-09-12T07:59:02.881Z"
+      },
+      {
+        "id": "act_mock_sess_0gckyb2_apprv_1789199942882",
+        "originator": "USER",
+        "actionType": "PLAN_APPROVED",
+        "planApproved": true,
+        "description": "Plan approved by operator.",
+        "createTime": "2026-09-12T07:59:02.882Z"
+      }
+    ],
+    "lastActivityAt": "2026-09-12T07:59:02.882Z"
+  },
+  {
+    "sessionId": "mock_sess_er228l1",
+    "agentId": "mock",
+    "repository": "MohamedGH/agentTeam",
+    "branch": "main",
+    "task": "Fix the DeepSeek provider and implement token streaming",
+    "status": "COMPLETED",
+    "createdAt": "2026-09-12T07:59:02.891Z",
+    "updatedAt": "2026-09-12T07:59:02.891Z",
+    "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+    "gitBranch": "jules/patch-28l1",
+    "title": "agentTeam: Fix the DeepSeek provider and implement token stre",
+    "summary": "Autonomous patch verified. Created branch jules/patch-28l1 and PR https://github.com/MohamedGH/agentTeam/pull/42.",
+    "activities": [
+      {
+        "id": "act_mock_sess_er228l1_1",
+        "originator": "AGENT",
+        "actionType": "PLANNING",
+        "description": "Analyzed repository MohamedGH/agentTeam and formulated execution plan.",
+        "createTime": "2026-09-12T07:59:02.891Z"
+      },
+      {
+        "id": "act_mock_sess_er228l1_2",
+        "originator": "AGENT",
+        "actionType": "CODE_MODIFICATION",
+        "description": "Applied required changes to resolve: \"Fix the DeepSeek provider and implement token streaming\".",
+        "createTime": "2026-09-12T07:59:02.891Z"
+      },
+      {
+        "id": "act_mock_sess_er228l1_3",
+        "originator": "AGENT",
+        "actionType": "TEST_RUN",
+        "description": "Ran repository automated test suite: 100% tests passing.",
+        "createTime": "2026-09-12T07:59:02.891Z"
+      },
+      {
+        "id": "act_mock_sess_er228l1_4",
+        "originator": "AGENT",
+        "actionType": "CREATE_PR",
+        "description": "Created Pull Request: https://github.com/MohamedGH/agentTeam/pull/42",
+        "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+        "createTime": "2026-09-12T07:59:02.891Z"
+      }
+    ]
+  },
+  {
+    "sessionId": "mock_sess_amkuv1e",
+    "agentId": "mock",
+    "repository": "MohamedGH/agentTeam",
+    "branch": "main",
+    "task": "Enhance rate limiting and add retry with jitter",
+    "status": "COMPLETED",
+    "createdAt": "2026-09-12T07:59:02.893Z",
+    "updatedAt": "2026-09-12T07:59:02.894Z",
+    "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+    "gitBranch": "jules/patch-uv1e",
+    "title": "agentTeam: Enhance rate limiting and add retry with jitter",
+    "summary": "Autonomous patch verified. Created branch jules/patch-uv1e and PR https://github.com/MohamedGH/agentTeam/pull/42.",
+    "activities": [
+      {
+        "id": "act_mock_sess_amkuv1e_1",
+        "originator": "AGENT",
+        "actionType": "PLANNING",
+        "description": "Analyzed repository MohamedGH/agentTeam and formulated execution plan.",
+        "createTime": "2026-09-12T07:59:02.894Z"
+      },
+      {
+        "id": "act_mock_sess_amkuv1e_2",
+        "originator": "AGENT",
+        "actionType": "CODE_MODIFICATION",
+        "description": "Applied required changes to resolve: \"Enhance rate limiting and add retry with jitter\".",
+        "createTime": "2026-09-12T07:59:02.894Z"
+      },
+      {
+        "id": "act_mock_sess_amkuv1e_3",
+        "originator": "AGENT",
+        "actionType": "TEST_RUN",
+        "description": "Ran repository automated test suite: 100% tests passing.",
+        "createTime": "2026-09-12T07:59:02.894Z"
+      },
+      {
+        "id": "act_mock_sess_amkuv1e_4",
+        "originator": "AGENT",
+        "actionType": "CREATE_PR",
+        "description": "Created Pull Request: https://github.com/MohamedGH/agentTeam/pull/42",
+        "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+        "createTime": "2026-09-12T07:59:02.894Z"
+      }
+    ]
+  },
+  {
+    "sessionId": "mock_sess_7t801yt",
+    "agentId": "mock",
+    "repository": "MohamedGH/agentTeam",
+    "branch": "main",
+    "task": "Upgrade error telemetry and implement exponential backoff in providers",
+    "status": "COMPLETED",
+    "createdAt": "2026-09-12T07:59:02.896Z",
+    "updatedAt": "2026-09-12T07:59:02.900Z",
+    "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+    "gitBranch": "jules/patch-01yt",
+    "title": "Provider Telemetry & Backoff",
+    "summary": "Plan approved and executed. Pull request created: https://github.com/MohamedGH/agentTeam/pull/42",
+    "activities": [
+      {
+        "id": "act_mock_sess_7t801yt_1",
+        "originator": "AGENT",
+        "actionType": "PLANNING",
+        "description": "Session initialized on MohamedGH/agentTeam (branch: main).",
+        "createTime": "2026-09-12T07:59:02.896Z"
+      },
+      {
+        "id": "act_mock_sess_7t801yt_plan_req",
+        "originator": "SYSTEM",
+        "actionType": "PLAN_APPROVAL_REQUIRED",
+        "description": "Session is paused awaiting plan approval from operator.",
+        "createTime": "2026-09-12T07:59:02.896Z"
+      },
+      {
+        "id": "act_mock_sess_7t801yt_user_1789199942898",
+        "originator": "USER",
+        "actionType": "USER_MESSAGE",
+        "description": "Ensure backoff includes ±20% randomized jitter to prevent thundering herd",
+        "createTime": "2026-09-12T07:59:02.898Z"
+      },
+      {
+        "id": "act_mock_sess_7t801yt_agent_reply_1789199942898",
+        "originator": "AGENT",
+        "actionType": "AGENT_REPLY",
+        "description": "Acknowledged instruction: \"Ensure backoff includes ±20% randomized jitter to prevent thundering herd\". Updating execution context.",
+        "createTime": "2026-09-12T07:59:02.898Z"
+      },
+      {
+        "id": "act_mock_sess_7t801yt_apprv_1789199942899",
+        "originator": "USER",
+        "actionType": "PLAN_APPROVED",
+        "planApproved": true,
+        "description": "Plan approved by operator.",
+        "createTime": "2026-09-12T07:59:02.899Z"
+      },
+      {
+        "id": "act_mock_sess_7t801yt_approved_1789199942899",
+        "originator": "USER",
+        "actionType": "PLAN_APPROVED",
+        "planApproved": true,
+        "description": "Plan approved by user. Jules resuming execution.",
+        "createTime": "2026-09-12T07:59:02.899Z"
+      },
+      {
+        "id": "act_mock_sess_7t801yt_pr_1789199942899",
+        "originator": "AGENT",
+        "actionType": "CREATE_PR",
+        "description": "Created Pull Request: https://github.com/MohamedGH/agentTeam/pull/42",
+        "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+        "createTime": "2026-09-12T07:59:02.899Z"
+      }
+    ],
+    "lastActivityAt": "2026-09-12T07:59:02.900Z"
+  },
+  {
+    "sessionId": "mock_sess_o5kw2r8",
+    "agentId": "mock",
+    "repository": "MohamedGH/agentTeam",
+    "branch": "main",
+    "task": "Long running simulation",
+    "status": "COMPLETED",
+    "createdAt": "2026-09-12T07:59:02.901Z",
+    "updatedAt": "2026-09-12T07:59:02.901Z",
+    "gitBranch": "jules/patch-w2r8",
+    "title": "Task on MohamedGH/agentTeam",
+    "summary": "Autonomous patch verified. Created branch jules/patch-w2r8.",
+    "activities": [
+      {
+        "id": "act_mock_sess_o5kw2r8_1",
+        "originator": "AGENT",
+        "actionType": "PLANNING",
+        "description": "Analyzed repository MohamedGH/agentTeam and formulated execution plan.",
+        "createTime": "2026-09-12T07:59:02.901Z"
+      },
+      {
+        "id": "act_mock_sess_o5kw2r8_2",
+        "originator": "AGENT",
+        "actionType": "CODE_MODIFICATION",
+        "description": "Applied required changes to resolve: \"Long running simulation\".",
+        "createTime": "2026-09-12T07:59:02.901Z"
+      },
+      {
+        "id": "act_mock_sess_o5kw2r8_3",
+        "originator": "AGENT",
+        "actionType": "TEST_RUN",
+        "description": "Ran repository automated test suite: 100% tests passing.",
+        "createTime": "2026-09-12T07:59:02.901Z"
+      }
+    ]
+  },
+  {
+    "sessionId": "mock_sess_ddz0qed",
+    "agentId": "mock",
+    "repository": "MohamedGH/agentTeam",
+    "branch": "main",
+    "task": "Fix the DeepSeek provider",
+    "status": "COMPLETED",
+    "createdAt": "2026-09-12T07:59:15.241Z",
+    "updatedAt": "2026-09-12T07:59:15.242Z",
+    "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+    "gitBranch": "jules/patch-0qed",
+    "title": "Task on MohamedGH/agentTeam",
+    "summary": "Autonomous patch verified. Created branch jules/patch-0qed and PR https://github.com/MohamedGH/agentTeam/pull/42.",
+    "activities": [
+      {
+        "id": "act_mock_sess_ddz0qed_1",
+        "originator": "AGENT",
+        "actionType": "PLANNING",
+        "description": "Analyzed repository MohamedGH/agentTeam and formulated execution plan.",
+        "createTime": "2026-09-12T07:59:15.241Z"
+      },
+      {
+        "id": "act_mock_sess_ddz0qed_2",
+        "originator": "AGENT",
+        "actionType": "CODE_MODIFICATION",
+        "description": "Applied required changes to resolve: \"Fix the DeepSeek provider\".",
+        "createTime": "2026-09-12T07:59:15.241Z"
+      },
+      {
+        "id": "act_mock_sess_ddz0qed_3",
+        "originator": "AGENT",
+        "actionType": "TEST_RUN",
+        "description": "Ran repository automated test suite: 100% tests passing.",
+        "createTime": "2026-09-12T07:59:15.241Z"
+      },
+      {
+        "id": "act_mock_sess_ddz0qed_4",
+        "originator": "AGENT",
+        "actionType": "CREATE_PR",
+        "description": "Created Pull Request: https://github.com/MohamedGH/agentTeam/pull/42",
+        "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+        "createTime": "2026-09-12T07:59:15.241Z"
+      }
+    ],
+    "lastActivityAt": "2026-09-12T07:59:15.242Z"
+  },
+  {
+    "sessionId": "mock_sess_47zlt34",
+    "agentId": "mock",
+    "repository": "MohamedGH/agentTeam",
+    "branch": "main",
+    "task": "Refactor rate limiter and add unit tests",
+    "status": "COMPLETED",
+    "createdAt": "2026-09-12T07:59:15.243Z",
+    "updatedAt": "2026-09-12T07:59:15.245Z",
+    "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+    "gitBranch": "jules/patch-lt34",
+    "title": "Task on MohamedGH/agentTeam",
+    "summary": "Plan approved and executed. Pull request created: https://github.com/MohamedGH/agentTeam/pull/42",
+    "activities": [
+      {
+        "id": "act_mock_sess_47zlt34_1",
+        "originator": "AGENT",
+        "actionType": "PLANNING",
+        "description": "Session initialized on MohamedGH/agentTeam (branch: main).",
+        "createTime": "2026-09-12T07:59:15.243Z"
+      },
+      {
+        "id": "act_mock_sess_47zlt34_plan_req",
+        "originator": "SYSTEM",
+        "actionType": "PLAN_APPROVAL_REQUIRED",
+        "description": "Session is paused awaiting plan approval from operator.",
+        "createTime": "2026-09-12T07:59:15.243Z"
+      },
+      {
+        "id": "act_mock_sess_47zlt34_user_1789199955244",
+        "originator": "USER",
+        "actionType": "USER_MESSAGE",
+        "description": "Please make sure to handle 429 Retry-After headers in the rate limiter",
+        "createTime": "2026-09-12T07:59:15.244Z"
+      },
+      {
+        "id": "act_mock_sess_47zlt34_agent_reply_1789199955244",
+        "originator": "AGENT",
+        "actionType": "AGENT_REPLY",
+        "description": "Acknowledged instruction: \"Please make sure to handle 429 Retry-After headers in the rate limiter\". Updating execution context.",
+        "createTime": "2026-09-12T07:59:15.244Z"
+      },
+      {
+        "id": "act_mock_sess_47zlt34_apprv_1789199955244",
+        "originator": "USER",
+        "actionType": "PLAN_APPROVED",
+        "planApproved": true,
+        "description": "Plan approved by operator.",
+        "createTime": "2026-09-12T07:59:15.244Z"
+      }
+    ],
+    "lastActivityAt": "2026-09-12T07:59:15.245Z"
+  },
+  {
+    "sessionId": "mock_sess_htqof11",
+    "agentId": "mock",
+    "repository": "MohamedGH/agentTeam",
+    "branch": "main",
+    "task": "Fix the DeepSeek provider and implement token streaming",
+    "status": "COMPLETED",
+    "createdAt": "2026-09-12T07:59:15.255Z",
+    "updatedAt": "2026-09-12T07:59:15.255Z",
+    "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+    "gitBranch": "jules/patch-of11",
+    "title": "agentTeam: Fix the DeepSeek provider and implement token stre",
+    "summary": "Autonomous patch verified. Created branch jules/patch-of11 and PR https://github.com/MohamedGH/agentTeam/pull/42.",
+    "activities": [
+      {
+        "id": "act_mock_sess_htqof11_1",
+        "originator": "AGENT",
+        "actionType": "PLANNING",
+        "description": "Analyzed repository MohamedGH/agentTeam and formulated execution plan.",
+        "createTime": "2026-09-12T07:59:15.255Z"
+      },
+      {
+        "id": "act_mock_sess_htqof11_2",
+        "originator": "AGENT",
+        "actionType": "CODE_MODIFICATION",
+        "description": "Applied required changes to resolve: \"Fix the DeepSeek provider and implement token streaming\".",
+        "createTime": "2026-09-12T07:59:15.255Z"
+      },
+      {
+        "id": "act_mock_sess_htqof11_3",
+        "originator": "AGENT",
+        "actionType": "TEST_RUN",
+        "description": "Ran repository automated test suite: 100% tests passing.",
+        "createTime": "2026-09-12T07:59:15.255Z"
+      },
+      {
+        "id": "act_mock_sess_htqof11_4",
+        "originator": "AGENT",
+        "actionType": "CREATE_PR",
+        "description": "Created Pull Request: https://github.com/MohamedGH/agentTeam/pull/42",
+        "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+        "createTime": "2026-09-12T07:59:15.255Z"
+      }
+    ]
+  },
+  {
+    "sessionId": "mock_sess_u2rhapc",
+    "agentId": "mock",
+    "repository": "MohamedGH/agentTeam",
+    "branch": "main",
+    "task": "Enhance rate limiting and add retry with jitter",
+    "status": "COMPLETED",
+    "createdAt": "2026-09-12T07:59:15.258Z",
+    "updatedAt": "2026-09-12T07:59:15.258Z",
+    "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+    "gitBranch": "jules/patch-hapc",
+    "title": "agentTeam: Enhance rate limiting and add retry with jitter",
+    "summary": "Autonomous patch verified. Created branch jules/patch-hapc and PR https://github.com/MohamedGH/agentTeam/pull/42.",
+    "activities": [
+      {
+        "id": "act_mock_sess_u2rhapc_1",
+        "originator": "AGENT",
+        "actionType": "PLANNING",
+        "description": "Analyzed repository MohamedGH/agentTeam and formulated execution plan.",
+        "createTime": "2026-09-12T07:59:15.258Z"
+      },
+      {
+        "id": "act_mock_sess_u2rhapc_2",
+        "originator": "AGENT",
+        "actionType": "CODE_MODIFICATION",
+        "description": "Applied required changes to resolve: \"Enhance rate limiting and add retry with jitter\".",
+        "createTime": "2026-09-12T07:59:15.258Z"
+      },
+      {
+        "id": "act_mock_sess_u2rhapc_3",
+        "originator": "AGENT",
+        "actionType": "TEST_RUN",
+        "description": "Ran repository automated test suite: 100% tests passing.",
+        "createTime": "2026-09-12T07:59:15.258Z"
+      },
+      {
+        "id": "act_mock_sess_u2rhapc_4",
+        "originator": "AGENT",
+        "actionType": "CREATE_PR",
+        "description": "Created Pull Request: https://github.com/MohamedGH/agentTeam/pull/42",
+        "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+        "createTime": "2026-09-12T07:59:15.258Z"
+      }
+    ]
+  },
+  {
+    "sessionId": "mock_sess_lerpuj8",
+    "agentId": "mock",
+    "repository": "MohamedGH/agentTeam",
+    "branch": "main",
+    "task": "Upgrade error telemetry and implement exponential backoff in providers",
+    "status": "COMPLETED",
+    "createdAt": "2026-09-12T07:59:15.260Z",
+    "updatedAt": "2026-09-12T07:59:15.265Z",
+    "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+    "gitBranch": "jules/patch-puj8",
+    "title": "Provider Telemetry & Backoff",
+    "summary": "Plan approved and executed. Pull request created: https://github.com/MohamedGH/agentTeam/pull/42",
+    "activities": [
+      {
+        "id": "act_mock_sess_lerpuj8_1",
+        "originator": "AGENT",
+        "actionType": "PLANNING",
+        "description": "Session initialized on MohamedGH/agentTeam (branch: main).",
+        "createTime": "2026-09-12T07:59:15.260Z"
+      },
+      {
+        "id": "act_mock_sess_lerpuj8_plan_req",
+        "originator": "SYSTEM",
+        "actionType": "PLAN_APPROVAL_REQUIRED",
+        "description": "Session is paused awaiting plan approval from operator.",
+        "createTime": "2026-09-12T07:59:15.260Z"
+      },
+      {
+        "id": "act_mock_sess_lerpuj8_user_1789199955261",
+        "originator": "USER",
+        "actionType": "USER_MESSAGE",
+        "description": "Ensure backoff includes ±20% randomized jitter to prevent thundering herd",
+        "createTime": "2026-09-12T07:59:15.261Z"
+      },
+      {
+        "id": "act_mock_sess_lerpuj8_agent_reply_1789199955261",
+        "originator": "AGENT",
+        "actionType": "AGENT_REPLY",
+        "description": "Acknowledged instruction: \"Ensure backoff includes ±20% randomized jitter to prevent thundering herd\". Updating execution context.",
+        "createTime": "2026-09-12T07:59:15.261Z"
+      },
+      {
+        "id": "act_mock_sess_lerpuj8_apprv_1789199955262",
+        "originator": "USER",
+        "actionType": "PLAN_APPROVED",
+        "planApproved": true,
+        "description": "Plan approved by operator.",
+        "createTime": "2026-09-12T07:59:15.262Z"
+      },
+      {
+        "id": "act_mock_sess_lerpuj8_approved_1789199955262",
+        "originator": "USER",
+        "actionType": "PLAN_APPROVED",
+        "planApproved": true,
+        "description": "Plan approved by user. Jules resuming execution.",
+        "createTime": "2026-09-12T07:59:15.262Z"
+      },
+      {
+        "id": "act_mock_sess_lerpuj8_pr_1789199955262",
+        "originator": "AGENT",
+        "actionType": "CREATE_PR",
+        "description": "Created Pull Request: https://github.com/MohamedGH/agentTeam/pull/42",
+        "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+        "createTime": "2026-09-12T07:59:15.262Z"
+      }
+    ],
+    "lastActivityAt": "2026-09-12T07:59:15.265Z"
+  },
+  {
+    "sessionId": "mock_sess_rvg1291",
+    "agentId": "mock",
+    "repository": "MohamedGH/agentTeam",
+    "branch": "main",
+    "task": "Long running simulation",
+    "status": "COMPLETED",
+    "createdAt": "2026-09-12T07:59:15.266Z",
+    "updatedAt": "2026-09-12T07:59:15.266Z",
+    "gitBranch": "jules/patch-1291",
+    "title": "Task on MohamedGH/agentTeam",
+    "summary": "Autonomous patch verified. Created branch jules/patch-1291.",
+    "activities": [
+      {
+        "id": "act_mock_sess_rvg1291_1",
+        "originator": "AGENT",
+        "actionType": "PLANNING",
+        "description": "Analyzed repository MohamedGH/agentTeam and formulated execution plan.",
+        "createTime": "2026-09-12T07:59:15.266Z"
+      },
+      {
+        "id": "act_mock_sess_rvg1291_2",
+        "originator": "AGENT",
+        "actionType": "CODE_MODIFICATION",
+        "description": "Applied required changes to resolve: \"Long running simulation\".",
+        "createTime": "2026-09-12T07:59:15.266Z"
+      },
+      {
+        "id": "act_mock_sess_rvg1291_3",
+        "originator": "AGENT",
+        "actionType": "TEST_RUN",
+        "description": "Ran repository automated test suite: 100% tests passing.",
+        "createTime": "2026-09-12T07:59:15.266Z"
+      }
+    ]
+  },
+  {
+    "sessionId": "mock_sess_75yi5gd",
+    "agentId": "mock",
+    "repository": "MohamedGH/agentTeam",
+    "branch": "main",
+    "task": "Fix the DeepSeek provider",
+    "status": "COMPLETED",
+    "createdAt": "2026-09-12T07:59:28.528Z",
+    "updatedAt": "2026-09-12T07:59:28.529Z",
+    "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+    "gitBranch": "jules/patch-i5gd",
+    "title": "Task on MohamedGH/agentTeam",
+    "summary": "Autonomous patch verified. Created branch jules/patch-i5gd and PR https://github.com/MohamedGH/agentTeam/pull/42.",
+    "activities": [
+      {
+        "id": "act_mock_sess_75yi5gd_1",
+        "originator": "AGENT",
+        "actionType": "PLANNING",
+        "description": "Analyzed repository MohamedGH/agentTeam and formulated execution plan.",
+        "createTime": "2026-09-12T07:59:28.528Z"
+      },
+      {
+        "id": "act_mock_sess_75yi5gd_2",
+        "originator": "AGENT",
+        "actionType": "CODE_MODIFICATION",
+        "description": "Applied required changes to resolve: \"Fix the DeepSeek provider\".",
+        "createTime": "2026-09-12T07:59:28.528Z"
+      },
+      {
+        "id": "act_mock_sess_75yi5gd_3",
+        "originator": "AGENT",
+        "actionType": "TEST_RUN",
+        "description": "Ran repository automated test suite: 100% tests passing.",
+        "createTime": "2026-09-12T07:59:28.528Z"
+      },
+      {
+        "id": "act_mock_sess_75yi5gd_4",
+        "originator": "AGENT",
+        "actionType": "CREATE_PR",
+        "description": "Created Pull Request: https://github.com/MohamedGH/agentTeam/pull/42",
+        "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+        "createTime": "2026-09-12T07:59:28.528Z"
+      }
+    ],
+    "lastActivityAt": "2026-09-12T07:59:28.529Z"
+  },
+  {
+    "sessionId": "mock_sess_2r4kepo",
+    "agentId": "mock",
+    "repository": "MohamedGH/agentTeam",
+    "branch": "main",
+    "task": "Refactor rate limiter and add unit tests",
+    "status": "COMPLETED",
+    "createdAt": "2026-09-12T07:59:28.530Z",
+    "updatedAt": "2026-09-12T07:59:28.533Z",
+    "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+    "gitBranch": "jules/patch-kepo",
+    "title": "Task on MohamedGH/agentTeam",
+    "summary": "Plan approved and executed. Pull request created: https://github.com/MohamedGH/agentTeam/pull/42",
+    "activities": [
+      {
+        "id": "act_mock_sess_2r4kepo_1",
+        "originator": "AGENT",
+        "actionType": "PLANNING",
+        "description": "Session initialized on MohamedGH/agentTeam (branch: main).",
+        "createTime": "2026-09-12T07:59:28.530Z"
+      },
+      {
+        "id": "act_mock_sess_2r4kepo_plan_req",
+        "originator": "SYSTEM",
+        "actionType": "PLAN_APPROVAL_REQUIRED",
+        "description": "Session is paused awaiting plan approval from operator.",
+        "createTime": "2026-09-12T07:59:28.530Z"
+      },
+      {
+        "id": "act_mock_sess_2r4kepo_user_1789199968531",
+        "originator": "USER",
+        "actionType": "USER_MESSAGE",
+        "description": "Please make sure to handle 429 Retry-After headers in the rate limiter",
+        "createTime": "2026-09-12T07:59:28.531Z"
+      },
+      {
+        "id": "act_mock_sess_2r4kepo_apprv_1789199968532",
+        "originator": "USER",
+        "actionType": "PLAN_APPROVED",
+        "planApproved": true,
+        "description": "Plan approved by operator.",
+        "createTime": "2026-09-12T07:59:28.532Z"
+      },
+      {
+        "id": "act_mock_sess_2r4kepo_agent_reply_1789199968531",
+        "originator": "AGENT",
+        "actionType": "AGENT_REPLY",
+        "description": "Acknowledged instruction: \"Please make sure to handle 429 Retry-After headers in the rate limiter\". Updating execution context.",
+        "createTime": "2026-09-12T07:59:28.536Z"
+      }
+    ],
+    "lastActivityAt": "2026-09-12T07:59:28.533Z"
+  },
+  {
+    "sessionId": "mock_sess_p9lfson",
+    "agentId": "mock",
+    "repository": "MohamedGH/agentTeam",
+    "branch": "main",
+    "task": "Fix the DeepSeek provider and implement token streaming",
+    "status": "COMPLETED",
+    "createdAt": "2026-09-12T07:59:28.540Z",
+    "updatedAt": "2026-09-12T07:59:28.540Z",
+    "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+    "gitBranch": "jules/patch-fson",
+    "title": "agentTeam: Fix the DeepSeek provider and implement token stre",
+    "summary": "Autonomous patch verified. Created branch jules/patch-fson and PR https://github.com/MohamedGH/agentTeam/pull/42.",
+    "activities": [
+      {
+        "id": "act_mock_sess_p9lfson_1",
+        "originator": "AGENT",
+        "actionType": "PLANNING",
+        "description": "Analyzed repository MohamedGH/agentTeam and formulated execution plan.",
+        "createTime": "2026-09-12T07:59:28.540Z"
+      },
+      {
+        "id": "act_mock_sess_p9lfson_2",
+        "originator": "AGENT",
+        "actionType": "CODE_MODIFICATION",
+        "description": "Applied required changes to resolve: \"Fix the DeepSeek provider and implement token streaming\".",
+        "createTime": "2026-09-12T07:59:28.540Z"
+      },
+      {
+        "id": "act_mock_sess_p9lfson_3",
+        "originator": "AGENT",
+        "actionType": "TEST_RUN",
+        "description": "Ran repository automated test suite: 100% tests passing.",
+        "createTime": "2026-09-12T07:59:28.540Z"
+      },
+      {
+        "id": "act_mock_sess_p9lfson_4",
+        "originator": "AGENT",
+        "actionType": "CREATE_PR",
+        "description": "Created Pull Request: https://github.com/MohamedGH/agentTeam/pull/42",
+        "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+        "createTime": "2026-09-12T07:59:28.540Z"
+      }
+    ]
+  },
+  {
+    "sessionId": "mock_sess_f5wzind",
+    "agentId": "mock",
+    "repository": "MohamedGH/agentTeam",
+    "branch": "main",
+    "task": "Enhance rate limiting and add retry with jitter",
+    "status": "COMPLETED",
+    "createdAt": "2026-09-12T07:59:28.543Z",
+    "updatedAt": "2026-09-12T07:59:28.543Z",
+    "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+    "gitBranch": "jules/patch-zind",
+    "title": "agentTeam: Enhance rate limiting and add retry with jitter",
+    "summary": "Autonomous patch verified. Created branch jules/patch-zind and PR https://github.com/MohamedGH/agentTeam/pull/42.",
+    "activities": [
+      {
+        "id": "act_mock_sess_f5wzind_1",
+        "originator": "AGENT",
+        "actionType": "PLANNING",
+        "description": "Analyzed repository MohamedGH/agentTeam and formulated execution plan.",
+        "createTime": "2026-09-12T07:59:28.543Z"
+      },
+      {
+        "id": "act_mock_sess_f5wzind_2",
+        "originator": "AGENT",
+        "actionType": "CODE_MODIFICATION",
+        "description": "Applied required changes to resolve: \"Enhance rate limiting and add retry with jitter\".",
+        "createTime": "2026-09-12T07:59:28.543Z"
+      },
+      {
+        "id": "act_mock_sess_f5wzind_3",
+        "originator": "AGENT",
+        "actionType": "TEST_RUN",
+        "description": "Ran repository automated test suite: 100% tests passing.",
+        "createTime": "2026-09-12T07:59:28.543Z"
+      },
+      {
+        "id": "act_mock_sess_f5wzind_4",
+        "originator": "AGENT",
+        "actionType": "CREATE_PR",
+        "description": "Created Pull Request: https://github.com/MohamedGH/agentTeam/pull/42",
+        "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+        "createTime": "2026-09-12T07:59:28.543Z"
+      }
+    ]
+  },
+  {
+    "sessionId": "mock_sess_cdzqptw",
+    "agentId": "mock",
+    "repository": "MohamedGH/agentTeam",
+    "branch": "main",
+    "task": "Upgrade error telemetry and implement exponential backoff in providers",
+    "status": "COMPLETED",
+    "createdAt": "2026-09-12T07:59:28.545Z",
+    "updatedAt": "2026-09-12T07:59:28.551Z",
+    "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+    "gitBranch": "jules/patch-qptw",
+    "title": "Provider Telemetry & Backoff",
+    "summary": "Plan approved and executed. Pull request created: https://github.com/MohamedGH/agentTeam/pull/42",
+    "activities": [
+      {
+        "id": "act_mock_sess_cdzqptw_1",
+        "originator": "AGENT",
+        "actionType": "PLANNING",
+        "description": "Session initialized on MohamedGH/agentTeam (branch: main).",
+        "createTime": "2026-09-12T07:59:28.546Z"
+      },
+      {
+        "id": "act_mock_sess_cdzqptw_plan_req",
+        "originator": "SYSTEM",
+        "actionType": "PLAN_APPROVAL_REQUIRED",
+        "description": "Session is paused awaiting plan approval from operator.",
+        "createTime": "2026-09-12T07:59:28.546Z"
+      },
+      {
+        "id": "act_mock_sess_cdzqptw_user_1789199968548",
+        "originator": "USER",
+        "actionType": "USER_MESSAGE",
+        "description": "Ensure backoff includes ±20% randomized jitter to prevent thundering herd",
+        "createTime": "2026-09-12T07:59:28.548Z"
+      },
+      {
+        "id": "act_mock_sess_cdzqptw_apprv_1789199968549",
+        "originator": "USER",
+        "actionType": "PLAN_APPROVED",
+        "planApproved": true,
+        "description": "Plan approved by operator.",
+        "createTime": "2026-09-12T07:59:28.549Z"
+      },
+      {
+        "id": "act_mock_sess_cdzqptw_approved_1789199968549",
+        "originator": "USER",
+        "actionType": "PLAN_APPROVED",
+        "planApproved": true,
+        "description": "Plan approved by user. Jules resuming execution.",
+        "createTime": "2026-09-12T07:59:28.549Z"
+      },
+      {
+        "id": "act_mock_sess_cdzqptw_pr_1789199968549",
+        "originator": "AGENT",
+        "actionType": "CREATE_PR",
+        "description": "Created Pull Request: https://github.com/MohamedGH/agentTeam/pull/42",
+        "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+        "createTime": "2026-09-12T07:59:28.549Z"
+      },
+      {
+        "id": "act_mock_sess_cdzqptw_agent_reply_1789199968548",
+        "originator": "AGENT",
+        "actionType": "AGENT_REPLY",
+        "description": "Acknowledged instruction: \"Ensure backoff includes ±20% randomized jitter to prevent thundering herd\". Updating execution context.",
+        "createTime": "2026-09-12T07:59:28.553Z"
+      }
+    ],
+    "lastActivityAt": "2026-09-12T07:59:28.551Z"
+  },
+  {
+    "sessionId": "mock_sess_l0wzcnb",
+    "agentId": "mock",
+    "repository": "MohamedGH/agentTeam",
+    "branch": "main",
+    "task": "Long running simulation",
+    "status": "COMPLETED",
+    "createdAt": "2026-09-12T07:59:28.551Z",
+    "updatedAt": "2026-09-12T07:59:28.551Z",
+    "gitBranch": "jules/patch-zcnb",
+    "title": "Task on MohamedGH/agentTeam",
+    "summary": "Autonomous patch verified. Created branch jules/patch-zcnb.",
+    "activities": [
+      {
+        "id": "act_mock_sess_l0wzcnb_1",
+        "originator": "AGENT",
+        "actionType": "PLANNING",
+        "description": "Analyzed repository MohamedGH/agentTeam and formulated execution plan.",
+        "createTime": "2026-09-12T07:59:28.551Z"
+      },
+      {
+        "id": "act_mock_sess_l0wzcnb_2",
+        "originator": "AGENT",
+        "actionType": "CODE_MODIFICATION",
+        "description": "Applied required changes to resolve: \"Long running simulation\".",
+        "createTime": "2026-09-12T07:59:28.551Z"
+      },
+      {
+        "id": "act_mock_sess_l0wzcnb_3",
+        "originator": "AGENT",
+        "actionType": "TEST_RUN",
+        "description": "Ran repository automated test suite: 100% tests passing.",
+        "createTime": "2026-09-12T07:59:28.551Z"
+      }
+    ]
+  },
+  {
+    "sessionId": "mock_sess_y8m0o88",
+    "agentId": "mock",
+    "repository": "MohamedGH/agentTeam",
+    "branch": "main",
+    "task": "Fix the DeepSeek provider",
+    "status": "COMPLETED",
+    "createdAt": "2026-09-12T07:59:53.037Z",
+    "updatedAt": "2026-09-12T07:59:53.039Z",
+    "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+    "gitBranch": "jules/patch-0o88",
+    "title": "Task on MohamedGH/agentTeam",
+    "summary": "Autonomous patch verified. Created branch jules/patch-0o88 and PR https://github.com/MohamedGH/agentTeam/pull/42.",
+    "activities": [
+      {
+        "id": "act_mock_sess_y8m0o88_1",
+        "originator": "AGENT",
+        "actionType": "PLANNING",
+        "description": "Analyzed repository MohamedGH/agentTeam and formulated execution plan.",
+        "createTime": "2026-09-12T07:59:53.037Z"
+      },
+      {
+        "id": "act_mock_sess_y8m0o88_2",
+        "originator": "AGENT",
+        "actionType": "CODE_MODIFICATION",
+        "description": "Applied required changes to resolve: \"Fix the DeepSeek provider\".",
+        "createTime": "2026-09-12T07:59:53.037Z"
+      },
+      {
+        "id": "act_mock_sess_y8m0o88_3",
+        "originator": "AGENT",
+        "actionType": "TEST_RUN",
+        "description": "Ran repository automated test suite: 100% tests passing.",
+        "createTime": "2026-09-12T07:59:53.037Z"
+      },
+      {
+        "id": "act_mock_sess_y8m0o88_4",
+        "originator": "AGENT",
+        "actionType": "CREATE_PR",
+        "description": "Created Pull Request: https://github.com/MohamedGH/agentTeam/pull/42",
+        "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+        "createTime": "2026-09-12T07:59:53.037Z"
+      }
+    ],
+    "lastActivityAt": "2026-09-12T07:59:53.039Z"
+  },
+  {
+    "sessionId": "mock_sess_hvsq4fy",
+    "agentId": "mock",
+    "repository": "MohamedGH/agentTeam",
+    "branch": "main",
+    "task": "Refactor rate limiter and add unit tests",
+    "status": "COMPLETED",
+    "createdAt": "2026-09-12T07:59:53.040Z",
+    "updatedAt": "2026-09-12T07:59:53.043Z",
+    "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+    "gitBranch": "jules/patch-q4fy",
+    "title": "Task on MohamedGH/agentTeam",
+    "summary": "Plan approved and executed. Pull request created: https://github.com/MohamedGH/agentTeam/pull/42",
+    "activities": [
+      {
+        "id": "act_mock_sess_hvsq4fy_1",
+        "originator": "AGENT",
+        "actionType": "PLANNING",
+        "description": "Session initialized on MohamedGH/agentTeam (branch: main).",
+        "createTime": "2026-09-12T07:59:53.040Z"
+      },
+      {
+        "id": "act_mock_sess_hvsq4fy_plan_req",
+        "originator": "SYSTEM",
+        "actionType": "PLAN_APPROVAL_REQUIRED",
+        "description": "Session is paused awaiting plan approval from operator.",
+        "createTime": "2026-09-12T07:59:53.040Z"
+      },
+      {
+        "id": "act_mock_sess_hvsq4fy_user_1789199993041",
+        "originator": "USER",
+        "actionType": "USER_MESSAGE",
+        "description": "Please make sure to handle 429 Retry-After headers in the rate limiter",
+        "createTime": "2026-09-12T07:59:53.041Z"
+      },
+      {
+        "id": "act_mock_sess_hvsq4fy_apprv_1789199993042",
+        "originator": "USER",
+        "actionType": "PLAN_APPROVED",
+        "planApproved": true,
+        "description": "Plan approved by operator.",
+        "createTime": "2026-09-12T07:59:53.042Z"
+      },
+      {
+        "id": "act_mock_sess_hvsq4fy_agent_reply_1789199993041",
+        "originator": "AGENT",
+        "actionType": "AGENT_REPLY",
+        "description": "Acknowledged instruction: \"Please make sure to handle 429 Retry-After headers in the rate limiter\". Updating execution context.",
+        "createTime": "2026-09-12T07:59:53.046Z"
+      }
+    ],
+    "lastActivityAt": "2026-09-12T07:59:53.043Z"
+  },
+  {
+    "sessionId": "mock_sess_ib8rv3g",
+    "agentId": "mock",
+    "repository": "MohamedGH/agentTeam",
+    "branch": "main",
+    "task": "Fix the DeepSeek provider and implement token streaming",
+    "status": "COMPLETED",
+    "createdAt": "2026-09-12T07:59:53.051Z",
+    "updatedAt": "2026-09-12T07:59:53.052Z",
+    "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+    "gitBranch": "jules/patch-rv3g",
+    "title": "agentTeam: Fix the DeepSeek provider and implement token stre",
+    "summary": "Autonomous patch verified. Created branch jules/patch-rv3g and PR https://github.com/MohamedGH/agentTeam/pull/42.",
+    "activities": [
+      {
+        "id": "act_mock_sess_ib8rv3g_1",
+        "originator": "AGENT",
+        "actionType": "PLANNING",
+        "description": "Analyzed repository MohamedGH/agentTeam and formulated execution plan.",
+        "createTime": "2026-09-12T07:59:53.051Z"
+      },
+      {
+        "id": "act_mock_sess_ib8rv3g_2",
+        "originator": "AGENT",
+        "actionType": "CODE_MODIFICATION",
+        "description": "Applied required changes to resolve: \"Fix the DeepSeek provider and implement token streaming\".",
+        "createTime": "2026-09-12T07:59:53.051Z"
+      },
+      {
+        "id": "act_mock_sess_ib8rv3g_3",
+        "originator": "AGENT",
+        "actionType": "TEST_RUN",
+        "description": "Ran repository automated test suite: 100% tests passing.",
+        "createTime": "2026-09-12T07:59:53.051Z"
+      },
+      {
+        "id": "act_mock_sess_ib8rv3g_4",
+        "originator": "AGENT",
+        "actionType": "CREATE_PR",
+        "description": "Created Pull Request: https://github.com/MohamedGH/agentTeam/pull/42",
+        "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+        "createTime": "2026-09-12T07:59:53.051Z"
+      }
+    ]
+  },
+  {
+    "sessionId": "mock_sess_itfgs14",
+    "agentId": "mock",
+    "repository": "MohamedGH/agentTeam",
+    "branch": "main",
+    "task": "Enhance rate limiting and add retry with jitter",
+    "status": "COMPLETED",
+    "createdAt": "2026-09-12T07:59:53.055Z",
+    "updatedAt": "2026-09-12T07:59:53.055Z",
+    "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+    "gitBranch": "jules/patch-gs14",
+    "title": "agentTeam: Enhance rate limiting and add retry with jitter",
+    "summary": "Autonomous patch verified. Created branch jules/patch-gs14 and PR https://github.com/MohamedGH/agentTeam/pull/42.",
+    "activities": [
+      {
+        "id": "act_mock_sess_itfgs14_1",
+        "originator": "AGENT",
+        "actionType": "PLANNING",
+        "description": "Analyzed repository MohamedGH/agentTeam and formulated execution plan.",
+        "createTime": "2026-09-12T07:59:53.055Z"
+      },
+      {
+        "id": "act_mock_sess_itfgs14_2",
+        "originator": "AGENT",
+        "actionType": "CODE_MODIFICATION",
+        "description": "Applied required changes to resolve: \"Enhance rate limiting and add retry with jitter\".",
+        "createTime": "2026-09-12T07:59:53.055Z"
+      },
+      {
+        "id": "act_mock_sess_itfgs14_3",
+        "originator": "AGENT",
+        "actionType": "TEST_RUN",
+        "description": "Ran repository automated test suite: 100% tests passing.",
+        "createTime": "2026-09-12T07:59:53.055Z"
+      },
+      {
+        "id": "act_mock_sess_itfgs14_4",
+        "originator": "AGENT",
+        "actionType": "CREATE_PR",
+        "description": "Created Pull Request: https://github.com/MohamedGH/agentTeam/pull/42",
+        "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+        "createTime": "2026-09-12T07:59:53.055Z"
+      }
+    ]
+  },
+  {
+    "sessionId": "mock_sess_ool9ahp",
+    "agentId": "mock",
+    "repository": "MohamedGH/agentTeam",
+    "branch": "main",
+    "task": "Upgrade error telemetry and implement exponential backoff in providers",
+    "status": "COMPLETED",
+    "createdAt": "2026-09-12T07:59:53.058Z",
+    "updatedAt": "2026-09-12T07:59:53.065Z",
+    "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+    "gitBranch": "jules/patch-9ahp",
+    "title": "Provider Telemetry & Backoff",
+    "summary": "Plan approved and executed. Pull request created: https://github.com/MohamedGH/agentTeam/pull/42",
+    "activities": [
+      {
+        "id": "act_mock_sess_ool9ahp_1",
+        "originator": "AGENT",
+        "actionType": "PLANNING",
+        "description": "Session initialized on MohamedGH/agentTeam (branch: main).",
+        "createTime": "2026-09-12T07:59:53.058Z"
+      },
+      {
+        "id": "act_mock_sess_ool9ahp_plan_req",
+        "originator": "SYSTEM",
+        "actionType": "PLAN_APPROVAL_REQUIRED",
+        "description": "Session is paused awaiting plan approval from operator.",
+        "createTime": "2026-09-12T07:59:53.058Z"
+      },
+      {
+        "id": "act_mock_sess_ool9ahp_user_1789199993062",
+        "originator": "USER",
+        "actionType": "USER_MESSAGE",
+        "description": "Ensure backoff includes ±20% randomized jitter to prevent thundering herd",
+        "createTime": "2026-09-12T07:59:53.062Z"
+      },
+      {
+        "id": "act_mock_sess_ool9ahp_apprv_1789199993064",
+        "originator": "USER",
+        "actionType": "PLAN_APPROVED",
+        "planApproved": true,
+        "description": "Plan approved by operator.",
+        "createTime": "2026-09-12T07:59:53.064Z"
+      },
+      {
+        "id": "act_mock_sess_ool9ahp_approved_1789199993064",
+        "originator": "USER",
+        "actionType": "PLAN_APPROVED",
+        "planApproved": true,
+        "description": "Plan approved by user. Jules resuming execution.",
+        "createTime": "2026-09-12T07:59:53.064Z"
+      },
+      {
+        "id": "act_mock_sess_ool9ahp_pr_1789199993064",
+        "originator": "AGENT",
+        "actionType": "CREATE_PR",
+        "description": "Created Pull Request: https://github.com/MohamedGH/agentTeam/pull/42",
+        "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+        "createTime": "2026-09-12T07:59:53.064Z"
+      },
+      {
+        "id": "act_mock_sess_ool9ahp_agent_reply_1789199993062",
+        "originator": "AGENT",
+        "actionType": "AGENT_REPLY",
+        "description": "Acknowledged instruction: \"Ensure backoff includes ±20% randomized jitter to prevent thundering herd\". Updating execution context.",
+        "createTime": "2026-09-12T07:59:53.067Z"
+      }
+    ],
+    "lastActivityAt": "2026-09-12T07:59:53.065Z"
+  },
+  {
+    "sessionId": "mock_sess_2w5jt90",
+    "agentId": "mock",
+    "repository": "MohamedGH/agentTeam",
+    "branch": "main",
+    "task": "Long running simulation",
+    "status": "COMPLETED",
+    "createdAt": "2026-09-12T07:59:53.066Z",
+    "updatedAt": "2026-09-12T07:59:53.066Z",
+    "gitBranch": "jules/patch-jt90",
+    "title": "Task on MohamedGH/agentTeam",
+    "summary": "Autonomous patch verified. Created branch jules/patch-jt90.",
+    "activities": [
+      {
+        "id": "act_mock_sess_2w5jt90_1",
+        "originator": "AGENT",
+        "actionType": "PLANNING",
+        "description": "Analyzed repository MohamedGH/agentTeam and formulated execution plan.",
+        "createTime": "2026-09-12T07:59:53.066Z"
+      },
+      {
+        "id": "act_mock_sess_2w5jt90_2",
+        "originator": "AGENT",
+        "actionType": "CODE_MODIFICATION",
+        "description": "Applied required changes to resolve: \"Long running simulation\".",
+        "createTime": "2026-09-12T07:59:53.066Z"
+      },
+      {
+        "id": "act_mock_sess_2w5jt90_3",
+        "originator": "AGENT",
+        "actionType": "TEST_RUN",
+        "description": "Ran repository automated test suite: 100% tests passing.",
+        "createTime": "2026-09-12T07:59:53.066Z"
+      }
+    ]
+  },
+  {
+    "sessionId": "mock_sess_wmfn7kh",
+    "agentId": "mock",
+    "repository": "MohamedGH/agentTeam",
+    "branch": "main",
+    "task": "Fix the DeepSeek provider",
+    "status": "COMPLETED",
+    "createdAt": "2026-09-12T08:00:22.656Z",
+    "updatedAt": "2026-09-12T08:00:22.658Z",
+    "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+    "gitBranch": "jules/patch-n7kh",
+    "title": "Task on MohamedGH/agentTeam",
+    "summary": "Autonomous patch verified. Created branch jules/patch-n7kh and PR https://github.com/MohamedGH/agentTeam/pull/42.",
+    "activities": [
+      {
+        "id": "act_mock_sess_wmfn7kh_1",
+        "originator": "AGENT",
+        "actionType": "PLANNING",
+        "description": "Analyzed repository MohamedGH/agentTeam and formulated execution plan.",
+        "createTime": "2026-09-12T08:00:22.656Z"
+      },
+      {
+        "id": "act_mock_sess_wmfn7kh_2",
+        "originator": "AGENT",
+        "actionType": "CODE_MODIFICATION",
+        "description": "Applied required changes to resolve: \"Fix the DeepSeek provider\".",
+        "createTime": "2026-09-12T08:00:22.656Z"
+      },
+      {
+        "id": "act_mock_sess_wmfn7kh_3",
+        "originator": "AGENT",
+        "actionType": "TEST_RUN",
+        "description": "Ran repository automated test suite: 100% tests passing.",
+        "createTime": "2026-09-12T08:00:22.656Z"
+      },
+      {
+        "id": "act_mock_sess_wmfn7kh_4",
+        "originator": "AGENT",
+        "actionType": "CREATE_PR",
+        "description": "Created Pull Request: https://github.com/MohamedGH/agentTeam/pull/42",
+        "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+        "createTime": "2026-09-12T08:00:22.656Z"
+      }
+    ],
+    "lastActivityAt": "2026-09-12T08:00:22.658Z"
+  },
+  {
+    "sessionId": "mock_sess_hrc3i7w",
+    "agentId": "mock",
+    "repository": "MohamedGH/agentTeam",
+    "branch": "main",
+    "task": "Refactor rate limiter and add unit tests",
+    "status": "COMPLETED",
+    "createdAt": "2026-09-12T08:00:22.658Z",
+    "updatedAt": "2026-09-12T08:00:22.662Z",
+    "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+    "gitBranch": "jules/patch-3i7w",
+    "title": "Task on MohamedGH/agentTeam",
+    "summary": "Plan approved and executed. Pull request created: https://github.com/MohamedGH/agentTeam/pull/42",
+    "activities": [
+      {
+        "id": "act_mock_sess_hrc3i7w_1",
+        "originator": "AGENT",
+        "actionType": "PLANNING",
+        "description": "Session initialized on MohamedGH/agentTeam (branch: main).",
+        "createTime": "2026-09-12T08:00:22.658Z"
+      },
+      {
+        "id": "act_mock_sess_hrc3i7w_plan_req",
+        "originator": "SYSTEM",
+        "actionType": "PLAN_APPROVAL_REQUIRED",
+        "description": "Session is paused awaiting plan approval from operator.",
+        "createTime": "2026-09-12T08:00:22.658Z"
+      },
+      {
+        "id": "act_mock_sess_hrc3i7w_user_1789200022660",
+        "originator": "USER",
+        "actionType": "USER_MESSAGE",
+        "description": "Please make sure to handle 429 Retry-After headers in the rate limiter",
+        "createTime": "2026-09-12T08:00:22.660Z"
+      },
+      {
+        "id": "act_mock_sess_hrc3i7w_apprv_1789200022661",
+        "originator": "USER",
+        "actionType": "PLAN_APPROVED",
+        "planApproved": true,
+        "description": "Plan approved by operator.",
+        "createTime": "2026-09-12T08:00:22.661Z"
+      },
+      {
+        "id": "act_mock_sess_hrc3i7w_agent_reply_1789200022660",
+        "originator": "AGENT",
+        "actionType": "AGENT_REPLY",
+        "description": "Acknowledged instruction: \"Please make sure to handle 429 Retry-After headers in the rate limiter\". Updating execution context.",
+        "createTime": "2026-09-12T08:00:22.665Z"
+      }
+    ],
+    "lastActivityAt": "2026-09-12T08:00:22.662Z"
+  },
+  {
+    "sessionId": "mock_sess_gubwc5n",
+    "agentId": "mock",
+    "repository": "MohamedGH/agentTeam",
+    "branch": "main",
+    "task": "Fix the DeepSeek provider and implement token streaming",
+    "status": "COMPLETED",
+    "createdAt": "2026-09-12T08:00:22.671Z",
+    "updatedAt": "2026-09-12T08:00:22.672Z",
+    "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+    "gitBranch": "jules/patch-wc5n",
+    "title": "agentTeam: Fix the DeepSeek provider and implement token stre",
+    "summary": "Autonomous patch verified. Created branch jules/patch-wc5n and PR https://github.com/MohamedGH/agentTeam/pull/42.",
+    "activities": [
+      {
+        "id": "act_mock_sess_gubwc5n_1",
+        "originator": "AGENT",
+        "actionType": "PLANNING",
+        "description": "Analyzed repository MohamedGH/agentTeam and formulated execution plan.",
+        "createTime": "2026-09-12T08:00:22.671Z"
+      },
+      {
+        "id": "act_mock_sess_gubwc5n_2",
+        "originator": "AGENT",
+        "actionType": "CODE_MODIFICATION",
+        "description": "Applied required changes to resolve: \"Fix the DeepSeek provider and implement token streaming\".",
+        "createTime": "2026-09-12T08:00:22.671Z"
+      },
+      {
+        "id": "act_mock_sess_gubwc5n_3",
+        "originator": "AGENT",
+        "actionType": "TEST_RUN",
+        "description": "Ran repository automated test suite: 100% tests passing.",
+        "createTime": "2026-09-12T08:00:22.671Z"
+      },
+      {
+        "id": "act_mock_sess_gubwc5n_4",
+        "originator": "AGENT",
+        "actionType": "CREATE_PR",
+        "description": "Created Pull Request: https://github.com/MohamedGH/agentTeam/pull/42",
+        "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+        "createTime": "2026-09-12T08:00:22.671Z"
+      }
+    ]
+  },
+  {
+    "sessionId": "mock_sess_wlz23ml",
+    "agentId": "mock",
+    "repository": "MohamedGH/agentTeam",
+    "branch": "main",
+    "task": "Enhance rate limiting and add retry with jitter",
+    "status": "COMPLETED",
+    "createdAt": "2026-09-12T08:00:22.675Z",
+    "updatedAt": "2026-09-12T08:00:22.675Z",
+    "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+    "gitBranch": "jules/patch-23ml",
+    "title": "agentTeam: Enhance rate limiting and add retry with jitter",
+    "summary": "Autonomous patch verified. Created branch jules/patch-23ml and PR https://github.com/MohamedGH/agentTeam/pull/42.",
+    "activities": [
+      {
+        "id": "act_mock_sess_wlz23ml_1",
+        "originator": "AGENT",
+        "actionType": "PLANNING",
+        "description": "Analyzed repository MohamedGH/agentTeam and formulated execution plan.",
+        "createTime": "2026-09-12T08:00:22.675Z"
+      },
+      {
+        "id": "act_mock_sess_wlz23ml_2",
+        "originator": "AGENT",
+        "actionType": "CODE_MODIFICATION",
+        "description": "Applied required changes to resolve: \"Enhance rate limiting and add retry with jitter\".",
+        "createTime": "2026-09-12T08:00:22.675Z"
+      },
+      {
+        "id": "act_mock_sess_wlz23ml_3",
+        "originator": "AGENT",
+        "actionType": "TEST_RUN",
+        "description": "Ran repository automated test suite: 100% tests passing.",
+        "createTime": "2026-09-12T08:00:22.675Z"
+      },
+      {
+        "id": "act_mock_sess_wlz23ml_4",
+        "originator": "AGENT",
+        "actionType": "CREATE_PR",
+        "description": "Created Pull Request: https://github.com/MohamedGH/agentTeam/pull/42",
+        "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+        "createTime": "2026-09-12T08:00:22.675Z"
+      }
+    ]
+  },
+  {
+    "sessionId": "mock_sess_jle5o04",
+    "agentId": "mock",
+    "repository": "MohamedGH/agentTeam",
+    "branch": "main",
+    "task": "Upgrade error telemetry and implement exponential backoff in providers",
+    "status": "COMPLETED",
+    "createdAt": "2026-09-12T08:00:22.678Z",
+    "updatedAt": "2026-09-12T08:00:22.683Z",
+    "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+    "gitBranch": "jules/patch-5o04",
+    "title": "Provider Telemetry & Backoff",
+    "summary": "Plan approved and executed. Pull request created: https://github.com/MohamedGH/agentTeam/pull/42",
+    "activities": [
+      {
+        "id": "act_mock_sess_jle5o04_1",
+        "originator": "AGENT",
+        "actionType": "PLANNING",
+        "description": "Session initialized on MohamedGH/agentTeam (branch: main).",
+        "createTime": "2026-09-12T08:00:22.678Z"
+      },
+      {
+        "id": "act_mock_sess_jle5o04_plan_req",
+        "originator": "SYSTEM",
+        "actionType": "PLAN_APPROVAL_REQUIRED",
+        "description": "Session is paused awaiting plan approval from operator.",
+        "createTime": "2026-09-12T08:00:22.678Z"
+      },
+      {
+        "id": "act_mock_sess_jle5o04_user_1789200022680",
+        "originator": "USER",
+        "actionType": "USER_MESSAGE",
+        "description": "Ensure backoff includes ±20% randomized jitter to prevent thundering herd",
+        "createTime": "2026-09-12T08:00:22.680Z"
+      },
+      {
+        "id": "act_mock_sess_jle5o04_apprv_1789200022681",
+        "originator": "USER",
+        "actionType": "PLAN_APPROVED",
+        "planApproved": true,
+        "description": "Plan approved by operator.",
+        "createTime": "2026-09-12T08:00:22.681Z"
+      },
+      {
+        "id": "act_mock_sess_jle5o04_approved_1789200022681",
+        "originator": "USER",
+        "actionType": "PLAN_APPROVED",
+        "planApproved": true,
+        "description": "Plan approved by user. Jules resuming execution.",
+        "createTime": "2026-09-12T08:00:22.681Z"
+      },
+      {
+        "id": "act_mock_sess_jle5o04_pr_1789200022681",
+        "originator": "AGENT",
+        "actionType": "CREATE_PR",
+        "description": "Created Pull Request: https://github.com/MohamedGH/agentTeam/pull/42",
+        "prUrl": "https://github.com/MohamedGH/agentTeam/pull/42",
+        "createTime": "2026-09-12T08:00:22.681Z"
+      },
+      {
+        "id": "act_mock_sess_jle5o04_agent_reply_1789200022680",
+        "originator": "AGENT",
+        "actionType": "AGENT_REPLY",
+        "description": "Acknowledged instruction: \"Ensure backoff includes ±20% randomized jitter to prevent thundering herd\". Updating execution context.",
+        "createTime": "2026-09-12T08:00:22.685Z"
+      }
+    ],
+    "lastActivityAt": "2026-09-12T08:00:22.683Z"
+  },
+  {
+    "sessionId": "mock_sess_349nv3a",
+    "agentId": "mock",
+    "repository": "MohamedGH/agentTeam",
+    "branch": "main",
+    "task": "Long running simulation",
+    "status": "COMPLETED",
+    "createdAt": "2026-09-12T08:00:22.684Z",
+    "updatedAt": "2026-09-12T08:00:22.684Z",
+    "gitBranch": "jules/patch-nv3a",
+    "title": "Task on MohamedGH/agentTeam",
+    "summary": "Autonomous patch verified. Created branch jules/patch-nv3a.",
+    "activities": [
+      {
+        "id": "act_mock_sess_349nv3a_1",
+        "originator": "AGENT",
+        "actionType": "PLANNING",
+        "description": "Analyzed repository MohamedGH/agentTeam and formulated execution plan.",
+        "createTime": "2026-09-12T08:00:22.684Z"
+      },
+      {
+        "id": "act_mock_sess_349nv3a_2",
+        "originator": "AGENT",
+        "actionType": "CODE_MODIFICATION",
+        "description": "Applied required changes to resolve: \"Long running simulation\".",
+        "createTime": "2026-09-12T08:00:22.684Z"
+      },
+      {
+        "id": "act_mock_sess_349nv3a_3",
+        "originator": "AGENT",
+        "actionType": "TEST_RUN",
+        "description": "Ran repository automated test suite: 100% tests passing.",
+        "createTime": "2026-09-12T08:00:22.684Z"
+      }
+    ]
+  }
+]
