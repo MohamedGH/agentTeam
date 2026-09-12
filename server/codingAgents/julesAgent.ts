@@ -286,13 +286,21 @@ export class JulesAgent implements ICodingAgent {
   }
 
   /**
+   * Start an asynchronous coding session without blocking the caller.
+   * Returns immediately with the newly created JulesSession resource.
+   */
+  public async startSession(task: CodingAgentTask): Promise<JulesSession> {
+    return this.createSession(task);
+  }
+
+  /**
    * Send a message to an active Jules session
    */
   public async sendMessage(sessionId: string, message: string): Promise<void> {
     const cleanId = sessionId.replace(/^sessions\//, '');
     await this.fetchJules<any>(`/sessions/${cleanId}:sendMessage`, {
       method: 'POST',
-      body: { message },
+      body: { prompt: message, message },
     });
   }
 
@@ -308,7 +316,8 @@ export class JulesAgent implements ICodingAgent {
   }
 
   /**
-   * Execute task end-to-end against Google Jules with active polling
+   * Execute task against Google Jules with asynchronous, non-blocking tolerance.
+   * Remote sessions taking longer than the local wait window are NOT marked as failed.
    */
   public async executeTask(
     task: CodingAgentTask,
@@ -343,7 +352,7 @@ export class JulesAgent implements ICodingAgent {
     }
 
     try {
-      // 1. Create Session
+      // 1. Create Session asynchronously
       const session = await this.createSession(task);
       const sessionId = session.id;
 
@@ -351,44 +360,80 @@ export class JulesAgent implements ICodingAgent {
       let activities: JulesActivity[] = [];
       const seenActivityIds = new Set<string>();
 
-      const pollIntervalMs = (task.pollIntervalSeconds || 3) * 1000;
-      const timeoutMs = (task.timeoutSeconds || 120) * 1000;
+      // Immediate return if non-blocking mode (timeoutSeconds === 0)
+      if (task.timeoutSeconds === 0) {
+        return {
+          agentId: this.id,
+          sessionId,
+          status: currentStatus,
+          repository: task.repository,
+          branch,
+          title: task.title,
+          prompt: task.task,
+          prUrl: session.prUrl,
+          gitBranch: session.gitBranch,
+          summary: `Google Jules session started asynchronously (State: ${currentStatus}). Session ID: ${sessionId}`,
+          activities: [],
+          rawSession: session,
+          durationMs: Date.now() - startMs,
+        };
+      }
 
-      // 2. Poll until terminal state (COMPLETED, FAILED, PAUSED) or timeout
+      const pollIntervalMs = Math.max(1000, (task.pollIntervalSeconds || 3) * 1000);
+      // Wait window (default 120s if not specified).
+      // IMPORTANT: If this window expires, we do NOT consider the session failed!
+      const waitWindowMs = (task.timeoutSeconds !== undefined ? task.timeoutSeconds : 120) * 1000;
+
+      // 2. Poll while active and within wait window
       while (
         currentStatus !== 'COMPLETED' &&
         currentStatus !== 'FAILED' &&
         currentStatus !== 'PAUSED' &&
-        Date.now() - startMs < timeoutMs
+        Date.now() - startMs < waitWindowMs
       ) {
         await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
 
-        const updatedSession = await this.getSession(sessionId);
-        currentStatus = updatedSession.state;
+        try {
+          const updatedSession = await this.getSession(sessionId);
+          currentStatus = updatedSession.state;
 
-        // Fetch activities
-        const latestActivities = await this.listActivities(sessionId);
-        for (const act of latestActivities) {
-          const actId = act.id || act.name || act.description;
-          if (actId && !seenActivityIds.has(actId)) {
-            seenActivityIds.add(actId);
-            activities.push(act);
-            if (onProgress) {
-              onProgress(act);
+          if (updatedSession.prUrl) {
+            session.prUrl = updatedSession.prUrl;
+          }
+          if (updatedSession.gitBranch) {
+            session.gitBranch = updatedSession.gitBranch;
+          }
+          if (updatedSession.resultSummary) {
+            session.resultSummary = updatedSession.resultSummary;
+          }
+
+          // Fetch activities
+          const latestActivities = await this.listActivities(sessionId);
+          for (const act of latestActivities) {
+            const actId = act.id || act.name || act.description;
+            if (actId && !seenActivityIds.has(actId)) {
+              seenActivityIds.add(actId);
+              activities.push(act);
+              if (onProgress) {
+                onProgress(act);
+              }
             }
           }
-        }
-
-        if (updatedSession.prUrl) {
-          session.prUrl = updatedSession.prUrl;
-        }
-        if (updatedSession.gitBranch) {
-          session.gitBranch = updatedSession.gitBranch;
-        }
-        if (updatedSession.resultSummary) {
-          session.resultSummary = updatedSession.resultSummary;
+        } catch (pollErr: any) {
+          console.warn(`[JulesAgent] Polling tick error for session ${sessionId}:`, pollErr.message);
         }
       }
+
+      // CRITICAL: A session still running in Google Jules cloud is NOT a failure.
+      const isStillRunning = currentStatus !== 'COMPLETED' && currentStatus !== 'FAILED';
+
+      const summary =
+        session.resultSummary ||
+        (currentStatus === 'COMPLETED'
+          ? `Google Jules autonomously completed task on ${task.repository} (${branch}).${session.prUrl ? ` Pull Request created: ${session.prUrl}` : ''}`
+          : isStillRunning
+          ? `Google Jules session is active and executing in the cloud (State: ${currentStatus}). Session ID: ${sessionId}. You can monitor progress, inspect activities, or approve plans asynchronously.`
+          : `Google Jules session status: ${currentStatus}`);
 
       return {
         agentId: this.id,
@@ -400,11 +445,7 @@ export class JulesAgent implements ICodingAgent {
         prompt: task.task,
         prUrl: session.prUrl,
         gitBranch: session.gitBranch,
-        summary:
-          session.resultSummary ||
-          (currentStatus === 'COMPLETED'
-            ? `Google Jules autonomously completed task on ${task.repository} (${branch}).${session.prUrl ? ` Pull Request created: ${session.prUrl}` : ''}`
-            : `Google Jules session status: ${currentStatus}`),
+        summary,
         activities,
         rawSession: session,
         durationMs: Date.now() - startMs,

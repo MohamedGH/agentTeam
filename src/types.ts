@@ -172,6 +172,35 @@ export interface JulesActivity {
   actionType?: string;
 }
 
+export type JulesSessionState =
+  | 'SESSION_STATE_UNSPECIFIED'
+  | 'QUEUED'
+  | 'PLANNING'
+  | 'AWAITING_PLAN_APPROVAL'
+  | 'IN_PROGRESS'
+  | 'PAUSED'
+  | 'COMPLETED'
+  | 'FAILED'
+  | 'CANCELLED'
+  | string;
+
+export interface JulesSession {
+  name?: string;
+  id: string;
+  prompt?: string;
+  title?: string;
+  state: JulesSessionState;
+  createTime?: string;
+  updateTime?: string;
+  sourceContext?: {
+    source: string;
+    branch?: string;
+  };
+  prUrl?: string;
+  gitBranch?: string;
+  resultSummary?: string;
+}
+
 export interface CodingAgentTask {
   agent?: string;
   repository: string;

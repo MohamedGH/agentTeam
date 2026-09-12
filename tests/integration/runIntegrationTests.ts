@@ -1,6 +1,7 @@
 import { runFailoverIntegrationTests } from './failover.test';
 import { runAgentTeamIntegrationTests } from './agentTeam.test';
 import { runJulesAgentTeamIntegrationTests } from './julesAgentTeam.test';
+import { runJulesAsyncMonitoringIntegrationTests } from './julesAsyncMonitoring.test';
 
 export async function runAllIntegrationTests() {
   console.log('====================================================');
@@ -10,6 +11,7 @@ export async function runAllIntegrationTests() {
   await runFailoverIntegrationTests();
   await runAgentTeamIntegrationTests();
   await runJulesAgentTeamIntegrationTests();
+  await runJulesAsyncMonitoringIntegrationTests();
 
   console.log('\n🎉 ALL INTEGRATION TESTS PASSED (100%)\n');
 }

@@ -284,6 +284,162 @@ async function startServer() {
     }
   });
 
+  // Asynchronous Observable Jules & Coding Agent Endpoints
+
+  // 1. Start new Jules session asynchronously (non-blocking)
+  app.post('/api/coding-agents/jules/sessions', async (req, res) => {
+    try {
+      const {
+        agent = 'jules',
+        repository,
+        branch = 'main',
+        task,
+        prompt,
+        title,
+        automationMode = 'AUTO_CREATE_PR',
+        requirePlanApproval = false,
+      } = req.body;
+
+      const taskPrompt = task || prompt;
+      if (!repository || !taskPrompt) {
+        return res.status(400).json({
+          error: 'Repository and task prompt are required to start a Jules session',
+        });
+      }
+
+      const session = await codingAgentManager.startSession({
+        agent,
+        repository,
+        branch,
+        task: taskPrompt,
+        title,
+        automationMode,
+        requirePlanApproval,
+      });
+
+      res.status(201).json({
+        success: true,
+        sessionId: session.id,
+        session,
+        status: session.state,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Generic start session endpoint alias
+  app.post('/api/coding-agents/sessions', async (req, res) => {
+    try {
+      const {
+        agent = 'jules',
+        repository,
+        branch = 'main',
+        task,
+        prompt,
+        title,
+        automationMode = 'AUTO_CREATE_PR',
+        requirePlanApproval = false,
+      } = req.body;
+
+      const taskPrompt = task || prompt;
+      if (!repository || !taskPrompt) {
+        return res.status(400).json({
+          error: 'Repository and task prompt are required',
+        });
+      }
+
+      const session = await codingAgentManager.startSession({
+        agent,
+        repository,
+        branch,
+        task: taskPrompt,
+        title,
+        automationMode,
+        requirePlanApproval,
+      });
+
+      res.status(201).json({
+        success: true,
+        sessionId: session.id,
+        session,
+        status: session.state,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // 2. Get Jules session status and details
+  app.get('/api/coding-agents/jules/sessions/:sessionId', async (req, res) => {
+    try {
+      const { sessionId } = req.params;
+      const session = await codingAgentManager.getSession(sessionId, 'jules');
+      res.json({
+        success: true,
+        sessionId: session.id,
+        status: session.state,
+        prUrl: session.prUrl,
+        gitBranch: session.gitBranch,
+        summary: session.resultSummary,
+        session,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // 3. Get Jules session activities
+  app.get('/api/coding-agents/jules/sessions/:sessionId/activities', async (req, res) => {
+    try {
+      const { sessionId } = req.params;
+      const activities = await codingAgentManager.listActivities(sessionId, 'jules');
+      res.json({
+        success: true,
+        sessionId,
+        activities,
+        total: activities.length,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // 4. Send interactive message/prompt to Jules session
+  app.post('/api/coding-agents/jules/sessions/:sessionId/message', async (req, res) => {
+    try {
+      const { sessionId } = req.params;
+      const message = req.body?.message || req.body?.prompt;
+      if (!message || typeof message !== 'string') {
+        return res.status(400).json({ error: 'Message content is required' });
+      }
+
+      await codingAgentManager.sendMessage(sessionId, message, 'jules');
+      res.json({
+        success: true,
+        sessionId,
+        message,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // 5. Approve plan for Jules session
+  app.post('/api/coding-agents/jules/sessions/:sessionId/approve-plan', async (req, res) => {
+    try {
+      const { sessionId } = req.params;
+      await codingAgentManager.approvePlan(sessionId, 'jules');
+      res.json({
+        success: true,
+        sessionId,
+        status: 'PLAN_APPROVED',
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.get('/api/coding-agents/session/:id', async (req, res) => {
     try {
       const sessionId = req.params.id;

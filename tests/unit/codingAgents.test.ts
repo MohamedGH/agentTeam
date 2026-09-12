@@ -97,5 +97,51 @@ export async function runCodingAgentsUnitTests() {
   assert.strictEqual(activities.length, mockResult.activities.length);
   console.log('✅ PASS: Session and activity retrieval verified through CodingAgentManager');
 
+  // 7. Asynchronous StartSession (Non-Blocking, Returns in < 100ms)
+  const startTimer = Date.now();
+  const asyncSession = await codingAgentManager.startSession({
+    agent: 'mock',
+    repository: 'MohamedGH/agentTeam',
+    branch: 'main',
+    task: 'Refactor rate limiter and add unit tests',
+    requirePlanApproval: true,
+  });
+  const elapsedMs = Date.now() - startTimer;
+  assert.ok(elapsedMs < 100, `startSession must return immediately without blocking (took ${elapsedMs}ms)`);
+  assert.ok(asyncSession.id, 'Session ID must be defined');
+  assert.strictEqual(asyncSession.state, 'AWAITING_PLAN_APPROVAL', 'Initial state should reflect requirePlanApproval');
+  console.log(`✅ PASS: Asynchronous startSession returns immediately (${elapsedMs}ms) in state ${asyncSession.state}`);
+
+  // 8. In-Session Interactive Messaging (sendMessage)
+  await codingAgentManager.sendMessage(
+    asyncSession.id,
+    'Please make sure to handle 429 Retry-After headers in the rate limiter'
+  );
+  const updatedActivities = await codingAgentManager.listActivities(asyncSession.id);
+  const userAct = updatedActivities.find((a) => a.originator === 'USER');
+  const agentReply = updatedActivities.find((a) => a.actionType === 'AGENT_REPLY');
+  assert.ok(userAct, 'User message activity must be recorded in session stream');
+  assert.ok(agentReply, 'Agent reply activity must be recorded in session stream');
+  console.log('✅ PASS: sendMessage appends user message and agent feedback activity');
+
+  // 9. Plan Approval (approvePlan)
+  await codingAgentManager.approvePlan(asyncSession.id);
+  const approvedSession = await codingAgentManager.getSession(asyncSession.id);
+  assert.strictEqual(approvedSession.state, 'COMPLETED', 'State must transition to COMPLETED upon plan approval');
+  assert.ok(approvedSession.prUrl?.includes('pull/42'), 'PR URL must be generated after plan approval');
+  console.log('✅ PASS: approvePlan transitions session state and generates Pull Request');
+
+  // 10. Long-running sessions (> 120s tolerance) never fail for duration
+  // Verify that an in-progress session whose wait window expires remains in valid state and error is undefined
+  const nonBlockingResult = await mockAgent.executeTask({
+    repository: 'MohamedGH/agentTeam',
+    branch: 'main',
+    task: 'Long running build simulation',
+    timeoutSeconds: 0,
+  });
+  assert.ok(nonBlockingResult.sessionId, 'Non-blocking execution returns valid session');
+  assert.strictEqual(nonBlockingResult.error, undefined, 'Session is not treated as failed');
+  console.log('✅ PASS: Long-running asynchronous sessions are not marked as failed when execution exceeds local window');
+
   console.log('✅ Jules & CodingAgentManager Unit Tests Passed');
 }

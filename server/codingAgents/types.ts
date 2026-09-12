@@ -7,9 +7,12 @@ export type JulesSessionState =
   | 'QUEUED'
   | 'PLANNING'
   | 'IN_PROGRESS'
+  | 'AWAITING_PLAN_APPROVAL'
   | 'PAUSED'
   | 'FAILED'
-  | 'COMPLETED';
+  | 'COMPLETED'
+  | 'CANCELLED'
+  | string;
 
 export type JulesAutomationMode =
   | 'AUTOMATION_MODE_UNSPECIFIED'

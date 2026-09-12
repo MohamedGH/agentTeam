@@ -85,18 +85,56 @@ export class CodingAgentManager {
   }
 
   /**
+   * Start an autonomous coding session asynchronously without blocking.
+   * Returns immediately with the newly created session.
+   */
+  public async startSession(task: CodingAgentTask): Promise<JulesSession> {
+    const agentId = task.agent || this.defaultAgentId;
+    const agent = this.getAgent(agentId);
+
+    console.log(`[CodingAgentManager] Starting async session on agent "${agentId}":`, {
+      repository: task.repository,
+      branch: task.branch || 'main',
+      task: task.task.slice(0, 80),
+      automationMode: task.automationMode || 'AUTOMATION_MODE_UNSPECIFIED',
+    });
+
+    return agent.startSession(task);
+  }
+
+  /**
+   * Send a message to an active session
+   */
+  public async sendMessage(sessionId: string, message: string, agentId?: string): Promise<void> {
+    const resolvedAgentId = agentId || (sessionId.startsWith('mock_sess_') ? 'mock' : this.defaultAgentId);
+    const agent = this.getAgent(resolvedAgentId);
+    return agent.sendMessage(sessionId, message);
+  }
+
+  /**
+   * Approve plan for a session awaiting approval
+   */
+  public async approvePlan(sessionId: string, agentId?: string): Promise<void> {
+    const resolvedAgentId = agentId || (sessionId.startsWith('mock_sess_') ? 'mock' : this.defaultAgentId);
+    const agent = this.getAgent(resolvedAgentId);
+    return agent.approvePlan(sessionId);
+  }
+
+  /**
    * Retrieve session status
    */
-  public async getSession(sessionId: string, agentId = 'jules'): Promise<JulesSession> {
-    const agent = this.getAgent(agentId);
+  public async getSession(sessionId: string, agentId?: string): Promise<JulesSession> {
+    const resolvedAgentId = agentId || (sessionId.startsWith('mock_sess_') ? 'mock' : this.defaultAgentId);
+    const agent = this.getAgent(resolvedAgentId);
     return agent.getSession(sessionId);
   }
 
   /**
    * Retrieve session activities
    */
-  public async listActivities(sessionId: string, agentId = 'jules'): Promise<JulesActivity[]> {
-    const agent = this.getAgent(agentId);
+  public async listActivities(sessionId: string, agentId?: string): Promise<JulesActivity[]> {
+    const resolvedAgentId = agentId || (sessionId.startsWith('mock_sess_') ? 'mock' : this.defaultAgentId);
+    const agent = this.getAgent(resolvedAgentId);
     return agent.listActivities(sessionId);
   }
 

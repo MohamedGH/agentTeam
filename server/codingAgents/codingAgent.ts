@@ -23,14 +23,21 @@ export interface ICodingAgent {
   /** Metadata and capabilities descriptor */
   getInfo(): CodingAgentInfo;
 
-  /** Create an asynchronous coding session */
+  /** Create/start an asynchronous coding session (non-blocking) */
   createSession(task: CodingAgentTask): Promise<JulesSession>;
+  startSession(task: CodingAgentTask): Promise<JulesSession>;
 
   /** Retrieve current session status */
   getSession(sessionId: string): Promise<JulesSession>;
 
   /** Retrieve activities / execution log for a given session */
   listActivities(sessionId: string): Promise<JulesActivity[]>;
+
+  /** Send a message/prompt to an ongoing session */
+  sendMessage(sessionId: string, message: string): Promise<void>;
+
+  /** Approve the plan for a session that requires plan approval */
+  approvePlan(sessionId: string): Promise<void>;
 
   /** List available GitHub sources connected to this agent */
   listSources?(): Promise<JulesSource[]>;

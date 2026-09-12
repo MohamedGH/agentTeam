@@ -8,6 +8,7 @@ import { QuotaDashboard } from './components/QuotaDashboard';
 import { RolesGuide } from './components/RolesGuide';
 import { JulesDashboard } from './components/JulesDashboard';
 import { AgentStep, FinalReport, AgentRole, ModelQuotaStatus, AIProviderId, ProviderInfo } from './types';
+import { routeManager, AppRoute } from './managers/routeManager';
 import {
   Play,
   Sparkles,
@@ -54,9 +55,22 @@ const PRESET_TASKS = [
 ];
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'studio' | 'workspace' | 'quota' | 'roles' | 'jules'>('studio');
+  const [activeTab, setActiveTab] = useState<AppRoute>(() => routeManager.getState().currentRoute);
   const [selectedTier, setSelectedTier] = useState<string>('tier_3');
   const [taskPrompt, setTaskPrompt] = useState<string>(PRESET_TASKS[0].prompt);
+
+  // Synchronize routeManager navigation
+  useEffect(() => {
+    const unsubscribe = routeManager.subscribe((state) => {
+      setActiveTab(state.currentRoute);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const handleTabChange = (tab: AppRoute) => {
+    setActiveTab(tab);
+    routeManager.navigate(tab);
+  };
 
   // Multi-Provider state
   const [activeProvider, setActiveProvider] = useState<AIProviderId>('gemini');
@@ -349,7 +363,7 @@ export default function App() {
       {/* Top Header */}
       <Header
         activeTab={activeTab}
-        setActiveTab={setActiveTab}
+        setActiveTab={handleTabChange}
         selectedTier={selectedTier}
         setSelectedTier={setSelectedTier}
         isRunning={isRunning}
@@ -584,7 +598,7 @@ export default function App() {
             {finalReport && (
               <FinalReportCard
                 report={finalReport}
-                onViewFiles={() => setActiveTab('workspace')}
+                onViewFiles={() => handleTabChange('workspace')}
               />
             )}
 

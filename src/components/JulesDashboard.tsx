@@ -14,21 +14,52 @@ import {
   Cpu,
   Clock,
   Search,
-  BookOpen,
+  MessageSquare,
+  Check,
+  ChevronRight,
+  Copy,
+  Zap,
+  Info,
+  PauseCircle,
+  Radio,
+  Send,
 } from 'lucide-react';
-import { CodingAgentInfo, CodingAgentResult, JulesActivity } from '../types';
+import { useJulesState } from '../managers/useJulesState';
+import { formatDate, truncate } from '../utils/functional';
+import { CodingAgentInfo } from '../types';
 
 interface JulesDashboardProps {
   onNotify?: (msg: string) => void;
 }
 
-export const JulesDashboard: React.FC<JulesDashboardProps> = () => {
+export const JulesDashboard: React.FC<JulesDashboardProps> = ({ onNotify }) => {
+  const {
+    activeSession,
+    activities,
+    recentSessions,
+    isPolling,
+    pollIntervalSeconds,
+    isStartingSession,
+    isSendingMessage,
+    isApprovingPlan,
+    isFetching,
+    error,
+    startSession,
+    fetchSession,
+    fetchActivities,
+    sendMessage,
+    approvePlan,
+    selectSession,
+    setPolling,
+    clearError,
+  } = useJulesState();
+
   const [agents, setAgents] = useState<CodingAgentInfo[]>([]);
   const [julesConfigured, setJulesConfigured] = useState<boolean>(false);
   const [hasApiKey, setHasApiKey] = useState<boolean>(false);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isLoadingAgents, setIsLoadingAgents] = useState<boolean>(false);
 
-  // Task form state
+  // Task form fields
   const [selectedAgent, setSelectedAgent] = useState<'jules' | 'mock'>('jules');
   const [repository, setRepository] = useState<string>('MohamedGH/agentTeam');
   const [branch, setBranch] = useState<string>('main');
@@ -39,19 +70,19 @@ export const JulesDashboard: React.FC<JulesDashboardProps> = () => {
   const [automationMode, setAutomationMode] = useState<'AUTO_CREATE_PR' | 'MANUAL'>('AUTO_CREATE_PR');
   const [requirePlanApproval, setRequirePlanApproval] = useState<boolean>(false);
 
-  // Execution state
-  const [isExecuting, setIsExecuting] = useState<boolean>(false);
-  const [result, setResult] = useState<CodingAgentResult | null>(null);
-  const [executionError, setExecutionError] = useState<string | null>(null);
-  const [activities, setActivities] = useState<JulesActivity[]>([]);
+  // In-session message input
+  const [userMessage, setUserMessage] = useState<string>('');
 
-  // Session Inspector
-  const [inspectSessionId, setInspectSessionId] = useState<string>('');
-  const [inspectedSession, setInspectedSession] = useState<any | null>(null);
-  const [isInspecting, setIsInspecting] = useState<boolean>(false);
+  // Search / Lookup Session ID
+  const [lookupId, setLookupId] = useState<string>('');
+  const [copiedSessionId, setCopiedSessionId] = useState<boolean>(false);
 
+  // Activity filter
+  const [activityFilter, setActivityFilter] = useState<'ALL' | 'AGENT' | 'USER' | 'SYSTEM'>('ALL');
+
+  // Load server agent status
   const fetchAgentInfo = async () => {
-    setIsLoading(true);
+    setIsLoadingAgents(true);
     try {
       const res = await fetch('/api/coding-agents/list');
       if (res.ok) {
@@ -69,9 +100,9 @@ export const JulesDashboard: React.FC<JulesDashboardProps> = () => {
         setHasApiKey(Boolean(health.hasJulesApiKey));
       }
     } catch (e) {
-      console.warn('Failed to load coding agents:', e);
+      console.warn('Failed to load coding agent configuration:', e);
     } finally {
-      setIsLoading(false);
+      setIsLoadingAgents(false);
     }
   };
 
@@ -79,502 +110,706 @@ export const JulesDashboard: React.FC<JulesDashboardProps> = () => {
     fetchAgentInfo();
   }, []);
 
-  const handleExecute = async () => {
-    if (!repository.trim() || !taskPrompt.trim() || isExecuting) return;
+  const handleStartSession = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!repository.trim() || !taskPrompt.trim() || isStartingSession) return;
 
-    setIsExecuting(true);
-    setExecutionError(null);
-    setResult(null);
-    setActivities([]);
+    clearError();
+    const session = await startSession({
+      agent: selectedAgent,
+      repository: repository.trim(),
+      branch: branch.trim() || 'main',
+      task: taskPrompt.trim(),
+      title: sessionTitle.trim() || undefined,
+      automationMode,
+      requirePlanApproval,
+    });
 
-    try {
-      const res = await fetch('/api/coding-agents/execute', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          agent: selectedAgent,
-          repository: repository.trim(),
-          branch: branch.trim() || 'main',
-          task: taskPrompt.trim(),
-          title: sessionTitle.trim() || undefined,
-          automationMode,
-          requirePlanApproval,
-        }),
-      });
-
-      if (!res.ok) {
-        throw new Error(`HTTP error ${res.status}: ${await res.text()}`);
-      }
-
-      const data: CodingAgentResult = await res.json();
-      setResult(data);
-      if (data.activities) {
-        setActivities(data.activities);
-      }
-      if (data.error) {
-        setExecutionError(data.error);
-      }
-    } catch (err: any) {
-      setExecutionError(err.message || 'Failed to execute Jules coding task');
-    } finally {
-      setIsExecuting(false);
+    if (session) {
+      onNotify?.(`Jules session ${session.id} started successfully`);
     }
   };
 
-  const handleInspectSession = async () => {
-    if (!inspectSessionId.trim() || isInspecting) return;
-    setIsInspecting(true);
-    setInspectedSession(null);
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeSession || !userMessage.trim() || isSendingMessage) return;
 
-    try {
-      const res = await fetch(`/api/coding-agents/session/${encodeURIComponent(inspectSessionId.trim())}?agent=${selectedAgent}`);
-      if (!res.ok) {
-        throw new Error(`Session not found or error (${res.status})`);
-      }
-      const data = await res.json();
-      setInspectedSession(data);
-    } catch (err: any) {
-      setInspectedSession({ error: err.message });
-    } finally {
-      setIsInspecting(false);
+    const messageText = userMessage.trim();
+    setUserMessage('');
+    const ok = await sendMessage(activeSession.id, messageText);
+    if (ok) {
+      onNotify?.('Message sent to Jules');
     }
   };
+
+  const handleApprovePlan = async () => {
+    if (!activeSession || isApprovingPlan) return;
+    const ok = await approvePlan(activeSession.id);
+    if (ok) {
+      onNotify?.('Plan approved. Jules is continuing execution.');
+    }
+  };
+
+  const handleCopySessionId = (id: string) => {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(id);
+      setCopiedSessionId(true);
+      setTimeout(() => setCopiedSessionId(false), 2000);
+    }
+  };
+
+  const handleLookupSession = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!lookupId.trim()) return;
+    selectSession(lookupId.trim());
+  };
+
+  const handleRefresh = () => {
+    if (activeSession) {
+      fetchSession(activeSession.id);
+      fetchActivities(activeSession.id);
+      onNotify?.('Session data refreshed');
+    }
+  };
+
+  const filteredActivities = activities.filter((act) => {
+    if (activityFilter === 'ALL') return true;
+    return (act.originator || 'AGENT').toUpperCase() === activityFilter;
+  });
+
+  const isAwaitingApproval =
+    activeSession?.state === 'AWAITING_PLAN_APPROVAL' ||
+    (activeSession?.state || '').toLowerCase().includes('awaitingplanapproval');
+
+  const isCompleted = activeSession?.state === 'COMPLETED';
+  const isFailed = activeSession?.state === 'FAILED';
+  const isRunning = !isCompleted && !isFailed && Boolean(activeSession);
 
   return (
-    <div className="space-y-6">
-      {/* Overview Banner */}
-      <div className="bg-slate-900 rounded-2xl border border-slate-800 p-6 shadow-xl">
+    <div className="space-y-6 max-w-7xl mx-auto px-2 sm:px-4">
+      {/* Overview & Architecture Header */}
+      <div className="bg-slate-900/90 backdrop-blur rounded-2xl border border-slate-800 p-4 sm:p-6 shadow-xl">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-3 mb-2">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-orange-600 flex items-center justify-center shadow-lg shadow-orange-500/20">
-                <GitPullRequest className="w-5 h-5 text-white" />
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-orange-600 flex items-center justify-center shadow-lg shadow-orange-500/20 shrink-0">
+                <Cpu className="w-5 h-5 text-white" />
               </div>
               <div>
-                <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
-                  Google Jules Autonomous Coding Agent
-                  <span className="text-[11px] font-mono font-medium px-2 py-0.5 rounded-full bg-orange-500/10 text-orange-400 border border-orange-500/20">
-                    Official v1alpha REST API
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 className="text-xl font-bold text-white tracking-tight">Google Jules Coding Agent</h2>
+                  <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                    Asynchronous & Observable
                   </span>
-                </h2>
-                <p className="text-xs text-slate-400">
-                  Autonomous cloud coding agent operating directly on GitHub repositories with automated Pull Requests
+                </div>
+                <p className="text-xs sm:text-sm text-slate-400">
+                  Cloud autonomous repository-level coding agent powered by Google Jules API v1alpha.
                 </p>
               </div>
             </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2 bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800 text-xs">
-              <Shield className="w-3.5 h-3.5 text-blue-400" />
-              <span className="text-slate-400">Auth:</span>
-              <code className="text-blue-300 font-mono text-[11px]">X-Goog-Api-Key</code>
-            </div>
-
             <div
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-semibold ${
+              className={`px-3 py-1.5 rounded-xl border flex items-center gap-2 text-xs font-medium ${
                 hasApiKey || julesConfigured
-                  ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'
-                  : 'bg-amber-500/10 text-amber-300 border-amber-500/30'
+                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                  : 'bg-amber-500/10 border-amber-500/30 text-amber-400'
               }`}
             >
-              {hasApiKey || julesConfigured ? (
-                <>
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  JULES_API_KEY Configured
-                </>
-              ) : (
-                <>
-                  <AlertTriangle className="w-3.5 h-3.5" />
-                  JULES_API_KEY Not Set (Mock Available)
-                </>
-              )}
+              <Shield className="w-3.5 h-3.5" />
+              <span>
+                {hasApiKey || julesConfigured
+                  ? 'JULES_API_KEY Configured'
+                  : 'JULES_API_KEY Not Set (Mock Ready)'}
+              </span>
             </div>
 
             <button
               onClick={fetchAgentInfo}
-              disabled={isLoading}
-              className="p-2 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 transition-all cursor-pointer"
-              title="Refresh status"
+              disabled={isLoadingAgents}
+              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
+              title="Refresh Agent Config"
             >
-              <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-4 h-4 ${isLoadingAgents ? 'animate-spin text-amber-400' : ''}`} />
             </button>
           </div>
         </div>
 
-        {/* API Architecture Notice */}
-        <div className="mt-4 pt-4 border-t border-slate-800/80 grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-          <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800">
-            <span className="font-bold text-slate-200 block mb-1">Architecture Separation</span>
-            <span className="text-slate-400 text-[11px]">
-              Jules operates via <code className="text-blue-300">CodingAgentManager</code>, strictly independent from LLM token providers in <code className="text-slate-300">ProviderManager</code>.
-            </span>
-          </div>
-
-          <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800">
-            <span className="font-bold text-slate-200 block mb-1">Official Base URL</span>
-            <span className="text-slate-400 text-[11px] font-mono text-orange-300 truncate block">
-              https://jules.googleapis.com/v1alpha
-            </span>
-            <span className="text-slate-500 text-[10px]">Sources, Sessions, Activities & Automations</span>
-          </div>
-
-          <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800">
-            <span className="font-bold text-slate-200 block mb-1">GitHub PR Automation</span>
-            <span className="text-slate-400 text-[11px]">
-              With <code className="text-emerald-300">AUTO_CREATE_PR</code>, Jules generates repository branch patches and creates ready-to-merge Pull Requests.
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Execution Console */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left Form: Task Dispatch */}
-        <div className="lg:col-span-7 bg-slate-900 rounded-2xl border border-slate-800 p-6 shadow-xl space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-            <div className="flex items-center gap-2">
-              <Cpu className="w-4 h-4 text-orange-400" />
-              <h3 className="text-sm font-bold text-slate-100 uppercase tracking-wider">
-                Dispatch Jules Coding Task
-              </h3>
-            </div>
-
-            {/* Target Agent Selector */}
-            <div className="flex items-center gap-2 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
-              <button
-                type="button"
-                onClick={() => setSelectedAgent('jules')}
-                className={`px-3 py-1 rounded-lg font-medium transition-all cursor-pointer ${
-                  selectedAgent === 'jules'
-                    ? 'bg-orange-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                Google Jules (Cloud)
-              </button>
-              <button
-                type="button"
-                onClick={() => setSelectedAgent('mock')}
-                className={`px-3 py-1 rounded-lg font-medium transition-all cursor-pointer ${
-                  selectedAgent === 'mock'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                Hermetic Mock (Test)
-              </button>
-            </div>
-          </div>
-
-          {/* Repository & Branch */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="sm:col-span-2 space-y-1">
-              <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-                <FolderGit2 className="w-3.5 h-3.5 text-slate-400" />
-                GitHub Repository
-              </label>
-              <input
-                type="text"
-                value={repository}
-                onChange={(e) => setRepository(e.target.value)}
-                placeholder="owner/repo (e.g. MohamedGH/agentTeam)"
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-100 font-mono focus:outline-none focus:border-orange-500"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-                <GitBranch className="w-3.5 h-3.5 text-slate-400" />
-                Starting Branch
-              </label>
-              <input
-                type="text"
-                value={branch}
-                onChange={(e) => setBranch(e.target.value)}
-                placeholder="main"
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-100 font-mono focus:outline-none focus:border-orange-500"
-              />
-            </div>
-          </div>
-
-          {/* Session Title */}
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-300">Session Title (Optional)</label>
-            <input
-              type="text"
-              value={sessionTitle}
-              onChange={(e) => setSessionTitle(e.target.value)}
-              placeholder="e.g. Fix DeepSeek Provider & Retry Logic"
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-100 focus:outline-none focus:border-orange-500"
-            />
-          </div>
-
-          {/* Task Prompt / Instructions */}
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-300">
-              Task Prompt / Specification
-            </label>
-            <textarea
-              rows={4}
-              value={taskPrompt}
-              onChange={(e) => setTaskPrompt(e.target.value)}
-              placeholder="Describe the bug to fix, feature to implement, or test to write..."
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-100 font-sans focus:outline-none focus:border-orange-500 resize-y"
-            />
-          </div>
-
-          {/* Automation Mode & Plan Approval */}
-          <div className="flex flex-wrap items-center justify-between gap-4 p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs">
-            <div>
-              <span className="font-semibold text-slate-300 block">Automation Mode:</span>
-              <div className="flex items-center gap-4 mt-1">
-                <label className="flex items-center gap-2 cursor-pointer text-slate-300">
-                  <input
-                    type="radio"
-                    name="automationMode"
-                    checked={automationMode === 'AUTO_CREATE_PR'}
-                    onChange={() => setAutomationMode('AUTO_CREATE_PR')}
-                    className="text-orange-500 focus:ring-0"
-                  />
-                  <span className="font-medium text-emerald-400">AUTO_CREATE_PR</span>
-                  <span className="text-slate-500 text-[11px]">(Auto Pull Request)</span>
-                </label>
-
-                <label className="flex items-center gap-2 cursor-pointer text-slate-300">
-                  <input
-                    type="radio"
-                    name="automationMode"
-                    checked={automationMode === 'MANUAL'}
-                    onChange={() => setAutomationMode('MANUAL')}
-                    className="text-orange-500 focus:ring-0"
-                  />
-                  <span>MANUAL</span>
-                  <span className="text-slate-500 text-[11px]">(Branch patch only)</span>
-                </label>
+        {/* Global Error Banner if any */}
+        {error && (
+          <div className="mt-4 p-3.5 bg-rose-500/10 border border-rose-500/30 rounded-xl flex items-start justify-between gap-3 text-sm text-rose-300">
+            <div className="flex items-start gap-2.5">
+              <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold text-rose-200">{error.message}</p>
+                {error.remediation && <p className="text-xs text-rose-300/80 mt-1">{error.remediation}</p>}
               </div>
             </div>
-
-            <label className="flex items-center gap-2 cursor-pointer text-slate-300 pt-1">
-              <input
-                type="checkbox"
-                checked={requirePlanApproval}
-                onChange={(e) => setRequirePlanApproval(e.target.checked)}
-                className="rounded border-slate-700 text-orange-500"
-              />
-              <span>Require Plan Approval</span>
-            </label>
-          </div>
-
-          {/* Quick Presets */}
-          <div className="space-y-1 pt-1">
-            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-              Quick Task Presets:
-            </span>
-            <div className="flex flex-wrap gap-2">
-              {[
-                {
-                  label: 'Fix DeepSeek Provider',
-                  title: 'Fix DeepSeek Provider',
-                  prompt: 'Fix the DeepSeek provider error handling, verify token accounting, and add retry logic with jitter.',
-                },
-                {
-                  label: 'JWT Expiration Guard',
-                  title: 'Add JWT Expiration & Revocation',
-                  prompt: 'Implement token expiration check and blacklist revocation in src/auth.py with complete pytest test suite.',
-                },
-                {
-                  label: 'Exponential Backoff 429',
-                  title: 'Implement Jittered Backoff for 429',
-                  prompt: 'Implement calculate_exponential_backoff in src/math_utils.py with full test coverage for rate limits.',
-                },
-              ].map((preset, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => {
-                    setSessionTitle(preset.title);
-                    setTaskPrompt(preset.prompt);
-                  }}
-                  className="text-[11px] px-2.5 py-1 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-300 border border-slate-800 transition-all cursor-pointer truncate max-w-xs"
-                >
-                  {preset.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Submit Button */}
-          <div className="pt-2">
             <button
-              onClick={handleExecute}
-              disabled={isExecuting || !repository.trim() || !taskPrompt.trim()}
-              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white font-bold text-xs sm:text-sm shadow-lg shadow-orange-500/20 disabled:opacity-50 transition-all cursor-pointer disabled:cursor-not-allowed"
+              onClick={clearError}
+              className="text-xs px-2 py-1 bg-rose-500/20 hover:bg-rose-500/30 rounded text-rose-200"
             >
-              {isExecuting ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  Jules is executing coding session...
-                </>
-              ) : (
-                <>
-                  <Play className="w-4 h-4 fill-white" />
-                  Dispatch Task to {selectedAgent === 'jules' ? 'Google Jules' : 'Mock Agent'}
-                </>
-              )}
+              Dismiss
             </button>
           </div>
+        )}
+      </div>
 
-          {executionError && (
-            <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-3 text-xs text-rose-400 flex items-start gap-2">
-              <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+      {/* Main Grid Layout: Form & Live Monitor */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Left Column: Launch Form & History (5 cols) */}
+        <div className="lg:col-span-5 space-y-6">
+          {/* Launch Session Card */}
+          <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-5 shadow-lg">
+            <h3 className="text-base font-semibold text-white mb-3 flex items-center gap-2">
+              <Play className="w-4 h-4 text-amber-400" />
+              Start Asynchronous Session
+            </h3>
+
+            <form onSubmit={handleStartSession} className="space-y-4">
+              {/* Agent Mode Selection */}
               <div>
-                <strong className="block font-bold">Execution Error:</strong>
-                {executionError}
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                  Execution Agent Engine
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedAgent('jules')}
+                    className={`px-3 py-2.5 rounded-xl text-left border text-xs font-medium transition-all ${
+                      selectedAgent === 'jules'
+                        ? 'bg-amber-500/15 border-amber-500/40 text-amber-300 shadow-sm shadow-amber-500/10'
+                        : 'bg-slate-800/60 border-slate-700 text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                    }`}
+                  >
+                    <div className="font-semibold">Google Jules</div>
+                    <div className="text-[10px] text-slate-400 mt-0.5">Real cloud API (v1alpha)</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSelectedAgent('mock')}
+                    className={`px-3 py-2.5 rounded-xl text-left border text-xs font-medium transition-all ${
+                      selectedAgent === 'mock'
+                        ? 'bg-indigo-500/15 border-indigo-500/40 text-indigo-300 shadow-sm shadow-indigo-500/10'
+                        : 'bg-slate-800/60 border-slate-700 text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                    }`}
+                  >
+                    <div className="font-semibold">Hermetic Mock</div>
+                    <div className="text-[10px] text-slate-400 mt-0.5">Zero-quota sandbox</div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Repository & Branch */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1">
+                    GitHub Repository
+                  </label>
+                  <div className="relative">
+                    <FolderGit2 className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
+                    <input
+                      type="text"
+                      value={repository}
+                      onChange={(e) => setRepository(e.target.value)}
+                      placeholder="owner/repo"
+                      required
+                      className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-600 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-colors"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1">
+                    Target Branch
+                  </label>
+                  <div className="relative">
+                    <GitBranch className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
+                    <input
+                      type="text"
+                      value={branch}
+                      onChange={(e) => setBranch(e.target.value)}
+                      placeholder="main"
+                      required
+                      className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-600 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-colors"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Task Title */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 mb-1">
+                  Session Title (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={sessionTitle}
+                  onChange={(e) => setSessionTitle(e.target.value)}
+                  placeholder="e.g. Implement authentication middleware"
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-600 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-colors"
+                />
+              </div>
+
+              {/* Task Prompt */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 mb-1">
+                  Task Prompt / Autonomous Instructions
+                </label>
+                <textarea
+                  value={taskPrompt}
+                  onChange={(e) => setTaskPrompt(e.target.value)}
+                  rows={3}
+                  placeholder="Describe the coding task, bugfix, or feature..."
+                  required
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-600 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-colors resize-none"
+                />
+              </div>
+
+              {/* Automation Mode & Plan Approval Toggles */}
+              <div className="space-y-2 pt-1 border-t border-slate-800/80">
+                <div className="flex items-center justify-between py-1">
+                  <div>
+                    <div className="text-xs font-medium text-slate-200">Auto-create Pull Request</div>
+                    <div className="text-[10px] text-slate-500">Jules will branch and open a GitHub PR upon completion</div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={automationMode === 'AUTO_CREATE_PR'}
+                    onChange={(e) => setAutomationMode(e.target.checked ? 'AUTO_CREATE_PR' : 'MANUAL')}
+                    className="w-4 h-4 rounded text-amber-500 bg-slate-800 border-slate-700 focus:ring-amber-500 cursor-pointer"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between py-1">
+                  <div>
+                    <div className="text-xs font-medium text-slate-200">Require Plan Approval</div>
+                    <div className="text-[10px] text-slate-500">Pause execution until you review and approve Jules' plan</div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={requirePlanApproval}
+                    onChange={(e) => setRequirePlanApproval(e.target.checked)}
+                    className="w-4 h-4 rounded text-amber-500 bg-slate-800 border-slate-700 focus:ring-amber-500 cursor-pointer"
+                  />
+                </div>
+              </div>
+
+              {/* Submit Button */}
+              <button
+                type="submit"
+                disabled={isStartingSession || !repository.trim() || !taskPrompt.trim()}
+                className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white text-xs font-bold shadow-md shadow-orange-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isStartingSession ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Starting Session...</span>
+                  </>
+                ) : (
+                  <>
+                    <Zap className="w-4 h-4" />
+                    <span>Launch Asynchronous Session</span>
+                  </>
+                )}
+              </button>
+            </form>
+          </div>
+
+          {/* Direct Session ID Lookup */}
+          <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-4 shadow-lg">
+            <h4 className="text-xs font-semibold text-slate-300 mb-2 flex items-center gap-2">
+              <Search className="w-3.5 h-3.5 text-amber-400" />
+              Inspect Existing Session by ID
+            </h4>
+            <form onSubmit={handleLookupSession} className="flex gap-2">
+              <input
+                type="text"
+                value={lookupId}
+                onChange={(e) => setLookupId(e.target.value)}
+                placeholder="e.g. sessions/12345 or 12345"
+                className="flex-1 px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-600 focus:outline-none focus:border-amber-500"
+              />
+              <button
+                type="submit"
+                disabled={!lookupId.trim()}
+                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl transition-colors disabled:opacity-50"
+              >
+                Inspect
+              </button>
+            </form>
+          </div>
+
+          {/* Recent Sessions List */}
+          {recentSessions.length > 0 && (
+            <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-4 shadow-lg">
+              <h4 className="text-xs font-semibold text-slate-300 mb-3 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-amber-400" />
+                  Recent Sessions ({recentSessions.length})
+                </span>
+                <span className="text-[10px] text-slate-500">Click to load</span>
+              </h4>
+
+              <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                {recentSessions.map((sess) => {
+                  const isCurrent = activeSession?.id === sess.id;
+                  return (
+                    <button
+                      key={sess.id}
+                      onClick={() => selectSession(sess.id)}
+                      className={`w-full text-left p-2.5 rounded-xl border text-xs transition-all flex items-center justify-between gap-2 ${
+                        isCurrent
+                          ? 'bg-amber-500/10 border-amber-500/40 text-amber-300 font-semibold'
+                          : 'bg-slate-950/60 border-slate-800/80 text-slate-300 hover:bg-slate-800/60'
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <div className="truncate font-mono text-[11px] text-slate-300">
+                          {sess.id}
+                        </div>
+                        <div className="truncate text-[10px] text-slate-500">
+                          {sess.title || sess.prompt || 'Autonomous Task'}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${
+                            sess.state === 'COMPLETED'
+                              ? 'bg-emerald-500/15 text-emerald-400'
+                              : sess.state === 'FAILED'
+                              ? 'bg-rose-500/15 text-rose-400'
+                              : 'bg-amber-500/15 text-amber-400'
+                          }`}
+                        >
+                          {sess.state || 'QUEUED'}
+                        </span>
+                        <ChevronRight className="w-3.5 h-3.5 text-slate-600" />
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
         </div>
 
-        {/* Right Panel: Session Result & Inspector */}
-        <div className="lg:col-span-5 space-y-6">
-          {/* Live Result Card */}
-          <div className="bg-slate-900 rounded-2xl border border-slate-800 p-5 shadow-xl space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
-                <Activity className="w-4 h-4 text-emerald-400" />
-                Session Execution Result
-              </h3>
-              {result && (
-                <span
-                  className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
-                    result.status === 'COMPLETED'
-                      ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                      : 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
-                  }`}
-                >
-                  {result.status}
-                </span>
-              )}
-            </div>
-
-            {result ? (
-              <div className="space-y-3 text-xs">
-                <div className="space-y-1">
-                  <span className="text-slate-400 text-[11px] block">Session ID:</span>
-                  <div className="font-mono text-slate-200 bg-slate-950 px-2.5 py-1 rounded border border-slate-800 text-[11px] break-all">
-                    {result.sessionId}
+        {/* Right Column: Live Observable Cockpit (7 cols) */}
+        <div className="lg:col-span-7 space-y-6">
+          {activeSession ? (
+            <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-5 shadow-lg space-y-5">
+              {/* Session Header Card */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-800">
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-mono text-slate-400">Session:</span>
+                    <span className="font-mono text-xs font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">
+                      {activeSession.id}
+                    </span>
+                    <button
+                      onClick={() => handleCopySessionId(activeSession.id)}
+                      className="text-slate-500 hover:text-slate-300 transition-colors p-1"
+                      title="Copy Session ID"
+                    >
+                      {copiedSessionId ? (
+                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      ) : (
+                        <Copy className="w-3.5 h-3.5" />
+                      )}
+                    </button>
                   </div>
+                  <h3 className="text-base font-bold text-white mt-1">
+                    {activeSession.title || activeSession.prompt || 'Autonomous Jules Task'}
+                  </h3>
                 </div>
 
-                {/* PR Banner if available */}
-                {result.prUrl && (
-                  <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-bold flex items-center gap-1.5">
-                        <GitPullRequest className="w-4 h-4" />
-                        Pull Request Created
-                      </span>
-                      <a
-                        href={result.prUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex items-center gap-1 text-emerald-400 hover:text-emerald-200 underline text-[11px]"
-                      >
-                        View on GitHub
-                        <ExternalLink className="w-3 h-3" />
-                      </a>
+                {/* Status Indicator Pill */}
+                <div className="flex items-center gap-2">
+                  <div
+                    className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 border ${
+                      isCompleted
+                        ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
+                        : isFailed
+                        ? 'bg-rose-500/15 border-rose-500/30 text-rose-400'
+                        : isAwaitingApproval
+                        ? 'bg-purple-500/15 border-purple-500/30 text-purple-400 animate-pulse'
+                        : 'bg-amber-500/15 border-amber-500/30 text-amber-400'
+                    }`}
+                  >
+                    {isRunning && !isAwaitingApproval && (
+                      <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+                    )}
+                    {isCompleted && <CheckCircle2 className="w-3.5 h-3.5" />}
+                    {isFailed && <AlertTriangle className="w-3.5 h-3.5" />}
+                    {isAwaitingApproval && <PauseCircle className="w-3.5 h-3.5" />}
+                    <span>{activeSession.state || 'QUEUED'}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Plan Approval Callout Banner if AWAITING_PLAN_APPROVAL */}
+              {isAwaitingApproval && (
+                <div className="p-4 rounded-xl bg-purple-500/10 border border-purple-500/30 space-y-3">
+                  <div className="flex items-start gap-2.5">
+                    <Info className="w-5 h-5 text-purple-400 shrink-0 mt-0.5" />
+                    <div>
+                      <h4 className="text-sm font-bold text-purple-200">Plan Approval Required</h4>
+                      <p className="text-xs text-purple-300/80 mt-0.5">
+                        Jules has analyzed the codebase and formulated an execution plan. Review the activities below and approve the plan to continue.
+                      </p>
                     </div>
-                    <span className="text-[11px] font-mono text-emerald-200 mt-1 block truncate">
-                      {result.prUrl}
-                    </span>
                   </div>
-                )}
-
-                {/* Branch Info */}
-                {result.gitBranch && (
-                  <div className="flex items-center gap-2 text-slate-300">
-                    <GitBranch className="w-3.5 h-3.5 text-blue-400" />
-                    <span>Patch Branch:</span>
-                    <code className="text-blue-300 font-mono text-[11px] bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">
-                      {result.gitBranch}
-                    </code>
+                  <div className="flex items-center justify-end">
+                    <button
+                      onClick={handleApprovePlan}
+                      disabled={isApprovingPlan}
+                      className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center gap-2 disabled:opacity-50"
+                    >
+                      {isApprovingPlan ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          <span>Approving Plan...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Approve Plan & Proceed</span>
+                        </>
+                      )}
+                    </button>
                   </div>
-                )}
-
-                {/* Summary */}
-                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-                  <span className="text-slate-400 font-bold block mb-1">Agent Summary:</span>
-                  <p className="text-slate-200 whitespace-pre-line leading-relaxed">
-                    {result.summary}
-                  </p>
                 </div>
+              )}
 
-                {/* Activity Feed */}
-                {activities.length > 0 && (
-                  <div className="space-y-2 pt-2">
-                    <span className="font-bold text-slate-300 block">
-                      Activities ({activities.length}):
-                    </span>
-                    <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                      {activities.map((act, i) => (
-                        <div
-                          key={i}
-                          className="bg-slate-950 p-2 rounded-lg border border-slate-800/80 text-[11px] text-slate-300 flex items-start gap-2"
+              {/* Session Meta Specs & PR Link */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs bg-slate-950/60 p-3 rounded-xl border border-slate-800">
+                <div>
+                  <span className="text-slate-500">Repository</span>
+                  <div className="font-semibold text-slate-300 truncate">
+                    {activeSession.sourceContext?.source?.replace(/^sources\/github\//, '') || repository}
+                  </div>
+                </div>
+                <div>
+                  <span className="text-slate-500">Branch</span>
+                  <div className="font-semibold text-slate-300 flex items-center gap-1 truncate">
+                    <GitBranch className="w-3 h-3 text-slate-400 shrink-0" />
+                    <span>{activeSession.gitBranch || branch}</span>
+                  </div>
+                </div>
+                <div>
+                  <span className="text-slate-500">Created At</span>
+                  <div className="font-semibold text-slate-300">
+                    {formatDate(activeSession.createTime)}
+                  </div>
+                </div>
+              </div>
+
+              {/* PR Banner if created */}
+              {activeSession.prUrl && (
+                <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/30 rounded-xl flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5 text-xs text-emerald-300">
+                    <GitPullRequest className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <div>
+                      <span className="font-bold text-white">Pull Request Ready: </span>
+                      <span className="font-mono text-emerald-300/90">{activeSession.prUrl}</span>
+                    </div>
+                  </div>
+                  <a
+                    href={activeSession.prUrl}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow transition-colors shrink-0"
+                  >
+                    <span>View PR</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+              )}
+
+              {/* In-Session Interactive Messaging */}
+              <div className="pt-2 border-t border-slate-800">
+                <form onSubmit={handleSendMessage} className="space-y-2">
+                  <label className="block text-xs font-semibold text-slate-400 flex items-center gap-1.5">
+                    <MessageSquare className="w-3.5 h-3.5 text-amber-400" />
+                    Send Live Instruction / Clarification to Jules
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={userMessage}
+                      onChange={(e) => setUserMessage(e.target.value)}
+                      placeholder="e.g. Please also update tests for math helper..."
+                      disabled={isSendingMessage || isCompleted || isFailed}
+                      className="flex-1 px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-600 focus:outline-none focus:border-amber-500 transition-colors disabled:opacity-50"
+                    />
+                    <button
+                      type="submit"
+                      disabled={isSendingMessage || !userMessage.trim() || isCompleted || isFailed}
+                      className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isSendingMessage ? (
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Send className="w-3.5 h-3.5" />
+                      )}
+                      <span className="hidden sm:inline">Send</span>
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              {/* Activity Stream Controller */}
+              <div className="pt-2 border-t border-slate-800 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Activity className="w-4 h-4 text-amber-400" />
+                    <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                      Live Activity Stream ({filteredActivities.length})
+                    </h4>
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-wrap text-xs">
+                    {/* Filter buttons */}
+                    <div className="flex items-center bg-slate-950 p-0.5 rounded-lg border border-slate-800">
+                      {(['ALL', 'AGENT', 'USER', 'SYSTEM'] as const).map((filter) => (
+                        <button
+                          key={filter}
+                          onClick={() => setActivityFilter(filter)}
+                          className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-colors ${
+                            activityFilter === filter
+                              ? 'bg-amber-500/20 text-amber-300'
+                              : 'text-slate-400 hover:text-slate-200'
+                          }`}
                         >
-                          <span className="text-orange-400 font-mono font-bold text-[10px]">
-                            #{i + 1}
-                          </span>
-                          <span className="flex-1">{act.description}</span>
-                        </div>
+                          {filter}
+                        </button>
                       ))}
                     </div>
+
+                    {/* Auto Polling Toggle */}
+                    <button
+                      onClick={() => setPolling(!isPolling, pollIntervalSeconds)}
+                      className={`px-2.5 py-1 rounded-lg border text-[11px] font-medium flex items-center gap-1 transition-colors ${
+                        isPolling
+                          ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                          : 'bg-slate-800 border-slate-700 text-slate-400'
+                      }`}
+                      title={isPolling ? 'Live auto-refresh enabled' : 'Auto-refresh paused'}
+                    >
+                      <Radio className={`w-3 h-3 ${isPolling ? 'animate-pulse text-emerald-400' : ''}`} />
+                      <span>{isPolling ? 'Live' : 'Paused'}</span>
+                    </button>
+
+                    {/* Manual Refresh */}
+                    <button
+                      onClick={handleRefresh}
+                      disabled={isFetching}
+                      className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
+                      title="Refresh Activities"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? 'animate-spin text-amber-400' : ''}`} />
+                    </button>
                   </div>
-                )}
-              </div>
-            ) : (
-              <div className="text-center py-8 text-slate-500 text-xs">
-                <Terminal className="w-8 h-8 mx-auto mb-2 text-slate-700" />
-                No active session execution yet. Configure your task and click Dispatch.
-              </div>
-            )}
-          </div>
+                </div>
 
-          {/* Session Inspector Card */}
-          <div className="bg-slate-900 rounded-2xl border border-slate-800 p-5 shadow-xl space-y-3">
-            <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
-              <Search className="w-4 h-4 text-blue-400" />
-              Session Status Inspector
-            </h3>
-            <p className="text-xs text-slate-400">
-              Query the status and activities of any existing Jules session by ID via <code className="text-slate-300 font-mono">GET /v1alpha/sessions/&#123;id&#125;</code>.
-            </p>
+                {/* Chronological Activity Feed */}
+                <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                  {filteredActivities.length === 0 ? (
+                    <div className="p-6 text-center text-xs text-slate-500 bg-slate-950/40 rounded-xl border border-dashed border-slate-800">
+                      Waiting for Jules activities stream...
+                    </div>
+                  ) : (
+                    filteredActivities.map((act, index) => {
+                      const originator = (act.originator || 'AGENT').toUpperCase();
+                      const isUser = originator === 'USER';
+                      const isSystem = originator === 'SYSTEM';
 
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                value={inspectSessionId}
-                onChange={(e) => setInspectSessionId(e.target.value)}
-                placeholder="Enter sessionId (e.g. sessions/12345)"
-                className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 font-mono focus:outline-none focus:border-blue-500"
-              />
-              <button
-                onClick={handleInspectSession}
-                disabled={isInspecting || !inspectSessionId.trim()}
-                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs disabled:opacity-50 transition-all cursor-pointer"
-              >
-                {isInspecting ? 'Fetching...' : 'Query'}
-              </button>
+                      return (
+                        <div
+                          key={act.id || `act_${index}`}
+                          className={`p-3 rounded-xl border text-xs transition-colors ${
+                            isUser
+                              ? 'bg-blue-500/5 border-blue-500/20'
+                              : isSystem
+                              ? 'bg-slate-800/40 border-slate-700/60'
+                              : 'bg-slate-950/60 border-slate-800/80'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2 mb-1">
+                            <div className="flex items-center gap-1.5">
+                              <span
+                                className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${
+                                  isUser
+                                    ? 'bg-blue-500/20 text-blue-300'
+                                    : isSystem
+                                    ? 'bg-slate-700 text-slate-300'
+                                    : 'bg-amber-500/20 text-amber-300'
+                                }`}
+                              >
+                                {originator}
+                              </span>
+                              {act.actionType && (
+                                <span className="text-[10px] font-mono text-slate-500">
+                                  [{act.actionType}]
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[10px] text-slate-500">
+                              {formatDate(act.createTime)}
+                            </span>
+                          </div>
+
+                          <p className="text-slate-300 whitespace-pre-wrap leading-relaxed">
+                            {act.description || act.output || 'Activity executed'}
+                          </p>
+
+                          {act.prUrl && (
+                            <a
+                              href={act.prUrl}
+                              target="_blank"
+                              rel="noreferrer noopener"
+                              className="mt-2 inline-flex items-center gap-1 text-[11px] text-emerald-400 hover:text-emerald-300 font-medium"
+                            >
+                              <span>Inspect Pull Request</span>
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
             </div>
-
-            {inspectedSession && (
-              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 text-xs font-mono max-h-48 overflow-y-auto">
-                <pre className="text-slate-300 text-[11px]">
-                  {JSON.stringify(inspectedSession, null, 2)}
-                </pre>
+          ) : (
+            <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-8 text-center shadow-lg space-y-4">
+              <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mx-auto text-amber-400">
+                <Terminal className="w-6 h-6" />
               </div>
-            )}
-          </div>
+              <div>
+                <h3 className="text-base font-bold text-white">No Active Session Selected</h3>
+                <p className="text-xs text-slate-400 max-w-md mx-auto mt-1">
+                  Launch a new asynchronous session on the left or select a previous session to observe live activity, approve plans, or interact directly with Jules.
+                </p>
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRepository('MohamedGH/agentTeam');
+                    setTaskPrompt('Fix the DeepSeek provider and add streaming token metrics');
+                  }}
+                  className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors"
+                >
+                  Load Sample Task Preset
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
