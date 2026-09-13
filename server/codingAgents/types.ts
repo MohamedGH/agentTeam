@@ -14,6 +14,53 @@ export type JulesSessionState =
   | 'CANCELLED'
   | string;
 
+export const TERMINAL_STATES: ReadonlySet<string> = new Set(['FAILED', 'COMPLETED', 'CANCELLED']);
+
+export function isTerminalState(state?: string): boolean {
+  if (!state) return false;
+  return TERMINAL_STATES.has(state);
+}
+
+/**
+ * Validates state transitions according to the strict state machine:
+ *   QUEUED -> PLANNING -> IN_PROGRESS -> COMPLETED
+ *   From non-terminal states -> FAILED or CANCELLED
+ *   Terminal states (FAILED, COMPLETED, CANCELLED) are IRREVERSIBLE:
+ *   FAILED -> FAILED only
+ *   COMPLETED -> COMPLETED only
+ *   CANCELLED -> CANCELLED only
+ */
+export function isValidStateTransition(current?: string, next?: string): boolean {
+  if (!next) return false;
+  if (!current || current === next) return true;
+
+  // Terminal states are strictly irreversible
+  if (isTerminalState(current)) {
+    return false;
+  }
+
+  // Any non-terminal state can transition to FAILED or CANCELLED
+  if (next === 'FAILED' || next === 'CANCELLED') {
+    return true;
+  }
+
+  // Strict non-terminal progression
+  switch (current) {
+    case 'QUEUED':
+      return ['PLANNING', 'IN_PROGRESS', 'AWAITING_PLAN_APPROVAL', 'PAUSED'].includes(next);
+    case 'PLANNING':
+      return ['IN_PROGRESS', 'AWAITING_PLAN_APPROVAL', 'PAUSED'].includes(next);
+    case 'AWAITING_PLAN_APPROVAL':
+      return ['IN_PROGRESS', 'PLANNING', 'PAUSED'].includes(next);
+    case 'IN_PROGRESS':
+      return ['COMPLETED', 'PAUSED', 'AWAITING_PLAN_APPROVAL'].includes(next);
+    case 'PAUSED':
+      return ['IN_PROGRESS', 'PLANNING', 'AWAITING_PLAN_APPROVAL'].includes(next);
+    default:
+      return true;
+  }
+}
+
 export type JulesAutomationMode =
   | 'AUTOMATION_MODE_UNSPECIFIED'
   | 'AUTO_CREATE_PR'

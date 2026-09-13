@@ -139,13 +139,17 @@ export class MockCodingAgent implements ICodingAgent {
     const sessionId = 'mock_sess_' + Math.random().toString(36).substring(2, 9);
     const branch = task.branch || 'main';
     const isAutoPr = task.automationMode === 'AUTO_CREATE_PR';
+    const isFailureTrigger = task.task.includes('TASK_TRIGGER_FAILURE');
+    const failureReason = isFailureTrigger
+      ? task.task.split('TASK_TRIGGER_FAILURE:')[1]?.trim() || 'Simulated task execution failure'
+      : undefined;
 
     const session: JulesSession = {
       name: `sessions/${sessionId}`,
       id: sessionId,
       prompt: task.task,
       title: task.title || `Task on ${task.repository}`,
-      state: 'COMPLETED',
+      state: isFailureTrigger ? 'FAILED' : 'COMPLETED',
       sourceContext: {
         source: `sources/github/${task.repository}`,
         githubRepoContext: {
@@ -155,9 +159,11 @@ export class MockCodingAgent implements ICodingAgent {
       automationMode: isAutoPr ? 'AUTO_CREATE_PR' : 'AUTOMATION_MODE_UNSPECIFIED',
       createTime: new Date().toISOString(),
       updateTime: new Date().toISOString(),
-      gitBranch: `jules/patch-${sessionId.slice(-4)}`,
-      prUrl: isAutoPr ? `https://github.com/${task.repository}/pull/42` : undefined,
-      resultSummary: `Autonomous patch verified. Created branch jules/patch-${sessionId.slice(-4)}${
+      gitBranch: isFailureTrigger ? undefined : `jules/patch-${sessionId.slice(-4)}`,
+      prUrl: !isFailureTrigger && isAutoPr ? `https://github.com/${task.repository}/pull/42` : undefined,
+      resultSummary: isFailureTrigger
+        ? `Task execution failed: ${failureReason}`
+        : `Autonomous patch verified. Created branch jules/patch-${sessionId.slice(-4)}${
         isAutoPr ? ` and PR https://github.com/${task.repository}/pull/42` : ''
       }.`,
     };
@@ -170,31 +176,44 @@ export class MockCodingAgent implements ICodingAgent {
         description: `Analyzed repository ${task.repository} and formulated execution plan.`,
         createTime: new Date().toISOString(),
       },
-      {
-        id: `act_${sessionId}_2`,
-        originator: 'AGENT',
-        actionType: 'CODE_MODIFICATION',
-        description: `Applied required changes to resolve: "${task.task}".`,
-        createTime: new Date().toISOString(),
-      },
-      {
-        id: `act_${sessionId}_3`,
-        originator: 'AGENT',
-        actionType: 'TEST_RUN',
-        description: 'Ran repository automated test suite: 100% tests passing.',
-        createTime: new Date().toISOString(),
-      },
     ];
 
-    if (isAutoPr) {
+    if (isFailureTrigger) {
       activities.push({
-        id: `act_${sessionId}_4`,
-        originator: 'AGENT',
-        actionType: 'CREATE_PR',
-        description: `Created Pull Request: https://github.com/${task.repository}/pull/42`,
-        prUrl: `https://github.com/${task.repository}/pull/42`,
+        id: `act_${sessionId}_err`,
+        originator: 'SYSTEM',
+        actionType: 'EXECUTION_FAILURE',
+        description: `Execution terminated abnormally: ${failureReason}`,
         createTime: new Date().toISOString(),
       });
+    } else {
+      activities.push(
+        {
+          id: `act_${sessionId}_2`,
+          originator: 'AGENT',
+          actionType: 'CODE_MODIFICATION',
+          description: `Applied required changes to resolve: "${task.task}".`,
+          createTime: new Date().toISOString(),
+        },
+        {
+          id: `act_${sessionId}_3`,
+          originator: 'AGENT',
+          actionType: 'TEST_RUN',
+          description: 'Ran repository automated test suite: 100% tests passing.',
+          createTime: new Date().toISOString(),
+        }
+      );
+
+      if (isAutoPr) {
+        activities.push({
+          id: `act_${sessionId}_4`,
+          originator: 'AGENT',
+          actionType: 'CREATE_PR',
+          description: `Created Pull Request: https://github.com/${task.repository}/pull/42`,
+          prUrl: `https://github.com/${task.repository}/pull/42`,
+          createTime: new Date().toISOString(),
+        });
+      }
     }
 
     this.sessions.set(sessionId, session);
@@ -417,7 +436,8 @@ export class MockCodingAgent implements ICodingAgent {
       prompt: task.task,
       prUrl: session.prUrl,
       gitBranch: session.gitBranch,
-      summary: session.resultSummary || 'Task completed successfully',
+      summary: session.resultSummary || (session.state === 'FAILED' ? 'Task execution failed' : 'Task completed successfully'),
+      error: session.state === 'FAILED' ? (session.resultSummary || 'Task execution failed') : undefined,
       activities,
       rawSession: session,
       durationMs: Date.now() - startMs,

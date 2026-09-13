@@ -50,8 +50,8 @@ export interface AgentStep {
 
 export interface FinalReport {
   implementation: 'PASS' | 'FAIL';
-  tests: 'PASS' | 'FAIL';
-  review: 'APPROVED' | 'CHANGES_REQUIRED';
+  tests: 'PASS' | 'FAIL' | 'SKIPPED';
+  review: 'APPROVED' | 'CHANGES_REQUIRED' | 'SKIPPED';
   filesChanged: string[];
   testSummary: string;
   reviewSummary: string;
@@ -65,6 +65,7 @@ export interface FinalReport {
     modelUsed: string;
     providerUsed?: string;
     codingAgentUsed?: string;
+    error?: string;
     prUrl?: string;
     gitBranch?: string;
     commitSha?: string;
@@ -80,7 +81,7 @@ export interface FinalReport {
       pullRequestUrl?: string;
       filesChanged?: string[];
     };
-    estimatedTokens: number;
+    estimatedTokens?: number;
     promptTokens?: number;
     completionTokens?: number;
     totalTokens?: number;

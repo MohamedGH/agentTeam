@@ -143,5 +143,60 @@ export async function runCodingAgentsUnitTests() {
   assert.strictEqual(nonBlockingResult.error, undefined, 'Session is not treated as failed');
   console.log('✅ PASS: Long-running asynchronous sessions are not marked as failed when execution exceeds local window');
 
+  // 11. State Machine & Terminal State Immutability Verification
+  const { isValidStateTransition, TERMINAL_STATES } = await import('../../server/codingAgents/types');
+  assert.ok(TERMINAL_STATES.has('FAILED'));
+  assert.ok(TERMINAL_STATES.has('COMPLETED'));
+  assert.ok(TERMINAL_STATES.has('CANCELLED'));
+  assert.strictEqual(isValidStateTransition('FAILED', 'COMPLETED'), false, 'FAILED state must NEVER transition to COMPLETED');
+  assert.strictEqual(isValidStateTransition('FAILED', 'IN_PROGRESS'), false, 'FAILED state must NEVER transition to IN_PROGRESS');
+  assert.strictEqual(isValidStateTransition('COMPLETED', 'IN_PROGRESS'), false, 'COMPLETED state must NEVER transition to IN_PROGRESS');
+  assert.strictEqual(isValidStateTransition('CANCELLED', 'COMPLETED'), false, 'CANCELLED state must NEVER transition to COMPLETED');
+  assert.strictEqual(isValidStateTransition('QUEUED', 'PLANNING'), true);
+  assert.strictEqual(isValidStateTransition('IN_PROGRESS', 'FAILED'), true);
+  console.log('✅ PASS: State machine transition rules prevent modifying terminal states');
+
+  // 12. SessionStore Terminal State Defense & Error Preservation
+  const store = codingAgentManager.getSessionStore();
+  const testSessionId = `test_term_guard_${Date.now()}`;
+  await store.saveSession({
+    sessionId: testSessionId,
+    agentId: 'jules',
+    repository: 'MohamedGH/agentTeam',
+    branch: 'main',
+    task: 'Trigger terminal error test',
+    status: 'FAILED',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    error: 'Requested entity was not found (404)',
+  });
+
+  const storedBefore = await store.getSession(testSessionId);
+  assert.strictEqual(storedBefore?.status, 'FAILED');
+  assert.strictEqual(storedBefore?.error, 'Requested entity was not found (404)');
+
+  // Attempt to illegally overwrite FAILED with COMPLETED
+  await store.updateSession(testSessionId, {
+    status: 'COMPLETED',
+    summary: 'Illegal overwrite attempt',
+  });
+
+  const storedAfter = await store.getSession(testSessionId);
+  assert.strictEqual(storedAfter?.status, 'FAILED', 'Store must REJECT transitioning FAILED to COMPLETED');
+  assert.strictEqual(storedAfter?.error, 'Requested entity was not found (404)', 'Store must PRESERVE original error');
+  console.log('✅ PASS: SessionStore immutability defends FAILED state and preserves original error');
+
+  // 13. CodingAgentManager.execute strictly sets success=false on failure
+  const failingTaskResult = await codingAgentManager.execute({
+    agent: 'mock',
+    repository: 'MohamedGH/agentTeam',
+    branch: 'main',
+    task: 'TASK_TRIGGER_FAILURE: 404 entity not found',
+  });
+  assert.strictEqual(failingTaskResult.status, 'FAILED');
+  assert.strictEqual(failingTaskResult.success, false, 'Result success must be strictly false on FAILED status');
+  assert.ok(failingTaskResult.error, 'Error must be populated');
+  console.log('✅ PASS: CodingAgentManager.execute strictly sets success=false and preserves error on failure');
+
   console.log('✅ Jules & CodingAgentManager Unit Tests Passed');
 }

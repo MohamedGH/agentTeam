@@ -584,6 +584,31 @@ export const JulesDashboard: React.FC<JulesDashboardProps> = ({ onNotify }) => {
                 </div>
               )}
 
+              {/* Explicit Failure Banner when Jules task has FAILED */}
+              {isFailed && (
+                <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 space-y-2">
+                  <div className="flex items-start gap-2.5">
+                    <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+                    <div className="space-y-1 w-full">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-sm font-bold text-rose-200">Google Jules Task Failed</h4>
+                        <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                          Terminal State
+                        </span>
+                      </div>
+                      <p className="text-xs text-rose-300 font-mono break-words bg-rose-950/40 p-2.5 rounded-lg border border-rose-900/40">
+                        {activeSession.resultSummary || 'Task failed during execution or remote entity was not found.'}
+                      </p>
+                      {activeSession.resultSummary?.includes('404') && (
+                        <p className="text-xs text-rose-300/80 pt-1">
+                          Tip: In Google Jules, repositories must be connected as a source in the Jules web workspace (<a href="https://jules.google.com" target="_blank" rel="noreferrer" className="underline text-rose-200 hover:text-white">jules.google.com</a>) before the autonomous agent can access them.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Session Meta Specs & PR Link */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs bg-slate-950/60 p-3 rounded-xl border border-slate-800">
                 <div>

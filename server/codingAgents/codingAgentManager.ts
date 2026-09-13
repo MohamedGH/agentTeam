@@ -100,7 +100,7 @@ export class CodingAgentManager {
     });
 
     const result = await agent.executeTask(task, onProgress);
-    result.success = result.status === 'COMPLETED';
+    result.success = result.status === 'COMPLETED' && !result.error;
 
     // Git / GitHub automation integration
     const gitRequested = Boolean(
@@ -116,7 +116,7 @@ export class CodingAgentManager {
       if (!this.githubManager.isConfigured()) {
         result.success = false;
         result.error = 'GITHUB_TOKEN is not configured';
-      } else if (result.status === 'FAILED') {
+      } else if (result.status === 'FAILED' || !result.success) {
         // Critical safety rule: Never automatically push if task or tests failed!
         result.success = false;
         result.testsPassed = false;
@@ -147,11 +147,12 @@ export class CodingAgentManager {
         result.commitUrl = gitRes.commitUrl;
         result.pullRequestUrl = gitRes.pullRequestUrl || result.prUrl;
         result.git = gitRes.git;
-        result.success = gitRes.success;
+        result.success = result.status === 'COMPLETED' && gitRes.success && !result.error;
 
         if (!gitRes.success) {
           result.error = gitRes.error;
           result.status = 'FAILED';
+          result.success = false;
         }
       }
     }
@@ -171,6 +172,7 @@ export class CodingAgentManager {
         gitBranch: result.gitBranch,
         title: result.title,
         summary: result.summary,
+        error: result.error,
         activities: result.activities,
       }).catch((err) => console.warn('[CodingAgentManager] Store save warning:', err.message));
     }
@@ -311,9 +313,14 @@ export class CodingAgentManager {
 
       return liveSession;
     } catch (agentErr: any) {
-      // If agent call failed but session was saved in store (e.g. server restart test)
-      if (stored) {
-        console.warn(`[CodingAgentManager] Live agent poll failed for ${cleanId}, serving durable stored session.`);
+      // RULE: Live Google Jules errors must NEVER be masked by an old stored COMPLETED state!
+      if (resolvedAgentId === 'jules') {
+        throw agentErr;
+      }
+
+      // If mock agent call failed due to cleared in-memory state (e.g. server restart test)
+      if (stored && resolvedAgentId === 'mock') {
+        console.warn(`[CodingAgentManager] Live mock agent poll failed for ${cleanId}, serving durable stored session.`);
         return {
           name: `sessions/${stored.sessionId}`,
           id: stored.sessionId,
@@ -367,6 +374,10 @@ export class CodingAgentManager {
 
       return activities;
     } catch (err: any) {
+      // RULE: Do not mask Jules API errors by swallowing them
+      if (resolvedAgentId === 'jules') {
+        throw err;
+      }
       console.warn(`[CodingAgentManager] Could not fetch live activities for ${cleanId}, using store:`, err.message);
       return this.sessionStore.getActivities(cleanId, options?.lastActivityTime);
     }

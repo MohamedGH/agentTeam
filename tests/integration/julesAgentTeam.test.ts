@@ -68,5 +68,36 @@ export async function runJulesAgentTeamIntegrationTests() {
   assert.ok(directResult.prUrl);
   console.log('✅ PASS: agentTeamEngine.runWithCodingAgent directly routes task to coding agent');
 
+  // Test Failure Handling: Jules failure must halt orchestration and never be masked as success
+  const failureResult = await agentTeamEngine.runWorkflow(
+    'TASK_TRIGGER_FAILURE: 404 entity not found',
+    'tier_3',
+    undefined,
+    {
+      provider: 'mock',
+      codingAgent: 'mock',
+      repository: 'MohamedGH/agentTeam',
+      branch: 'main',
+    }
+  );
+
+  assert.strictEqual(failureResult.success, false, 'Workflow MUST fail when coding agent fails');
+  assert.ok(failureResult.error, 'Error must be preserved in workflow result');
+  
+  // Verify that subsequent agents (Tester, Reviewer) WERE NOT RUN!
+  const failedTesterSteps = failureResult.steps.filter((s) => s.agent === 'tester');
+  const failedReviewerSteps = failureResult.steps.filter((s) => s.agent === 'reviewer');
+  assert.strictEqual(failedTesterSteps.length, 0, 'Tester must NOT run when Jules agent fails');
+  assert.strictEqual(failedReviewerSteps.length, 0, 'Reviewer must NOT run when Jules agent fails');
+
+  const failedDevStep = failureResult.steps.find((s) => s.agent === 'developer' && s.status === 'STATUS: FAILED');
+  assert.ok(failedDevStep, 'Jules failure step must be recorded in steps');
+  assert.strictEqual(failedDevStep?.status, 'STATUS: FAILED');
+  assert.strictEqual(failureResult.finalReport?.implementation, 'FAIL');
+  assert.strictEqual(failureResult.finalReport?.tests, 'SKIPPED');
+  assert.strictEqual(failureResult.finalReport?.review, 'SKIPPED');
+
+  console.log('✅ PASS: Coding agent failure strictly halts team orchestration, prevents subsequent agents, and returns success=false');
+
   console.log('✅ Jules Team Integration Tests Passed');
 }

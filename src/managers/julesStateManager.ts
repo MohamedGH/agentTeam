@@ -163,7 +163,30 @@ class JulesStateManager {
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
-        throw new Error(errData.error || `HTTP ${res.status}`);
+        let errorMessage = errData.error || `HTTP ${res.status}`;
+        if (res.status === 404 || errorMessage.includes('Requested entity was not found')) {
+          errorMessage = `Jules resource not found (404): Requested entity was not found. Please verify that repository is connected in your Google Jules workspace (https://jules.google.com).`;
+        }
+
+        if (this.state.activeSession?.id === cleanId) {
+          const failedSession: JulesSession = {
+            ...this.state.activeSession,
+            state: 'FAILED',
+            resultSummary: errorMessage,
+          };
+          this.update({
+            activeSession: failedSession,
+            isFetching: false,
+            error: errorManager.parseError(new Error(errorMessage), 'Jules API error'),
+          });
+          this.stopPolling();
+        } else {
+          this.update({
+            isFetching: false,
+            error: errorManager.parseError(new Error(errorMessage), 'Jules API error'),
+          });
+        }
+        return null;
       }
 
       const data = await res.json();
@@ -173,10 +196,20 @@ class JulesStateManager {
         state: data.status,
         prUrl: data.prUrl,
         gitBranch: data.gitBranch,
-        resultSummary: data.summary,
+        resultSummary: data.summary || data.error,
         prompt: '',
         sourceContext: { source: '' },
       };
+
+      if (data.error && !session.resultSummary) {
+        session.resultSummary = data.error;
+      }
+
+      // State machine defense: If session was already FAILED, never downgrade or overwrite with non-terminal
+      if (this.state.activeSession?.id === cleanId && this.state.activeSession.state === 'FAILED' && session.state !== 'FAILED') {
+        session.state = 'FAILED';
+        session.resultSummary = this.state.activeSession.resultSummary || session.resultSummary;
+      }
 
       const updatedRecent = [session, ...this.state.recentSessions.filter((s) => s.id !== session.id)].slice(0, 15);
 
@@ -185,6 +218,10 @@ class JulesStateManager {
         recentSessions: updatedRecent,
         isFetching: false,
       });
+
+      if (session.state === 'FAILED' || session.state === 'COMPLETED' || session.state === 'CANCELLED') {
+        this.stopPolling();
+      }
 
       this.saveToStorage();
       return session;

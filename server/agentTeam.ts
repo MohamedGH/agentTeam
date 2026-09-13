@@ -160,6 +160,65 @@ Provide your architectural breakdown and delegation plan.`;
             }
           );
 
+          if (julesResult.status === 'FAILED' || !julesResult.success) {
+            const errorMsg = julesResult.error || julesResult.summary || 'Google Jules coding agent failed.';
+            addStep({
+              phase: 2,
+              phaseName: 'Implementation (Jules)',
+              agent: 'developer',
+              thought: `Google Jules execution failed: ${errorMsg}`,
+              toolCalls: [
+                {
+                  id: 'tc_jules_error',
+                  name: 'jules_session_error',
+                  args: { sessionId: julesResult.sessionId, error: errorMsg },
+                  result: `FAILED: ${errorMsg}`,
+                  timestamp: Date.now(),
+                },
+              ],
+              status: 'STATUS: FAILED',
+              output: `Error running Google Jules agent: ${errorMsg}`,
+            });
+
+            return {
+              taskId,
+              taskPrompt,
+              success: false,
+              modelUsed: chosenModel,
+              codingAgentUsed: codingAgentToUse || undefined,
+              prUrl: julesResult.pullRequestUrl || julesResult.prUrl,
+              gitBranch: julesResult.git?.branch || julesResult.gitBranch,
+              commitSha: julesResult.commitSha,
+              commitUrl: julesResult.commitUrl,
+              pullRequestUrl: julesResult.pullRequestUrl || julesResult.prUrl,
+              testsPassed: false,
+              git: julesResult.git,
+              steps,
+              finalReport: {
+                implementation: 'FAIL',
+                tests: 'SKIPPED',
+                review: 'SKIPPED',
+                filesChanged: [],
+                testSummary: 'Tests skipped: Google Jules coding agent failed.',
+                reviewSummary: 'Review skipped: Google Jules coding agent failed.',
+                remainingIssues: [errorMsg],
+                totalCycles: {
+                  testerCorrections: 0,
+                  reviewerCorrections: 0,
+                },
+                metrics: {
+                  durationMs: Date.now() - startTime,
+                  modelUsed: chosenModel,
+                  providerUsed: activeProvider,
+                  codingAgentUsed: codingAgentToUse || undefined,
+                  error: errorMsg,
+                },
+              },
+              virtualFiles: workspace.getFiles(),
+              error: errorMsg,
+            };
+          }
+
           // Synchronize simulated changes to virtual workspace so tests can validate
           const toolCalls = this.executeDeveloperActions(taskPrompt, developerCycle, changedFileList);
 
@@ -180,7 +239,7 @@ Provide your architectural breakdown and delegation plan.`;
                 timestamp: Date.now(),
               },
             ],
-            status: julesResult.status === 'COMPLETED' ? 'Jules Coding Complete' : 'Implementation Ready for QA',
+            status: 'Jules Coding Complete',
             output: (julesResult.pullRequestUrl || julesResult.prUrl)
               ? `Pull Request: ${julesResult.pullRequestUrl || julesResult.prUrl} (Branch: ${julesResult.git?.branch || julesResult.gitBranch || 'patch'})`
               : julesResult.summary,

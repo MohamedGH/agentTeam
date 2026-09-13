@@ -160,20 +160,15 @@ export class JulesAgent implements ICodingAgent {
       return [];
     }
 
-    try {
-      const res = await this.fetchJules<{ sources?: any[] }>('/sources');
-      if (!res.sources || !Array.isArray(res.sources)) {
-        return [];
-      }
-      return res.sources.map((s) => ({
-        name: s.name,
-        displayName: s.displayName || s.name,
-        githubRepo: s.githubRepo || s.githubRepoContext,
-      }));
-    } catch (err: any) {
-      console.warn('[JulesAgent] Failed to list sources:', err.message);
+    const res = await this.fetchJules<{ sources?: any[] }>('/sources');
+    if (!res.sources || !Array.isArray(res.sources)) {
       return [];
     }
+    return res.sources.map((s) => ({
+      name: s.name,
+      displayName: s.displayName || s.name,
+      githubRepo: s.githubRepo || s.githubRepoContext,
+    }));
   }
 
   /**
@@ -210,10 +205,24 @@ export class JulesAgent implements ICodingAgent {
       requirePlanApproval: Boolean(task.requirePlanApproval),
     };
 
-    const sessionResponse = await this.fetchJules<any>('/sessions', {
-      method: 'POST',
-      body: requestPayload,
-    });
+    let sessionResponse: any;
+    try {
+      sessionResponse = await this.fetchJules<any>('/sessions', {
+        method: 'POST',
+        body: requestPayload,
+      });
+    } catch (err: any) {
+      if (
+        err.message?.includes('404') ||
+        err.message?.includes('Requested entity was not found') ||
+        err.message?.includes('not found')
+      ) {
+        throw new Error(
+          `Jules source not connected: ${task.repository}. Requested entity was not found (404). Please ensure repository "${task.repository}" is connected in your Google Jules workspace (https://jules.google.com) and that your API key has permissions to access it.`
+        );
+      }
+      throw err;
+    }
 
     const sessionId = sessionResponse.name ? sessionResponse.name.split('/').pop() : sessionResponse.id;
 
@@ -271,42 +280,37 @@ export class JulesAgent implements ICodingAgent {
     options?: { lastActivityTime?: string; pageSize?: number }
   ): Promise<JulesActivity[]> {
     const cleanId = sessionId.replace(/^sessions\//, '');
-    try {
-      let endpoint = `/sessions/${cleanId}/activities`;
-      if (options?.pageSize) {
-        endpoint += `?pageSize=${encodeURIComponent(options.pageSize)}`;
-      }
+    let endpoint = `/sessions/${cleanId}/activities`;
+    if (options?.pageSize) {
+      endpoint += `?pageSize=${encodeURIComponent(options.pageSize)}`;
+    }
 
-      const res = await this.fetchJules<{ activities?: any[] }>(endpoint);
-      if (!res.activities || !Array.isArray(res.activities)) {
-        return [];
-      }
-      const mapped = res.activities.map((act) => ({
-        name: act.name,
-        id: act.id || act.name?.split('/').pop(),
-        originator: act.originator || 'AGENT',
-        description: act.description || act.message || act.summary || '',
-        createTime: act.createTime,
-        planApproved: act.planApproved,
-        output: act.output,
-        prUrl: act.prUrl || act.pullRequestUrl,
-        gitBranch: act.gitBranch,
-        actionType: act.actionType,
-      }));
-
-      if (options?.lastActivityTime) {
-        const since = new Date(options.lastActivityTime).getTime();
-        return mapped.filter((a) => {
-          if (!a.createTime) return true;
-          return new Date(a.createTime).getTime() > since;
-        });
-      }
-
-      return mapped;
-    } catch (err: any) {
-      console.warn(`[JulesAgent] Failed to fetch activities for session ${cleanId}:`, err.message);
+    const res = await this.fetchJules<{ activities?: any[] }>(endpoint);
+    if (!res.activities || !Array.isArray(res.activities)) {
       return [];
     }
+    const mapped = res.activities.map((act) => ({
+      name: act.name,
+      id: act.id || act.name?.split('/').pop(),
+      originator: act.originator || 'AGENT',
+      description: act.description || act.message || act.summary || '',
+      createTime: act.createTime,
+      planApproved: act.planApproved,
+      output: act.output,
+      prUrl: act.prUrl || act.pullRequestUrl,
+      gitBranch: act.gitBranch,
+      actionType: act.actionType,
+    }));
+
+    if (options?.lastActivityTime) {
+      const since = new Date(options.lastActivityTime).getTime();
+      return mapped.filter((a) => {
+        if (!a.createTime) return true;
+        return new Date(a.createTime).getTime() > since;
+      });
+    }
+
+    return mapped;
   }
 
   /**
@@ -323,7 +327,7 @@ export class JulesAgent implements ICodingAgent {
    */
   public async sendMessage(sessionId: string, message: string): Promise<void> {
     const cleanId = sessionId.replace(/^sessions\//, '');
-    const session = await this.getSession(cleanId).catch(() => null);
+    const session = await this.getSession(cleanId);
     if (session && (session.state === 'COMPLETED' || session.state === 'FAILED' || session.state === 'CANCELLED')) {
       throw new Error(`Cannot send message: Jules session ${cleanId} is in terminal state (${session.state}).`);
     }
@@ -340,7 +344,7 @@ export class JulesAgent implements ICodingAgent {
    */
   public async approvePlan(sessionId: string): Promise<void> {
     const cleanId = sessionId.replace(/^sessions\//, '');
-    const session = await this.getSession(cleanId).catch(() => null);
+    const session = await this.getSession(cleanId);
     if (session && (session.state === 'COMPLETED' || session.state === 'FAILED' || session.state === 'CANCELLED')) {
       throw new Error(`Cannot approve plan: Jules session ${cleanId} is in terminal state (${session.state}).`);
     }
@@ -370,6 +374,7 @@ export class JulesAgent implements ICodingAgent {
     // If API key is not configured, give a clear instructive response
     if (!this.isConfigured()) {
       return {
+        success: false,
         agentId: this.id,
         sessionId: 'unconfigured_session',
         status: 'FAILED',
@@ -400,10 +405,12 @@ export class JulesAgent implements ICodingAgent {
       let currentStatus: JulesSessionState = session.state;
       let activities: JulesActivity[] = [];
       const seenActivityIds = new Set<string>();
+      let terminalError: string | null = null;
 
       // Immediate return if non-blocking mode (timeoutSeconds === 0 or undefined)
       if (!task.timeoutSeconds || task.timeoutSeconds <= 0) {
         return {
+          success: false,
           agentId: this.id,
           sessionId,
           status: currentStatus,
@@ -427,6 +434,7 @@ export class JulesAgent implements ICodingAgent {
       while (
         currentStatus !== 'COMPLETED' &&
         currentStatus !== 'FAILED' &&
+        currentStatus !== 'CANCELLED' &&
         currentStatus !== 'PAUSED' &&
         Date.now() - startMs < waitWindowMs
       ) {
@@ -447,34 +455,78 @@ export class JulesAgent implements ICodingAgent {
           }
 
           // Fetch activities
-          const latestActivities = await this.listActivities(sessionId);
-          for (const act of latestActivities) {
-            const actId = act.id || act.name || act.description;
-            if (actId && !seenActivityIds.has(actId)) {
-              seenActivityIds.add(actId);
-              activities.push(act);
-              if (onProgress) {
-                onProgress(act);
+          try {
+            const latestActivities = await this.listActivities(sessionId);
+            for (const act of latestActivities) {
+              const actId = act.id || act.name || act.description;
+              if (actId && !seenActivityIds.has(actId)) {
+                seenActivityIds.add(actId);
+                activities.push(act);
+                if (onProgress) {
+                  onProgress(act);
+                }
               }
             }
+          } catch (actErr: any) {
+            console.warn(`[JulesAgent] Activity poll non-fatal warning:`, actErr.message);
+          }
+
+          // Stop polling immediately upon reaching terminal state
+          if (currentStatus === 'FAILED') {
+            terminalError = updatedSession.resultSummary || 'Task failed during Google Jules execution';
+            break;
+          }
+          if (currentStatus === 'COMPLETED' || currentStatus === 'CANCELLED') {
+            break;
           }
         } catch (pollErr: any) {
-          console.warn(`[JulesAgent] Polling tick error for session ${sessionId}:`, pollErr.message);
+          console.error(`[JulesAgent] Polling error for session ${sessionId}:`, pollErr.message);
+          // If fatal (401, 403, 404, or not found), terminate immediately
+          if (
+            pollErr.message?.includes('404') ||
+            pollErr.message?.includes('401') ||
+            pollErr.message?.includes('403') ||
+            pollErr.message?.includes('not found') ||
+            pollErr.message?.includes('Requested entity was not found')
+          ) {
+            currentStatus = 'FAILED';
+            terminalError = pollErr.message;
+            break;
+          }
         }
       }
 
-      // CRITICAL: A session still running in Google Jules cloud is NEVER marked as failed.
-      const isStillRunning = currentStatus !== 'COMPLETED' && currentStatus !== 'FAILED';
+      if (currentStatus === 'FAILED') {
+        const errorMsg = terminalError || session.resultSummary || 'Google Jules task failed';
+        return {
+          success: false,
+          agentId: this.id,
+          sessionId,
+          status: 'FAILED',
+          repository: task.repository,
+          branch,
+          title: task.title,
+          prompt: task.task,
+          prUrl: session.prUrl,
+          gitBranch: session.gitBranch,
+          summary: session.resultSummary || `Google Jules task failed: ${errorMsg}`,
+          activities,
+          rawSession: session,
+          durationMs: Date.now() - startMs,
+          error: errorMsg,
+        };
+      }
+
+      const isStillRunning = currentStatus !== 'COMPLETED';
 
       const summary =
         session.resultSummary ||
         (currentStatus === 'COMPLETED'
           ? `Google Jules autonomously completed task on ${task.repository} (${branch}).${session.prUrl ? ` Pull Request created: ${session.prUrl}` : ''}`
-          : isStillRunning
-          ? `Google Jules session is active and executing in the cloud (State: ${currentStatus}). Session ID: ${sessionId}. Execution continues beyond local HTTP wait window (${task.timeoutSeconds}s). Session remains active and can be monitored asynchronously via getSession.`
-          : `Google Jules session status: ${currentStatus}`);
+          : `Google Jules session is active and executing in the cloud (State: ${currentStatus}). Session ID: ${sessionId}. Execution continues beyond local HTTP wait window (${task.timeoutSeconds}s). Session remains active and can be monitored asynchronously via getSession.`);
 
       return {
+        success: currentStatus === 'COMPLETED',
         agentId: this.id,
         sessionId,
         status: currentStatus,
@@ -491,6 +543,7 @@ export class JulesAgent implements ICodingAgent {
       };
     } catch (err: any) {
       return {
+        success: false,
         agentId: this.id,
         sessionId: 'error_session',
         status: 'FAILED',

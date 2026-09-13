@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { JulesActivity, JulesSessionState } from './types';
+import { JulesActivity, JulesSessionState, isTerminalState, isValidStateTransition } from './types';
 
 /**
  * StoredCodingSession
@@ -20,6 +20,7 @@ export interface StoredCodingSession {
   gitBranch?: string;
   title?: string;
   summary?: string;
+  error?: string;
   activities?: JulesActivity[];
   metadata?: Record<string, any>;
 }
@@ -111,9 +112,35 @@ export class FileBackedCodingAgentSessionStore implements ICodingAgentSessionSto
   public async saveSession(session: StoredCodingSession): Promise<StoredCodingSession> {
     this.loadFromDisk();
     const existing = this.cache.get(session.sessionId);
+
+    let effectiveStatus = session.status;
+    let effectiveError = session.error || existing?.error;
+
+    if (existing) {
+      // RULE: Terminal states are strictly immutable and irreversible
+      if (isTerminalState(existing.status)) {
+        if (session.status !== existing.status) {
+          console.warn(
+            `[SessionStore] Terminal state immutability violation: cannot transition from terminal state ${existing.status} to ${session.status} for session ${session.sessionId}. Preserving ${existing.status}.`
+          );
+          effectiveStatus = existing.status;
+        }
+        if (existing.status === 'FAILED') {
+          effectiveError = existing.error || session.error;
+        }
+      } else if (!isValidStateTransition(existing.status, session.status)) {
+        console.warn(
+          `[SessionStore] Invalid state transition rejected from ${existing.status} to ${session.status} for session ${session.sessionId}.`
+        );
+        effectiveStatus = existing.status;
+      }
+    }
+
     const merged: StoredCodingSession = {
       ...existing,
       ...session,
+      status: effectiveStatus,
+      error: effectiveError,
       updatedAt: new Date().toISOString(),
       activities: session.activities || existing?.activities || [],
     };
@@ -139,13 +166,37 @@ export class FileBackedCodingAgentSessionStore implements ICodingAgentSessionSto
       return null;
     }
 
+    let targetStatus = updates.status !== undefined ? updates.status : current.status;
+    let targetError = updates.error !== undefined ? updates.error : current.error;
+
+    // RULE: Terminal states are strictly immutable and irreversible
+    if (isTerminalState(current.status)) {
+      if (updates.status && updates.status !== current.status) {
+        console.warn(
+          `[SessionStore] Terminal state immutability violation: cannot update terminal state ${current.status} to ${updates.status} for session ${sessionId}. Preserving ${current.status}.`
+        );
+        targetStatus = current.status;
+      }
+      if (current.status === 'FAILED') {
+        // Never wipe out error from a FAILED terminal session
+        targetError = current.error || updates.error;
+      }
+    } else if (updates.status && !isValidStateTransition(current.status, updates.status)) {
+      console.warn(
+        `[SessionStore] Invalid state transition rejected from ${current.status} to ${updates.status} for session ${sessionId}.`
+      );
+      targetStatus = current.status;
+    }
+
     const updated: StoredCodingSession = {
       ...current,
       ...updates,
+      status: targetStatus,
+      error: targetError,
       updatedAt: new Date().toISOString(),
     };
 
-    if (updates.status && updates.status !== current.status) {
+    if (targetStatus !== current.status) {
       updated.lastActivityAt = new Date().toISOString();
     }
 
