@@ -13,6 +13,16 @@ export interface TeamRunOptions {
   branch?: string;
   automationMode?: 'AUTO_CREATE_PR' | 'MANUAL';
   title?: string;
+  createRepository?: boolean;
+  repositoryName?: string;
+  private?: boolean;
+  commitAndPush?: boolean;
+  commitPushAndCreatePR?: boolean;
+  git?: {
+    commit?: boolean;
+    push?: boolean;
+    createPullRequest?: boolean;
+  };
 }
 
 export class AgentTeamEngine {
@@ -131,6 +141,12 @@ Provide your architectural breakdown and delegation plan.`;
               task: taskPrompt,
               title: options.title || `agentTeam: ${taskPrompt.slice(0, 50)}`,
               automationMode: options.automationMode || 'AUTO_CREATE_PR',
+              createRepository: options.createRepository,
+              repositoryName: options.repositoryName,
+              private: options.private,
+              commitAndPush: options.commitAndPush,
+              commitPushAndCreatePR: options.commitPushAndCreatePR,
+              git: options.git,
             },
             (activity) => {
               addStep({
@@ -158,15 +174,53 @@ Provide your architectural breakdown and delegation plan.`;
                 id: 'tc_jules_session',
                 name: 'jules_session_result',
                 args: { sessionId: julesResult.sessionId, status: julesResult.status },
-                result: julesResult.prUrl ? `PR: ${julesResult.prUrl}` : `Status: ${julesResult.status}`,
+                result: (julesResult.pullRequestUrl || julesResult.prUrl)
+                  ? `PR: ${julesResult.pullRequestUrl || julesResult.prUrl}`
+                  : `Status: ${julesResult.status}`,
                 timestamp: Date.now(),
               },
             ],
             status: julesResult.status === 'COMPLETED' ? 'Jules Coding Complete' : 'Implementation Ready for QA',
-            output: julesResult.prUrl
-              ? `Pull Request created: ${julesResult.prUrl} (Branch: ${julesResult.gitBranch || 'patch'})`
+            output: (julesResult.pullRequestUrl || julesResult.prUrl)
+              ? `Pull Request: ${julesResult.pullRequestUrl || julesResult.prUrl} (Branch: ${julesResult.git?.branch || julesResult.gitBranch || 'patch'})`
               : julesResult.summary,
           });
+
+          if (julesResult.git) {
+            addStep({
+              phase: 6,
+              phaseName: 'GitHub Workflow',
+              agent: 'developer',
+              thought: `Git & GitHub Delivery for ${repo}: commit=${julesResult.git.committed}, push=${julesResult.git.pushed}, PR=${julesResult.pullRequestUrl || 'none'}`,
+              toolCalls: [
+                {
+                  id: 'tc_git_status',
+                  name: 'git_status',
+                  args: { repository: repo, branch },
+                  result: `Branch: ${julesResult.git.branch || branch}, Changed: ${(julesResult.git.filesChanged || []).join(', ') || 'none'}`,
+                  timestamp: Date.now(),
+                },
+                ...(julesResult.commitSha ? [{
+                  id: 'tc_git_commit',
+                  name: 'git_commit',
+                  args: { commitSha: julesResult.commitSha },
+                  result: julesResult.commitUrl || julesResult.commitSha,
+                  timestamp: Date.now(),
+                }] : []),
+                ...(julesResult.pullRequestUrl ? [{
+                  id: 'tc_github_pr',
+                  name: 'github_pull_request',
+                  args: { url: julesResult.pullRequestUrl },
+                  result: `Pull Request opened: ${julesResult.pullRequestUrl}`,
+                  timestamp: Date.now(),
+                }] : []),
+              ],
+              status: julesResult.testsPassed !== false ? 'STATUS: VERIFIED & DELIVERED' : 'STATUS: BLOCKED (Tests Failed)',
+              output: julesResult.pullRequestUrl
+                ? `GitHub PR: ${julesResult.pullRequestUrl} | Commit: ${julesResult.commitSha || 'latest'}`
+                : `Git Commit: ${julesResult.commitSha || 'latest'} pushed to ${julesResult.git.branch || branch}`,
+            });
+          }
         } else {
           // Standard LLM Developer implementation
           const devPrompt =
@@ -392,8 +446,13 @@ Evaluate code quality, security implications, maintainability, and clean archite
           modelUsed: chosenModel,
           providerUsed: activeProvider,
           codingAgentUsed: codingAgentToUse || undefined,
-          prUrl: julesResult?.prUrl,
-          gitBranch: julesResult?.gitBranch,
+          prUrl: julesResult?.pullRequestUrl || julesResult?.prUrl,
+          gitBranch: julesResult?.git?.branch || julesResult?.gitBranch,
+          commitSha: julesResult?.commitSha,
+          commitUrl: julesResult?.commitUrl,
+          pullRequestUrl: julesResult?.pullRequestUrl || julesResult?.prUrl,
+          testsPassed: julesResult?.testsPassed,
+          git: julesResult?.git,
           estimatedTokens: totalTokens,
           promptTokens: totalPromptTokens,
           completionTokens: totalCompletionTokens,
@@ -423,8 +482,13 @@ Evaluate code quality, security implications, maintainability, and clean archite
         success: true,
         modelUsed: chosenModel,
         codingAgentUsed: codingAgentToUse || undefined,
-        prUrl: julesResult?.prUrl,
-        gitBranch: julesResult?.gitBranch,
+        prUrl: julesResult?.pullRequestUrl || julesResult?.prUrl,
+        gitBranch: julesResult?.git?.branch || julesResult?.gitBranch,
+        commitSha: julesResult?.commitSha,
+        commitUrl: julesResult?.commitUrl,
+        pullRequestUrl: julesResult?.pullRequestUrl || julesResult?.prUrl,
+        testsPassed: julesResult?.testsPassed,
+        git: julesResult?.git,
         steps,
         finalReport,
         virtualFiles: workspace.getFiles(),

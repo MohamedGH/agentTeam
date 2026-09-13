@@ -67,6 +67,19 @@ export interface FinalReport {
     codingAgentUsed?: string;
     prUrl?: string;
     gitBranch?: string;
+    commitSha?: string;
+    commitUrl?: string;
+    pullRequestUrl?: string;
+    testsPassed?: boolean;
+    git?: {
+      committed?: boolean;
+      pushed?: boolean;
+      branch?: string;
+      commitSha?: string;
+      commitUrl?: string;
+      pullRequestUrl?: string;
+      filesChanged?: string[];
+    };
     estimatedTokens: number;
     promptTokens?: number;
     completionTokens?: number;
@@ -84,6 +97,19 @@ export interface TeamRunResult {
   codingAgentUsed?: string;
   prUrl?: string;
   gitBranch?: string;
+  commitSha?: string;
+  commitUrl?: string;
+  pullRequestUrl?: string;
+  testsPassed?: boolean;
+  git?: {
+    committed?: boolean;
+    pushed?: boolean;
+    branch?: string;
+    commitSha?: string;
+    commitUrl?: string;
+    pullRequestUrl?: string;
+    filesChanged?: string[];
+  };
   steps: AgentStep[];
   finalReport?: FinalReport;
   virtualFiles: Record<string, string>;

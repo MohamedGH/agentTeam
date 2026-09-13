@@ -3,6 +3,7 @@ import { runCloudMonitoringUnitTests } from './cloudMonitoring.test';
 import { runProvidersUnitTests } from './providers.test';
 import { runQuotaAndTokenAccountingUnitTests } from './quotaAndTokenAccounting.test';
 import { runCodingAgentsUnitTests } from './codingAgents.test';
+import { runGitHubUnitTests } from './github.test';
 
 export async function runAllUnitTests() {
   console.log('====================================================');
@@ -14,6 +15,7 @@ export async function runAllUnitTests() {
   await runProvidersUnitTests();
   await runQuotaAndTokenAccountingUnitTests();
   await runCodingAgentsUnitTests();
+  await runGitHubUnitTests();
 
   console.log('\n🎉 ALL UNIT TESTS PASSED (100%)\n');
 }

@@ -3,6 +3,7 @@ import { runAgentTeamIntegrationTests } from './agentTeam.test';
 import { runJulesAgentTeamIntegrationTests } from './julesAgentTeam.test';
 import { runJulesAsyncMonitoringIntegrationTests } from './julesAsyncMonitoring.test';
 import { runJulesComprehensiveScenariosTest } from './julesComprehensiveScenarios.test';
+import { runGitHubWorkflowIntegrationTests } from './githubWorkflow.test';
 
 export async function runAllIntegrationTests() {
   console.log('====================================================');
@@ -14,6 +15,7 @@ export async function runAllIntegrationTests() {
   await runJulesAgentTeamIntegrationTests();
   await runJulesAsyncMonitoringIntegrationTests();
   await runJulesComprehensiveScenariosTest();
+  await runGitHubWorkflowIntegrationTests();
 
   console.log('\n🎉 ALL INTEGRATION TESTS PASSED (100%)\n');
 }

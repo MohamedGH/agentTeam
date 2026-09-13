@@ -14,6 +14,7 @@ import {
   FileBackedCodingAgentSessionStore,
   StoredCodingSession,
 } from './sessionStore';
+import { GitHubManager, githubManager as defaultGitHubManager } from '../github';
 
 /**
  * CodingAgentManager
@@ -28,15 +29,25 @@ export class CodingAgentManager {
   private agents: Map<string, ICodingAgent> = new Map();
   private defaultAgentId: string = 'jules';
   private sessionStore: ICodingAgentSessionStore;
+  private githubManager: GitHubManager;
 
-  constructor(sessionStore?: ICodingAgentSessionStore) {
+  constructor(sessionStore?: ICodingAgentSessionStore, customGitHubManager?: GitHubManager) {
     this.sessionStore = sessionStore || new FileBackedCodingAgentSessionStore();
+    this.githubManager = customGitHubManager || defaultGitHubManager;
     this.registerAgent(new JulesAgent());
     this.registerAgent(new MockCodingAgent());
   }
 
   public getSessionStore(): ICodingAgentSessionStore {
     return this.sessionStore;
+  }
+
+  public getGitHubManager(): GitHubManager {
+    return this.githubManager;
+  }
+
+  public setGitHubManager(manager: GitHubManager): void {
+    this.githubManager = manager;
   }
 
   public registerAgent(agent: ICodingAgent): void {
@@ -89,6 +100,61 @@ export class CodingAgentManager {
     });
 
     const result = await agent.executeTask(task, onProgress);
+    result.success = result.status === 'COMPLETED';
+
+    // Git / GitHub automation integration
+    const gitRequested = Boolean(
+      task.git?.commit ||
+      task.git?.push ||
+      task.git?.createPullRequest ||
+      task.commitAndPush ||
+      task.commitPushAndCreatePR ||
+      task.createRepository
+    );
+
+    if (gitRequested) {
+      if (!this.githubManager.isConfigured()) {
+        result.success = false;
+        result.error = 'GITHUB_TOKEN is not configured';
+      } else if (result.status === 'FAILED') {
+        // Critical safety rule: Never automatically push if task or tests failed!
+        result.success = false;
+        result.testsPassed = false;
+        result.error = result.error || result.summary || 'Coding task failed: skipping git push and PR.';
+      } else {
+        const repoTarget = task.repositoryName || task.repository;
+        const targetBranch =
+          task.branch ||
+          result.gitBranch ||
+          `jules/task-${result.sessionId?.slice(-6) || Date.now().toString(36)}`;
+
+        const gitRes = await this.githubManager.processTaskResult({
+          repository: repoTarget,
+          branch: targetBranch,
+          baseBranch: 'main',
+          taskPrompt: task.task,
+          sessionId: result.sessionId,
+          createRepository: task.createRepository,
+          private: task.private,
+          git: task.git,
+          commitAndPush: task.commitAndPush,
+          commitPushAndCreatePR: task.commitPushAndCreatePR,
+          testCommand: task.testCommand || (task.git?.runTests !== false ? 'npm run lint' : undefined),
+        });
+
+        result.testsPassed = gitRes.testsPassed;
+        result.commitSha = gitRes.commitSha;
+        result.commitUrl = gitRes.commitUrl;
+        result.pullRequestUrl = gitRes.pullRequestUrl || result.prUrl;
+        result.git = gitRes.git;
+        result.success = gitRes.success;
+
+        if (!gitRes.success) {
+          result.error = gitRes.error;
+          result.status = 'FAILED';
+        }
+      }
+    }
 
     // Save session snapshot into sessionStore
     if (result.sessionId) {

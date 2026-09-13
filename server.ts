@@ -8,6 +8,7 @@ import { workspace } from './server/virtualWorkspace';
 import { agentTeamEngine } from './server/agentTeam';
 import { codingAgentManager } from './server/codingAgents';
 import { cloudMonitoringQuotaService } from './server/cloudMonitoring';
+import { githubManager } from './server/github';
 
 async function startServer() {
   const app = express();
@@ -25,6 +26,7 @@ async function startServer() {
         server: 'agentTeam-server',
         hasGeminiApiKey: Boolean(process.env.GEMINI_API_KEY),
         hasJulesApiKey: Boolean(process.env.JULES_API_KEY),
+        hasGitHubToken: githubManager.isConfigured(),
         ...health,
       });
     } catch (err: any) {
@@ -33,6 +35,7 @@ async function startServer() {
         server: 'agentTeam-server',
         hasGeminiApiKey: Boolean(process.env.GEMINI_API_KEY),
         hasJulesApiKey: Boolean(process.env.JULES_API_KEY),
+        hasGitHubToken: githubManager.isConfigured(),
         timestamp: new Date().toISOString(),
         error: err.message,
       });
@@ -265,32 +268,68 @@ async function startServer() {
         requirePlanApproval = false,
         waitForCompletion = false,
         timeoutSeconds,
+        createRepository,
+        repositoryName,
+        private: isPrivate,
+        git,
+        commitAndPush,
+        commitPushAndCreatePR,
       } = req.body;
 
       const taskPrompt = task || prompt;
-      if (!repository || !taskPrompt) {
+      const repoTarget = repositoryName || repository;
+      if (!repoTarget || !taskPrompt) {
         return res.status(400).json({ error: 'Repository and task are required' });
       }
 
-      // If client explicitly requests synchronous waiting (e.g. CLI script), use executeTask
-      if (waitForCompletion && timeoutSeconds && timeoutSeconds > 0) {
+      const gitRequested = Boolean(
+        git?.push ||
+        git?.createPullRequest ||
+        commitAndPush ||
+        commitPushAndCreatePR ||
+        createRepository
+      );
+
+      if (gitRequested && !githubManager.isConfigured()) {
+        return res.status(401).json({
+          success: false,
+          error: 'GITHUB_TOKEN is not configured',
+        });
+      }
+
+      // If client requests execution with git operations or synchronous waiting
+      if (gitRequested || (waitForCompletion && timeoutSeconds && timeoutSeconds > 0)) {
         const result = await codingAgentManager.execute({
           agent,
-          repository,
+          repository: repoTarget,
           branch,
           task: taskPrompt,
           title,
           automationMode,
           requirePlanApproval,
           timeoutSeconds,
+          createRepository,
+          repositoryName,
+          private: isPrivate,
+          git,
+          commitAndPush,
+          commitPushAndCreatePR,
         });
-        return res.json(result);
+
+        if (!result.success && result.error === 'GITHUB_TOKEN is not configured') {
+          return res.status(401).json({
+            success: false,
+            error: 'GITHUB_TOKEN is not configured',
+          });
+        }
+
+        return res.status(result.success ? 200 : 500).json(result);
       }
 
       // Default asynchronous flow: startSession immediately returns sessionId and status
       const session = await codingAgentManager.startSession({
         agent,
-        repository,
+        repository: repoTarget,
         branch,
         task: taskPrompt,
         title,
@@ -302,7 +341,7 @@ async function startServer() {
         success: true,
         sessionId: session.id,
         status: session.state || 'QUEUED',
-        repository,
+        repository: repoTarget,
         branch,
         title: session.title || title,
         prompt: taskPrompt,
@@ -317,7 +356,7 @@ async function startServer() {
 
   // Asynchronous Observable Jules & Coding Agent Endpoints
 
-  // 1. Start new Jules session asynchronously (non-blocking)
+  // 1. Start new Jules session (supports immediate asynchronous dispatch or integrated git push workflow)
   app.post('/api/coding-agents/jules/sessions', async (req, res) => {
     try {
       const {
@@ -329,18 +368,84 @@ async function startServer() {
         title,
         automationMode = 'AUTO_CREATE_PR',
         requirePlanApproval = false,
+        createRepository,
+        repositoryName,
+        private: isPrivate,
+        git,
+        commitAndPush,
+        commitPushAndCreatePR,
       } = req.body;
 
       const taskPrompt = task || prompt;
-      if (!repository || !taskPrompt) {
+      const repoTarget = repositoryName || repository;
+      if (!repoTarget || !taskPrompt) {
         return res.status(400).json({
           error: 'Repository and task prompt are required to start a Jules session',
         });
       }
 
+      const gitRequested = Boolean(
+        git?.commit ||
+        git?.push ||
+        git?.createPullRequest ||
+        commitAndPush ||
+        commitPushAndCreatePR ||
+        createRepository
+      );
+
+      // Enforce strict GitHub authentication requirement
+      if (gitRequested && !githubManager.isConfigured()) {
+        return res.status(401).json({
+          success: false,
+          error: 'GITHUB_TOKEN is not configured',
+        });
+      }
+
+      // If Git workflow is requested (commit, push, PR, createRepository), execute the task and git workflow
+      if (gitRequested) {
+        const result = await codingAgentManager.execute({
+          agent,
+          repository: repoTarget,
+          branch,
+          task: taskPrompt,
+          title,
+          automationMode,
+          requirePlanApproval,
+          createRepository,
+          repositoryName,
+          private: isPrivate,
+          git,
+          commitAndPush,
+          commitPushAndCreatePR,
+        });
+
+        if (!result.success && result.error === 'GITHUB_TOKEN is not configured') {
+          return res.status(401).json({
+            success: false,
+            error: 'GITHUB_TOKEN is not configured',
+          });
+        }
+
+        return res.status(result.success ? 200 : (result.testsPassed === false ? 422 : 500)).json({
+          success: result.success,
+          sessionId: result.sessionId,
+          status: result.status,
+          error: result.error,
+          testsPassed: result.testsPassed,
+          git: result.git || {
+            committed: Boolean(result.commitSha),
+            pushed: Boolean(result.commitUrl),
+            branch: result.gitBranch || branch,
+            commitSha: result.commitSha,
+            commitUrl: result.commitUrl,
+            pullRequestUrl: result.pullRequestUrl || result.prUrl,
+          },
+        });
+      }
+
       const session = await codingAgentManager.startSession({
         agent,
-        repository,
+        repository: repoTarget,
         branch,
         task: taskPrompt,
         title,
@@ -514,6 +619,79 @@ async function startServer() {
     }
   });
 
+  // -------------------------------------------------------------
+  // GITHUB DIRECT WORKFLOW & REPOSITORY APIS
+  // -------------------------------------------------------------
+  app.get('/api/github/status', async (req, res) => {
+    try {
+      const configured = githubManager.isConfigured();
+      if (!configured) {
+        return res.json({
+          configured: false,
+          error: 'GITHUB_TOKEN is not configured',
+        });
+      }
+      try {
+        const user = await githubManager.getClient().getAuthenticatedUser();
+        return res.json({
+          configured: true,
+          user: {
+            login: user.login,
+            id: user.id,
+            avatar_url: user.avatar_url,
+            html_url: user.html_url,
+          },
+        });
+      } catch (clientErr: any) {
+        return res.json({
+          configured: true,
+          user: null,
+          warning: clientErr.message,
+        });
+      }
+    } catch (err: any) {
+      res.status(500).json({ configured: false, error: err.message });
+    }
+  });
+
+  app.post('/api/github/workflow', async (req, res) => {
+    try {
+      if (!githubManager.isConfigured()) {
+        return res.status(401).json({
+          success: false,
+          error: 'GITHUB_TOKEN is not configured',
+        });
+      }
+
+      const result = await githubManager.processTaskResult(req.body);
+      return res.status(result.success ? 200 : (result.testsPassed === false ? 422 : 500)).json(result);
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.post('/api/github/repositories', async (req, res) => {
+    try {
+      if (!githubManager.isConfigured()) {
+        return res.status(401).json({
+          success: false,
+          error: 'GITHUB_TOKEN is not configured',
+        });
+      }
+
+      const { repository, createRepository = true, private: isPrivate = false } = req.body;
+      const repo = await githubManager.ensureRepository({
+        repository,
+        createRepository,
+        private: isPrivate,
+      });
+
+      res.json({ success: true, repository: repo });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
   // Multi-Agent Team Execution API (with optional Jules delegation)
   app.post('/api/team/run', async (req, res) => {
     try {
@@ -527,6 +705,12 @@ async function startServer() {
         branch,
         automationMode,
         title,
+        createRepository,
+        repositoryName,
+        private: isPrivate,
+        commitAndPush,
+        commitPushAndCreatePR,
+        git,
       } = req.body;
 
       if (!prompt || typeof prompt !== 'string') {
@@ -541,6 +725,12 @@ async function startServer() {
         branch,
         automationMode,
         title,
+        createRepository,
+        repositoryName,
+        private: isPrivate,
+        commitAndPush,
+        commitPushAndCreatePR,
+        git,
       });
       res.json(result);
     } catch (err: any) {
@@ -559,6 +749,12 @@ async function startServer() {
     const branch = (req.body?.branch || req.query?.branch) as string | undefined;
     const automationMode = (req.body?.automationMode || req.query?.automationMode) as any;
     const title = (req.body?.title || req.query?.title) as string | undefined;
+    const createRepository = req.body?.createRepository ?? (req.query?.createRepository === 'true');
+    const repositoryName = (req.body?.repositoryName || req.query?.repositoryName) as string | undefined;
+    const isPrivate = req.body?.private ?? (req.query?.private === 'true');
+    const commitAndPush = req.body?.commitAndPush ?? (req.query?.commitAndPush === 'true');
+    const commitPushAndCreatePR = req.body?.commitPushAndCreatePR ?? (req.query?.commitPushAndCreatePR === 'true');
+    const git = req.body?.git;
 
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -580,6 +776,12 @@ async function startServer() {
           branch,
           automationMode,
           title,
+          createRepository,
+          repositoryName,
+          private: isPrivate,
+          commitAndPush,
+          commitPushAndCreatePR,
+          git,
         }
       );
 

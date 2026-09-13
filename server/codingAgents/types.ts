@@ -88,9 +88,22 @@ export interface CodingAgentTask {
   requirePlanApproval?: boolean;
   timeoutSeconds?: number;
   pollIntervalSeconds?: number;
+  createRepository?: boolean;
+  repositoryName?: string;
+  private?: boolean;
+  commitAndPush?: boolean;
+  commitPushAndCreatePR?: boolean;
+  testCommand?: string;
+  git?: {
+    commit?: boolean;
+    push?: boolean;
+    createPullRequest?: boolean;
+    runTests?: boolean;
+  };
 }
 
 export interface CodingAgentResult {
+  success?: boolean;
   agentId: string;
   sessionId: string;
   status: JulesSessionState;
@@ -105,6 +118,19 @@ export interface CodingAgentResult {
   rawSession?: any;
   durationMs: number;
   error?: string;
+  commitSha?: string;
+  commitUrl?: string;
+  pullRequestUrl?: string;
+  testsPassed?: boolean;
+  git?: {
+    committed: boolean;
+    pushed: boolean;
+    branch: string;
+    commitSha?: string;
+    commitUrl?: string;
+    pullRequestUrl?: string;
+    filesChanged?: string[];
+  };
 }
 
 export interface CodingAgentInfo {
