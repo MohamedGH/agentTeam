@@ -18,13 +18,13 @@ export function sanitizeErrorMessage(rawMessage: string): string {
 
   return rawMessage
     // Redact Google Gemini API keys (AIzaSy...)
-    .replace(/AIza[0-9A-Za-z-_]{20,}/g, 'AIza...[REDACTED_API_KEY]')
-    // Redact OpenAI API keys (sk-...)
-    .replace(/sk-[0-9a-zA-Z-_]{20,}/g, 'sk-...[REDACTED_API_KEY]')
-    // Redact Groq API keys (gsk_...)
-    .replace(/gsk_[0-9a-zA-Z-_]{20,}/g, 'gsk_...[REDACTED_API_KEY]')
+    .replace(/AIza[0-9A-Za-z-_]{10,}/g, 'AIza...[REDACTED_API_KEY]')
     // Redact Anthropic API keys (sk-ant-...)
-    .replace(/sk-ant-[0-9a-zA-Z-_]{20,}/g, 'sk-ant-...[REDACTED_API_KEY]')
+    .replace(/sk-ant-[0-9a-zA-Z-_]{5,}/g, 'sk-ant-...[REDACTED_API_KEY]')
+    // Redact Groq API keys (gsk_...)
+    .replace(/gsk_[0-9a-zA-Z-_]{5,}/g, 'gsk_...[REDACTED_API_KEY]')
+    // Redact OpenAI API keys (sk-...)
+    .replace(/sk-[0-9a-zA-Z-_]{10,}/g, 'sk-...[REDACTED_API_KEY]')
     // Redact Authorization Bearer headers
     .replace(/Bearer\s+[A-Za-z0-9._-]+/gi, 'Bearer [REDACTED_TOKEN]')
     // Redact query parameter keys: ?key=... or &key=...

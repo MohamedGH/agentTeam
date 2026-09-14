@@ -232,6 +232,65 @@ Provide your architectural breakdown and delegation plan.`;
             };
           }
 
+          if (executionStatus === 'CANCELLED') {
+            const cancelMsg = julesResult.summary || 'Google Jules coding agent session was cancelled.';
+            addStep({
+              phase: 2,
+              phaseName: 'Implementation (Jules)',
+              agent: 'developer',
+              thought: `Google Jules execution cancelled: ${cancelMsg}`,
+              toolCalls: [
+                {
+                  id: 'tc_jules_cancelled',
+                  name: 'jules_session_cancelled',
+                  args: { sessionId: julesResult.sessionId, status: 'CANCELLED' },
+                  result: `CANCELLED: ${cancelMsg}`,
+                  timestamp: Date.now(),
+                },
+              ],
+              status: 'STATUS: CANCELLED',
+              output: cancelMsg,
+            });
+
+            return {
+              taskId,
+              taskPrompt,
+              success: false,
+              executionStatus: 'CANCELLED',
+              modelUsed: chosenModel,
+              codingAgentUsed: codingAgentToUse || undefined,
+              prUrl: julesResult.pullRequestUrl || julesResult.prUrl,
+              gitBranch: julesResult.git?.branch || julesResult.gitBranch,
+              commitSha: julesResult.commitSha,
+              commitUrl: julesResult.commitUrl,
+              pullRequestUrl: julesResult.pullRequestUrl || julesResult.prUrl,
+              testsPassed: undefined,
+              git: julesResult.git,
+              steps,
+              finalReport: {
+                implementation: 'RUNNING',
+                tests: 'SKIPPED',
+                review: 'SKIPPED',
+                filesChanged: [],
+                testSummary: 'Tests skipped: Google Jules session was cancelled.',
+                reviewSummary: 'Review skipped: Google Jules session was cancelled.',
+                remainingIssues: [cancelMsg],
+                totalCycles: {
+                  testerCorrections: 0,
+                  reviewerCorrections: 0,
+                },
+                metrics: {
+                  durationMs: Date.now() - startTime,
+                  modelUsed: chosenModel,
+                  providerUsed: activeProvider,
+                  codingAgentUsed: codingAgentToUse || undefined,
+                },
+              },
+              virtualFiles: workspace.getFiles(),
+              error: undefined,
+            };
+          }
+
           if (executionStatus === 'RUNNING') {
             // Asynchronous session actively running in the cloud (QUEUED, PLANNING, IN_PROGRESS, etc.)
             // CRITICAL ORCHESTRATION RULES:
@@ -689,12 +748,21 @@ Evaluate code quality, security implications, maintainability, and clean archite
     task: CodingAgentTask,
     onStep?: (step: AgentStep) => void
   ): Promise<TeamRunResult> {
+    const isMock = task.agent === 'mock';
     return this.runWorkflow(task.task, 'tier_3', onStep, {
+      provider: isMock ? 'mock' : undefined,
+      model: isMock ? 'mock-fast-model' : undefined,
       codingAgent: (task.agent as any) || 'jules',
       repository: task.repository,
       branch: task.branch,
       automationMode: task.automationMode,
       title: task.title,
+      commitAndPush: task.commitAndPush,
+      commitPushAndCreatePR: task.commitPushAndCreatePR,
+      git: task.git,
+      createRepository: task.createRepository,
+      repositoryName: task.repositoryName,
+      private: task.private,
     });
   }
 

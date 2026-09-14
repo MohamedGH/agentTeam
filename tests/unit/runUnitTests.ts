@@ -5,6 +5,7 @@ import { runQuotaAndTokenAccountingUnitTests } from './quotaAndTokenAccounting.t
 import { runCodingAgentsUnitTests } from './codingAgents.test';
 import { runGitHubUnitTests } from './github.test';
 import { runErrorClassifierAndFailoverUnitTests } from './errorClassifierAndFailover.test';
+import { runHardeningVerificationTests } from './hardeningVerification.test';
 
 export async function runAllUnitTests() {
   console.log('====================================================');
@@ -18,6 +19,7 @@ export async function runAllUnitTests() {
   await runCodingAgentsUnitTests();
   await runGitHubUnitTests();
   await runErrorClassifierAndFailoverUnitTests();
+  await runHardeningVerificationTests();
 
   console.log('\n🎉 ALL UNIT TESTS PASSED (100%)\n');
 }

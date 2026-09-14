@@ -521,6 +521,27 @@ export class JulesAgent implements ICodingAgent {
         };
       }
 
+      if (currentStatus === 'CANCELLED') {
+        const cancelMsg = session.resultSummary || 'Google Jules task was cancelled';
+        return {
+          success: false,
+          executionStatus: 'CANCELLED',
+          agentId: this.id,
+          sessionId,
+          status: 'CANCELLED',
+          repository: task.repository,
+          branch,
+          title: task.title,
+          prompt: task.task,
+          prUrl: session.prUrl,
+          gitBranch: session.gitBranch,
+          summary: cancelMsg,
+          activities,
+          rawSession: session,
+          durationMs: Date.now() - startMs,
+        };
+      }
+
       const isCompleted = currentStatus === 'COMPLETED';
 
       const summary =

@@ -207,7 +207,7 @@ export async function runCodingAgentsUnitTests() {
   assert.strictEqual(deriveExecutionStatus('PAUSED', false), 'RUNNING');
   assert.strictEqual(deriveExecutionStatus('FAILED', false), 'FAILED');
   assert.strictEqual(deriveExecutionStatus('FAILED', true), 'FAILED');
-  assert.strictEqual(deriveExecutionStatus('CANCELLED', false), 'FAILED');
+  assert.strictEqual(deriveExecutionStatus('CANCELLED', false), 'CANCELLED');
   assert.strictEqual(deriveExecutionStatus('COMPLETED', false), 'COMPLETED');
   assert.strictEqual(deriveExecutionStatus('COMPLETED', true), 'FAILED', 'Error flag overrides COMPLETED to FAILED');
   assert.strictEqual(mockResult.executionStatus, 'COMPLETED');

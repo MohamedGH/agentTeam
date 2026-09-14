@@ -116,20 +116,26 @@ export class CodingAgentManager {
     );
 
     if (gitRequested) {
-      if (!this.githubManager.isConfigured()) {
+      if (result.executionStatus === 'RUNNING') {
+        // Jules session is still in flight in the cloud (e.g. QUEUED, PLANNING, IN_PROGRESS).
+        // Do NOT push to git or create PR yet, and NEVER treat as failed due to missing GitHub token!
+        result.testsPassed = undefined;
         result.success = false;
-        result.error = 'GITHUB_TOKEN is not configured';
-        result.executionStatus = 'FAILED';
+        // executionStatus remains 'RUNNING'
+      } else if (result.executionStatus === 'CANCELLED') {
+        // Jules session was cancelled. Do NOT execute git automation or treat as generic FAILED!
+        result.testsPassed = undefined;
+        result.success = false;
+        result.executionStatus = 'CANCELLED';
       } else if (result.executionStatus === 'FAILED') {
         // Critical safety rule: Never automatically push if task or tests failed!
         result.success = false;
         result.testsPassed = false;
         result.error = result.error || result.summary || 'Coding task failed: skipping git push and PR.';
-      } else if (result.executionStatus === 'RUNNING') {
-        // Jules session is still in flight in the cloud (e.g. QUEUED, PLANNING, IN_PROGRESS).
-        // Do NOT push to git or create PR yet, but DO NOT treat as failed!
-        result.testsPassed = undefined;
+      } else if (!this.githubManager.isConfigured()) {
         result.success = false;
+        result.error = 'GITHUB_TOKEN is not configured';
+        result.executionStatus = 'FAILED';
       } else if (result.executionStatus === 'COMPLETED') {
         const repoTarget = task.repositoryName || task.repository;
         const targetBranch =

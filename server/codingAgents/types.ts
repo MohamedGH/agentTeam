@@ -14,10 +14,13 @@ export type JulesSessionState =
   | 'CANCELLED'
   | string;
 
-export type ExecutionStatus = 'FAILED' | 'RUNNING' | 'COMPLETED';
+export type ExecutionStatus = 'FAILED' | 'RUNNING' | 'COMPLETED' | 'CANCELLED';
 
 export function deriveExecutionStatus(status?: string, hasError?: boolean): ExecutionStatus {
-  if (hasError || status === 'FAILED' || status === 'CANCELLED') {
+  if (status === 'CANCELLED') {
+    return 'CANCELLED';
+  }
+  if (hasError || status === 'FAILED') {
     return 'FAILED';
   }
   if (status === 'COMPLETED') {

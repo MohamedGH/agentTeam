@@ -50,6 +50,12 @@ export interface ProviderInfo {
 
 export type TokenAccountingType = 'real_provider' | 'mock' | 'fallback_unknown';
 
+export type GenerationOutcome =
+  | 'REAL_PROVIDER_SUCCESS'
+  | 'DEGRADED_FALLBACK'
+  | 'PROVIDER_FAILURE'
+  | 'TASK_FAILURE';
+
 export interface AgentStep {
   id: string;
   phase: number;
@@ -68,12 +74,16 @@ export interface AgentStep {
   isRealTokenUsage?: boolean;
   tokenAccountingType?: TokenAccountingType;
   failoverHistory?: FailoverRecord[];
+  generationOutcome?: GenerationOutcome;
 }
 
-export type ExecutionStatus = 'FAILED' | 'RUNNING' | 'COMPLETED';
+export type ExecutionStatus = 'FAILED' | 'RUNNING' | 'COMPLETED' | 'CANCELLED';
 
 export function deriveExecutionStatus(status?: string, hasError?: boolean): ExecutionStatus {
-  if (hasError || status === 'FAILED' || status === 'CANCELLED') {
+  if (status === 'CANCELLED') {
+    return 'CANCELLED';
+  }
+  if (hasError || status === 'FAILED') {
     return 'FAILED';
   }
   if (status === 'COMPLETED') {

@@ -149,6 +149,8 @@ export class MockCodingAgent implements ICodingAgent {
     let simulatedState: JulesSessionState = 'COMPLETED';
     if (isFailureTrigger) {
       simulatedState = 'FAILED';
+    } else if (task.task.includes('TASK_SIMULATE_CANCELLED')) {
+      simulatedState = 'CANCELLED';
     } else if (task.task.includes('TASK_SIMULATE_QUEUED') || (!task.timeoutSeconds && task.timeoutSeconds !== undefined)) {
       simulatedState = 'QUEUED';
     } else if (task.task.includes('TASK_SIMULATE_PLANNING')) {
@@ -159,6 +161,8 @@ export class MockCodingAgent implements ICodingAgent {
       simulatedState = 'IN_PROGRESS';
     } else if (task.task.includes('TASK_SIMULATE_PAUSED')) {
       simulatedState = 'PAUSED';
+    } else if (task.task.includes('TASK_SIMULATE_COMPLETED')) {
+      simulatedState = 'COMPLETED';
     }
 
     const session: JulesSession = {
@@ -445,9 +449,12 @@ export class MockCodingAgent implements ICodingAgent {
       }
     }
 
-    const isFailed = session.state === 'FAILED' || session.state === 'CANCELLED';
+    const isCancelled = session.state === 'CANCELLED';
+    const isFailed = session.state === 'FAILED';
     const isCompleted = session.state === 'COMPLETED';
-    const executionStatus: ExecutionStatus = isFailed
+    const executionStatus: ExecutionStatus = isCancelled
+      ? 'CANCELLED'
+      : isFailed
       ? 'FAILED'
       : isCompleted
       ? 'COMPLETED'
@@ -469,6 +476,8 @@ export class MockCodingAgent implements ICodingAgent {
         session.resultSummary ||
         (isFailed
           ? 'Task execution failed'
+          : isCancelled
+          ? 'Task execution was cancelled'
           : isCompleted
           ? 'Task completed successfully'
           : `Google Jules session started asynchronously (State: ${session.state}). Session ID: ${session.id}`),

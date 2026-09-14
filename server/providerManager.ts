@@ -70,14 +70,20 @@ export class ProviderManager {
   private activeProvider: AIProviderId = 'gemini';
   private activeModelOverrides: Partial<Record<AIProviderId, string>> = {};
 
-  constructor() {
-    this.registerProvider(new GeminiProvider());
-    this.registerProvider(new OpenAIProvider());
-    this.registerProvider(new AnthropicProvider());
-    this.registerProvider(new GroqProvider());
-    this.registerProvider(new DeepSeekProvider());
-    this.registerProvider(new CustomProvider());
-    this.registerProvider(new MockProvider());
+  constructor(options?: { registerDefaults?: boolean }) {
+    if (options?.registerDefaults !== false) {
+      this.registerProvider(new GeminiProvider());
+      this.registerProvider(new OpenAIProvider());
+      this.registerProvider(new AnthropicProvider());
+      this.registerProvider(new GroqProvider());
+      this.registerProvider(new DeepSeekProvider());
+      this.registerProvider(new CustomProvider());
+      this.registerProvider(new MockProvider());
+    }
+  }
+
+  public clearProviders(): void {
+    this.providers.clear();
   }
 
   public registerProvider(provider: IAIProvider) {
@@ -321,6 +327,7 @@ export class ProviderManager {
             provider: provId,
             model: candidateModel,
             failoverHistory: failoverHistory.length > 0 ? failoverHistory : undefined,
+            generationOutcome: res.generationOutcome || (res.isRealProviderUsage ? 'REAL_PROVIDER_SUCCESS' : 'DEGRADED_FALLBACK'),
           };
         } catch (err: any) {
           const classified = classifyProviderError(err);
@@ -389,6 +396,7 @@ export class ProviderManager {
       model,
       isRealProviderUsage: false,
       tokenAccountingType: 'fallback_unknown',
+      generationOutcome: 'DEGRADED_FALLBACK',
       failoverHistory: failoverHistory.length > 0 ? failoverHistory : undefined,
     };
   }

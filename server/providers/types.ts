@@ -34,6 +34,12 @@ export { classifyProviderError, sanitizeErrorMessage } from './errorClassifier';
 
 export type TokenAccountingType = 'real_provider' | 'mock' | 'fallback_unknown';
 
+export type GenerationOutcome =
+  | 'REAL_PROVIDER_SUCCESS'
+  | 'DEGRADED_FALLBACK'
+  | 'MOCK_SUCCESS'
+  | 'TASK_FAILURE';
+
 export interface ProviderModelConfig {
   name: string;
   displayName: string;
@@ -53,6 +59,7 @@ export interface GenerationUsageResult {
   isRealProviderUsage: boolean;
   tokenAccountingType: TokenAccountingType;
   failoverHistory?: FailoverRecord[];
+  generationOutcome?: GenerationOutcome;
 }
 
 export interface GenerateOptions {
