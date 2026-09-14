@@ -1,0 +1,113 @@
+[
+  {
+    "sessionId": "mock_sess_02pq6f4",
+    "agentId": "mock",
+    "repository": "MohamedGH/agentTeam",
+    "branch": "main",
+    "task": "Testing no premature git push",
+    "status": "QUEUED",
+    "createdAt": "2026-09-14T19:52:25.963Z",
+    "updatedAt": "2026-09-14T19:52:26.525Z",
+    "gitBranch": "jules/patch-q6f4",
+    "title": "agentTeam: Testing no premature git push",
+    "summary": "Session queued and ready for autonomous cloud execution.",
+    "activities": [
+      {
+        "id": "act_mock_sess_02pq6f4_1",
+        "originator": "AGENT",
+        "actionType": "PLANNING",
+        "description": "Session initialized on MohamedGH/agentTeam (branch: main).",
+        "createTime": "2026-09-14T19:52:25.963Z"
+      }
+    ],
+    "lastActivityAt": "2026-09-14T19:52:26.525Z",
+    "workflowState": {
+      "workflowId": "wf_mock_sess_02pq6f4",
+      "sessionId": "mock_sess_02pq6f4",
+      "agentId": "mock",
+      "repository": "MohamedGH/agentTeam",
+      "branch": "main",
+      "task": "Testing no premature git push",
+      "title": "agentTeam: Testing no premature git push",
+      "stage": "JULES_RUNNING",
+      "status": "QUEUED",
+      "executionStatus": "RUNNING",
+      "options": {
+        "agent": "mock",
+        "repository": "MohamedGH/agentTeam",
+        "branch": "main",
+        "taskPrompt": "Testing no premature git push",
+        "commitAndPush": true,
+        "commitPushAndCreatePR": true
+      },
+      "createdAt": "2026-09-14T19:52:25.963Z",
+      "updatedAt": "2026-09-14T19:52:26.525Z",
+      "lastPolledAt": "2026-09-14T19:52:26.525Z",
+      "pollCount": 4,
+      "gitBranch": "jules/patch-q6f4",
+      "steps": [
+        {
+          "id": "step_init_1789415545963",
+          "phase": 1,
+          "phaseName": "Task Architecture & Orchestration",
+          "agent": "manager",
+          "thought": "Initialized asynchronous workflow wf_mock_sess_02pq6f4 for task: \"Testing no premature git push\" on repository MohamedGH/agentTeam (main).",
+          "status": "Workflow Dispatched",
+          "output": "Target: MohamedGH/agentTeam:main | Agent: mock | Mode: AUTO_CREATE_PR",
+          "timestamp": 1789415545963
+        },
+        {
+          "id": "step_dev_1789415545963",
+          "phase": 2,
+          "phaseName": "Autonomous Coding Session (Mock Jules)",
+          "agent": "developer",
+          "thought": "Cloud session started (State: QUEUED). Polling orchestrator assigned to monitor progress.",
+          "status": "STATUS: RUNNING (QUEUED)",
+          "output": "Session ID: mock_sess_02pq6f4",
+          "timestamp": 1789415545963
+        },
+        {
+          "id": "step_act_1789415545964_1yo5",
+          "phase": 2,
+          "phaseName": "Jules Activity",
+          "agent": "developer",
+          "thought": "Jules Activity: Session initialized on MohamedGH/agentTeam (branch: main).",
+          "status": "PLANNING",
+          "output": "Session initialized on MohamedGH/agentTeam (branch: main).",
+          "timestamp": 1789415545963
+        },
+        {
+          "id": "step_act_1789415546323_gxsq",
+          "phase": 2,
+          "phaseName": "Jules Activity",
+          "agent": "developer",
+          "thought": "Jules Activity: Session initialized on MohamedGH/agentTeam (branch: main).",
+          "status": "PLANNING",
+          "output": "Session initialized on MohamedGH/agentTeam (branch: main).",
+          "timestamp": 1789415545963
+        },
+        {
+          "id": "step_act_1789415546424_rj60",
+          "phase": 2,
+          "phaseName": "Jules Activity",
+          "agent": "developer",
+          "thought": "Jules Activity: Session initialized on MohamedGH/agentTeam (branch: main).",
+          "status": "PLANNING",
+          "output": "Session initialized on MohamedGH/agentTeam (branch: main).",
+          "timestamp": 1789415545963
+        },
+        {
+          "id": "step_act_1789415546525_16w3",
+          "phase": 2,
+          "phaseName": "Jules Activity",
+          "agent": "developer",
+          "thought": "Jules Activity: Session initialized on MohamedGH/agentTeam (branch: main).",
+          "status": "PLANNING",
+          "output": "Session initialized on MohamedGH/agentTeam (branch: main).",
+          "timestamp": 1789415545963
+        }
+      ],
+      "summary": "Session queued and ready for autonomous cloud execution."
+    }
+  }
+]

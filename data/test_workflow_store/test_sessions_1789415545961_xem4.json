@@ -1,0 +1,102 @@
+[
+  {
+    "sessionId": "mock_sess_qm02fmc",
+    "agentId": "mock",
+    "repository": "MohamedGH/agentTeam",
+    "branch": "main",
+    "task": "Implement async orchestrator pipeline",
+    "status": "QUEUED",
+    "createdAt": "2026-09-14T19:52:25.962Z",
+    "updatedAt": "2026-09-14T19:52:26.525Z",
+    "gitBranch": "jules/patch-2fmc",
+    "title": "agentTeam: Implement async orchestrator pipeline",
+    "summary": "Session queued and ready for autonomous cloud execution.",
+    "activities": [
+      {
+        "id": "act_mock_sess_qm02fmc_1",
+        "originator": "AGENT",
+        "actionType": "PLANNING",
+        "description": "Session initialized on MohamedGH/agentTeam (branch: main).",
+        "createTime": "2026-09-14T19:52:25.962Z"
+      }
+    ],
+    "lastActivityAt": "2026-09-14T19:52:26.524Z",
+    "workflowState": {
+      "workflowId": "wf_mock_sess_qm02fmc",
+      "sessionId": "mock_sess_qm02fmc",
+      "agentId": "mock",
+      "repository": "MohamedGH/agentTeam",
+      "branch": "main",
+      "task": "Implement async orchestrator pipeline",
+      "title": "agentTeam: Implement async orchestrator pipeline",
+      "stage": "JULES_RUNNING",
+      "status": "QUEUED",
+      "executionStatus": "RUNNING",
+      "options": {
+        "agent": "mock",
+        "repository": "MohamedGH/agentTeam",
+        "branch": "main",
+        "taskPrompt": "Implement async orchestrator pipeline",
+        "automationMode": "AUTO_CREATE_PR"
+      },
+      "createdAt": "2026-09-14T19:52:25.962Z",
+      "updatedAt": "2026-09-14T19:52:26.524Z",
+      "lastPolledAt": "2026-09-14T19:52:26.524Z",
+      "pollCount": 3,
+      "gitBranch": "jules/patch-2fmc",
+      "steps": [
+        {
+          "id": "step_init_1789415545962",
+          "phase": 1,
+          "phaseName": "Task Architecture & Orchestration",
+          "agent": "manager",
+          "thought": "Initialized asynchronous workflow wf_mock_sess_qm02fmc for task: \"Implement async orchestrator pipeline\" on repository MohamedGH/agentTeam (main).",
+          "status": "Workflow Dispatched",
+          "output": "Target: MohamedGH/agentTeam:main | Agent: mock | Mode: AUTO_CREATE_PR",
+          "timestamp": 1789415545962
+        },
+        {
+          "id": "step_dev_1789415545962",
+          "phase": 2,
+          "phaseName": "Autonomous Coding Session (Mock Jules)",
+          "agent": "developer",
+          "thought": "Cloud session started (State: QUEUED). Polling orchestrator assigned to monitor progress.",
+          "status": "STATUS: RUNNING (QUEUED)",
+          "output": "Session ID: mock_sess_qm02fmc",
+          "timestamp": 1789415545962
+        },
+        {
+          "id": "step_act_1789415546323_zjrh",
+          "phase": 2,
+          "phaseName": "Jules Activity",
+          "agent": "developer",
+          "thought": "Jules Activity: Session initialized on MohamedGH/agentTeam (branch: main).",
+          "status": "PLANNING",
+          "output": "Session initialized on MohamedGH/agentTeam (branch: main).",
+          "timestamp": 1789415545962
+        },
+        {
+          "id": "step_act_1789415546424_tity",
+          "phase": 2,
+          "phaseName": "Jules Activity",
+          "agent": "developer",
+          "thought": "Jules Activity: Session initialized on MohamedGH/agentTeam (branch: main).",
+          "status": "PLANNING",
+          "output": "Session initialized on MohamedGH/agentTeam (branch: main).",
+          "timestamp": 1789415545962
+        },
+        {
+          "id": "step_act_1789415546525_ormj",
+          "phase": 2,
+          "phaseName": "Jules Activity",
+          "agent": "developer",
+          "thought": "Jules Activity: Session initialized on MohamedGH/agentTeam (branch: main).",
+          "status": "PLANNING",
+          "output": "Session initialized on MohamedGH/agentTeam (branch: main).",
+          "timestamp": 1789415545962
+        }
+      ],
+      "summary": "Session queued and ready for autonomous cloud execution."
+    }
+  }
+]

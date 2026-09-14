@@ -7,6 +7,7 @@ import { quotaManager } from './server/quotaManager';
 import { workspace } from './server/virtualWorkspace';
 import { agentTeamEngine } from './server/agentTeam';
 import { codingAgentManager } from './server/codingAgents';
+import { workflowOrchestrator } from './server/workflowOrchestrator';
 import { cloudMonitoringQuotaService } from './server/cloudMonitoring';
 import { githubManager } from './server/github';
 
@@ -622,6 +623,114 @@ async function startServer() {
   });
 
   // -------------------------------------------------------------
+  // WORKFLOW ORCHESTRATOR APIS
+  // -------------------------------------------------------------
+  app.post('/api/workflows', async (req, res) => {
+    try {
+      const {
+        agent = 'jules',
+        repository,
+        branch = 'main',
+        task,
+        prompt,
+        title,
+        automationMode = 'AUTO_CREATE_PR',
+        git,
+        commitAndPush,
+        commitPushAndCreatePR,
+        createRepository,
+        testCommand,
+      } = req.body;
+
+      const taskPrompt = task || prompt;
+      if (!repository || !taskPrompt) {
+        return res.status(400).json({ error: 'repository and task prompt are required' });
+      }
+
+      const workflow = await workflowOrchestrator.startWorkflow({
+        agent,
+        repository,
+        branch,
+        taskPrompt,
+        title,
+        automationMode,
+        git,
+        commitAndPush,
+        commitPushAndCreatePR,
+        createRepository,
+        testCommand,
+      });
+
+      res.status(201).json({
+        success: true,
+        workflowId: workflow.workflowId,
+        sessionId: workflow.sessionId,
+        status: workflow.status,
+        stage: workflow.stage,
+        executionStatus: workflow.executionStatus,
+        workflow,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get('/api/workflows', async (req, res) => {
+    try {
+      const active = workflowOrchestrator.getActiveWorkflows();
+      const allStored = await codingAgentManager.listStoredSessions();
+      const workflows = allStored
+        .filter((s) => s.workflowState)
+        .map((s) => s.workflowState);
+
+      res.json({
+        success: true,
+        activeWorkflowsCount: active.length,
+        active,
+        workflows,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get('/api/workflows/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const workflow = await workflowOrchestrator.getWorkflow(id);
+      if (!workflow) {
+        return res.status(404).json({ error: `Workflow "${id}" not found` });
+      }
+      res.json({ success: true, workflow });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/workflows/:id/poll', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const workflow = await workflowOrchestrator.pollWorkflow(id);
+      res.json({ success: true, workflow });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/workflows/:id/resume', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const workflow = await workflowOrchestrator.resumeWorkflow(id);
+      if (!workflow) {
+        return res.status(404).json({ error: `Workflow "${id}" not found` });
+      }
+      res.json({ success: true, workflow });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // -------------------------------------------------------------
   // GITHUB DIRECT WORKFLOW & REPOSITORY APIS
   // -------------------------------------------------------------
   app.get('/api/github/status', async (req, res) => {
@@ -811,6 +920,15 @@ async function startServer() {
     app.use((req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
+  }
+
+  // Resume all non-terminal workflows persisted across server reboot
+  try {
+    const resumed = await workflowOrchestrator.resumeAllActiveWorkflows();
+    console.log(`[agentTeam] Resumed ${resumed.length} active workflows from durable store.`);
+    workflowOrchestrator.ensurePollerRunning();
+  } catch (err: any) {
+    console.warn('[agentTeam] Non-fatal error resuming active workflows:', err.message);
   }
 
   app.listen(PORT, '0.0.0.0', () => {

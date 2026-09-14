@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { JulesActivity, JulesSessionState, isTerminalState, isValidStateTransition } from './types';
+import { JulesActivity, JulesSessionState, WorkflowState, isTerminalState, isValidStateTransition } from './types';
 
 /**
  * StoredCodingSession
@@ -23,6 +23,7 @@ export interface StoredCodingSession {
   error?: string;
   activities?: JulesActivity[];
   metadata?: Record<string, any>;
+  workflowState?: WorkflowState;
 }
 
 /**
@@ -43,6 +44,8 @@ export interface ICodingAgentSessionStore {
   listSessions(agentId?: string): Promise<StoredCodingSession[]>;
   saveActivities(sessionId: string, activities: JulesActivity[]): Promise<void>;
   getActivities(sessionId: string, sinceIsoTimestamp?: string): Promise<JulesActivity[]>;
+  listActiveWorkflows?(): Promise<StoredCodingSession[]>;
+  saveWorkflowState?(sessionId: string, workflowState: WorkflowState): Promise<StoredCodingSession | null>;
   deleteSession?(sessionId: string): Promise<boolean>;
 }
 
@@ -262,6 +265,29 @@ export class FileBackedCodingAgentSessionStore implements ICodingAgentSessionSto
     return session.activities.filter((a) => {
       if (!a.createTime) return true;
       return new Date(a.createTime).getTime() > sinceTime;
+    });
+  }
+
+  public async listActiveWorkflows(): Promise<StoredCodingSession[]> {
+    this.loadFromDisk();
+    const all = Array.from(this.cache.values());
+    return all.filter((s) => {
+      if (!s || !s.sessionId) return false;
+      const isTerminal = isTerminalState(s.status);
+      const isWorkflowTerminal = s.workflowState?.stage === 'COMPLETED' || s.workflowState?.stage === 'FAILED' || s.workflowState?.stage === 'CANCELLED';
+      // An active workflow is one that is NOT terminal in either Jules status or overall workflowStage
+      return !isTerminal || (s.workflowState && !isWorkflowTerminal);
+    });
+  }
+
+  public async saveWorkflowState(sessionId: string, workflowState: WorkflowState): Promise<StoredCodingSession | null> {
+    return this.updateSession(sessionId, {
+      workflowState,
+      status: workflowState.status || undefined,
+      prUrl: workflowState.prUrl || undefined,
+      gitBranch: workflowState.gitBranch || undefined,
+      error: workflowState.error || undefined,
+      updatedAt: new Date().toISOString(),
     });
   }
 

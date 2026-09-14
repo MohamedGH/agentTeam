@@ -6,6 +6,7 @@ import { runCodingAgentsUnitTests } from './codingAgents.test';
 import { runGitHubUnitTests } from './github.test';
 import { runErrorClassifierAndFailoverUnitTests } from './errorClassifierAndFailover.test';
 import { runHardeningVerificationTests } from './hardeningVerification.test';
+import { runWorkflowOrchestratorUnitTests } from './workflowOrchestrator.test';
 
 export async function runAllUnitTests() {
   console.log('====================================================');
@@ -20,13 +21,16 @@ export async function runAllUnitTests() {
   await runGitHubUnitTests();
   await runErrorClassifierAndFailoverUnitTests();
   await runHardeningVerificationTests();
+  await runWorkflowOrchestratorUnitTests();
 
   console.log('\n🎉 ALL UNIT TESTS PASSED (100%)\n');
 }
 
 if (import.meta.url.endsWith(process.argv[1]) || process.argv[1]?.includes('runUnitTests')) {
-  runAllUnitTests().catch((err) => {
-    console.error('Unit tests failed:', err);
-    process.exit(1);
-  });
+  runAllUnitTests()
+    .then(() => process.exit(0))
+    .catch((err) => {
+      console.error('Unit tests failed:', err);
+      process.exit(1);
+    });
 }

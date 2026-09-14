@@ -33,6 +33,33 @@ export class MockCodingAgent implements ICodingAgent {
   private simulatedTimelines: Map<string, MockTimelineStep[]> = new Map();
   private simulatedElapsedSeconds: Map<string, number> = new Map();
 
+  private defaultMockOverride?: Partial<JulesSession>;
+
+  constructor(private sessionStore?: any) {}
+
+  /** Allow tests to set a default mock session state or updates */
+  public setMockSession(override: Partial<JulesSession>): void {
+    this.defaultMockOverride = override;
+    for (const session of this.sessions.values()) {
+      if (override.state) session.state = override.state;
+      if (override.prUrl) session.prUrl = override.prUrl;
+      if (override.gitBranch) session.gitBranch = override.gitBranch;
+      if (override.resultSummary) session.resultSummary = override.resultSummary;
+    }
+  }
+
+  /** Update state and metadata of a specific mock session */
+  public updateSessionState(sessionId: string, state: JulesSessionState, extra?: Partial<JulesSession>): void {
+    const cleanId = sessionId.replace(/^sessions\//, '');
+    const session = this.sessions.get(cleanId) || this.sessions.get(sessionId);
+    if (session) {
+      session.state = state;
+      if (extra) {
+        Object.assign(session, extra);
+      }
+    }
+  }
+
   public isConfigured(): boolean {
     return true;
   }
@@ -311,6 +338,13 @@ export class MockCodingAgent implements ICodingAgent {
       });
     }
 
+    if (this.defaultMockOverride) {
+      if (this.defaultMockOverride.state) session.state = this.defaultMockOverride.state;
+      if (this.defaultMockOverride.prUrl) session.prUrl = this.defaultMockOverride.prUrl;
+      if (this.defaultMockOverride.gitBranch) session.gitBranch = this.defaultMockOverride.gitBranch;
+      if (this.defaultMockOverride.resultSummary) session.resultSummary = this.defaultMockOverride.resultSummary;
+    }
+
     this.sessions.set(sessionId, session);
     this.sessionActivities.set(sessionId, activities);
 
@@ -403,9 +437,40 @@ export class MockCodingAgent implements ICodingAgent {
 
   public async getSession(sessionId: string): Promise<JulesSession> {
     const cleanId = sessionId.replace(/^sessions\//, '');
-    const session = this.sessions.get(cleanId);
+    let session = this.sessions.get(cleanId);
+    if (!session && this.sessionStore) {
+      const stored = await this.sessionStore.getSession(cleanId);
+      if (stored) {
+        session = {
+          name: `sessions/${stored.sessionId}`,
+          id: stored.sessionId,
+          prompt: stored.task,
+          title: stored.title,
+          state: stored.status,
+          sourceContext: {
+            source: `sources/github/${stored.repository}`,
+            githubRepoContext: { startingBranch: stored.branch },
+          },
+          automationMode: 'AUTO_CREATE_PR',
+          createTime: stored.createdAt,
+          updateTime: stored.updatedAt,
+          gitBranch: stored.gitBranch,
+          prUrl: stored.prUrl,
+          resultSummary: stored.summary,
+        };
+        this.sessions.set(cleanId, session);
+      }
+    }
+
     if (!session) {
       throw new Error(`Mock session not found: ${cleanId}`);
+    }
+
+    if (this.defaultMockOverride) {
+      if (this.defaultMockOverride.state) session.state = this.defaultMockOverride.state;
+      if (this.defaultMockOverride.prUrl) session.prUrl = this.defaultMockOverride.prUrl;
+      if (this.defaultMockOverride.gitBranch) session.gitBranch = this.defaultMockOverride.gitBranch;
+      if (this.defaultMockOverride.resultSummary) session.resultSummary = this.defaultMockOverride.resultSummary;
     }
 
     // If a timeline is registered, sync session state with virtual elapsed time

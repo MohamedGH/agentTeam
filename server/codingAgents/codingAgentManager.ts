@@ -33,11 +33,32 @@ export class CodingAgentManager {
   private sessionStore: ICodingAgentSessionStore;
   private githubManager: GitHubManager;
 
-  constructor(sessionStore?: ICodingAgentSessionStore, customGitHubManager?: GitHubManager) {
-    this.sessionStore = sessionStore || new FileBackedCodingAgentSessionStore();
-    this.githubManager = customGitHubManager || defaultGitHubManager;
-    this.registerAgent(new JulesAgent());
-    this.registerAgent(new MockCodingAgent());
+  constructor(
+    sessionStoreOrOptions?: ICodingAgentSessionStore | {
+      sessionStore?: ICodingAgentSessionStore;
+      githubManager?: GitHubManager;
+      julesAgent?: ICodingAgent;
+      mockAgent?: ICodingAgent;
+    },
+    customGitHubManager?: GitHubManager
+  ) {
+    if (sessionStoreOrOptions && typeof (sessionStoreOrOptions as any).saveSession !== 'function' && typeof sessionStoreOrOptions === 'object') {
+      const opts = sessionStoreOrOptions as {
+        sessionStore?: ICodingAgentSessionStore;
+        githubManager?: GitHubManager;
+        julesAgent?: ICodingAgent;
+        mockAgent?: ICodingAgent;
+      };
+      this.sessionStore = opts.sessionStore || new FileBackedCodingAgentSessionStore();
+      this.githubManager = opts.githubManager || customGitHubManager || defaultGitHubManager;
+      this.registerAgent(opts.julesAgent || new JulesAgent());
+      this.registerAgent(opts.mockAgent || new MockCodingAgent(this.sessionStore));
+    } else {
+      this.sessionStore = (sessionStoreOrOptions as ICodingAgentSessionStore) || new FileBackedCodingAgentSessionStore();
+      this.githubManager = customGitHubManager || defaultGitHubManager;
+      this.registerAgent(new JulesAgent());
+      this.registerAgent(new MockCodingAgent(this.sessionStore));
+    }
   }
 
   public getSessionStore(): ICodingAgentSessionStore {

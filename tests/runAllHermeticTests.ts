@@ -12,6 +12,7 @@ async function main() {
   console.log('====================================================');
   console.log('✨ ALL HERMETIC TESTS (UNIT + INTEGRATION) PASSED 100%');
   console.log('====================================================');
+  process.exit(0);
 }
 
 main().catch((err) => {

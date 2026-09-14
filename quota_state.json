@@ -1,7 +1,7 @@
 {
   "gemini-2.0-flash-lite": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -10,8 +10,8 @@
     "cooloff_until": 0
   },
   "gemini-2.0-flash-preview-image-generation": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -20,8 +20,8 @@
     "cooloff_until": 0
   },
   "gemini-2.0-flash": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -30,8 +30,8 @@
     "cooloff_until": 0
   },
   "gemini-2.5-flash-1p": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -40,8 +40,8 @@
     "cooloff_until": 0
   },
   "gemini-2.5-flash-exp": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -50,8 +50,8 @@
     "cooloff_until": 0
   },
   "gemini-2.5-flash-lite": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -60,8 +60,8 @@
     "cooloff_until": 0
   },
   "gemini-2.5-flash-preview-image": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -70,8 +70,8 @@
     "cooloff_until": 0
   },
   "gemini-2.5-flash-tts": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -80,8 +80,8 @@
     "cooloff_until": 0
   },
   "gemini-2.5-flash": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -90,8 +90,8 @@
     "cooloff_until": 0
   },
   "gemini-2.5-pro-tts": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -100,8 +100,8 @@
     "cooloff_until": 0
   },
   "gemini-2.5-pro": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -110,8 +110,8 @@
     "cooloff_until": 0
   },
   "gemini-3-flash": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -120,8 +120,8 @@
     "cooloff_until": 0
   },
   "gemini-3-pro-image": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -130,8 +130,8 @@
     "cooloff_until": 0
   },
   "gemini-3-pro": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -140,8 +140,8 @@
     "cooloff_until": 0
   },
   "gemini-3.1-flash-image": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -150,8 +150,8 @@
     "cooloff_until": 0
   },
   "gemini-3.1-flash-lite-image": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -160,8 +160,8 @@
     "cooloff_until": 0
   },
   "gemini-3.1-flash-lite": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -170,8 +170,8 @@
     "cooloff_until": 0
   },
   "gemini-3.1-flash-tts": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -180,8 +180,8 @@
     "cooloff_until": 0
   },
   "gemini-3.1-pro": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -190,8 +190,8 @@
     "cooloff_until": 0
   },
   "gemini-3.5-flash-lite": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -200,8 +200,8 @@
     "cooloff_until": 0
   },
   "gemini-3.5-flash": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -210,8 +210,8 @@
     "cooloff_until": 0
   },
   "gemini-3.6-flash": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -220,8 +220,8 @@
     "cooloff_until": 0
   },
   "gemini-3.7-flash": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -230,8 +230,8 @@
     "cooloff_until": 0
   },
   "gemini-flash-tool-retrieval": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -240,8 +240,8 @@
     "cooloff_until": 0
   },
   "gemini-robotics-er-1.6-preview": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -250,8 +250,8 @@
     "cooloff_until": 0
   },
   "gemini-robotics-er-2-preview": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -260,8 +260,8 @@
     "cooloff_until": 0
   },
   "antigravity": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -270,8 +270,8 @@
     "cooloff_until": 0
   },
   "gdm-eval-model-mow": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -280,8 +280,8 @@
     "cooloff_until": 0
   },
   "gemini-2.5-flash-live": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -290,8 +290,8 @@
     "cooloff_until": 0
   },
   "gemini-2.5-flash-native-audio-dialog": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -300,8 +300,8 @@
     "cooloff_until": 0
   },
   "gemini-2.5-pro-1p-freebie": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -310,8 +310,8 @@
     "cooloff_until": 0
   },
   "gemini-3-flash-live": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -320,8 +320,8 @@
     "cooloff_until": 0
   },
   "gemini-3.5-live-translate": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -330,8 +330,8 @@
     "cooloff_until": 0
   },
   "gemini-3.5-transcribe-live": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -340,8 +340,8 @@
     "cooloff_until": 0
   },
   "gemini-3.5-transcribe": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -350,8 +350,8 @@
     "cooloff_until": 0
   },
   "gemini-robotics-er-1.5-preview": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -360,8 +360,8 @@
     "cooloff_until": 0
   },
   "gemma-3-12b": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -370,8 +370,8 @@
     "cooloff_until": 0
   },
   "gemma-3-1b": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -380,8 +380,8 @@
     "cooloff_until": 0
   },
   "gemma-3-27b": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -390,8 +390,8 @@
     "cooloff_until": 0
   },
   "gemma-3-2b": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -400,8 +400,8 @@
     "cooloff_until": 0
   },
   "gemma-3-4b": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -410,8 +410,8 @@
     "cooloff_until": 0
   },
   "gemma-4-26b": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -420,8 +420,8 @@
     "cooloff_until": 0
   },
   "gemma-4-31b": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -430,8 +430,8 @@
     "cooloff_until": 0
   },
   "gqi-cst-h34jgm": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -440,8 +440,8 @@
     "cooloff_until": 0
   },
   "k3p9mfl8q2": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -450,8 +450,8 @@
     "cooloff_until": 0
   },
   "x9q2mfl4yg": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -460,8 +460,8 @@
     "cooloff_until": 0
   },
   "7s9d0xhwo8": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -470,8 +470,8 @@
     "cooloff_until": 0
   },
   "chat-bard": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -480,8 +480,8 @@
     "cooloff_until": 0
   },
   "computer-use-exp": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -490,8 +490,8 @@
     "cooloff_until": 0
   },
   "f116dzcgxx": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -500,8 +500,8 @@
     "cooloff_until": 0
   },
   "gdm-eval-model-u": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -510,8 +510,8 @@
     "cooloff_until": 0
   },
   "j2ycnyml2h": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -520,8 +520,8 @@
     "cooloff_until": 0
   },
   "learnlm-2.0-flash-experimental": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -530,8 +530,8 @@
     "cooloff_until": 0
   },
   "med-gemini": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -540,8 +540,8 @@
     "cooloff_until": 0
   },
   "qgsAKtKtlw": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -550,8 +550,8 @@
     "cooloff_until": 0
   },
   "u9x2v8w1z4": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -560,8 +560,8 @@
     "cooloff_until": 0
   },
   "xh7Bm2Kp9w": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -570,8 +570,8 @@
     "cooloff_until": 0
   },
   "computer-use-preview": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -580,8 +580,8 @@
     "cooloff_until": 0
   },
   "deep-research-pro-preview": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -590,8 +590,8 @@
     "cooloff_until": 0
   },
   "gemini-2.0-exp": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -600,8 +600,8 @@
     "cooloff_until": 0
   },
   "gemini-2.0-flash-exp-audio": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -610,8 +610,8 @@
     "cooloff_until": 0
   },
   "gemini-2.0-flash-exp-image": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -620,8 +620,8 @@
     "cooloff_until": 0
   },
   "gemini-2.0-flash-exp": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -630,8 +630,8 @@
     "cooloff_until": 0
   },
   "gemini-2.0-flash-live": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -640,8 +640,8 @@
     "cooloff_until": 0
   },
   "gemini-2.5-flash-exp-native-audio-thinking-dialog": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -650,8 +650,8 @@
     "cooloff_until": 0
   },
   "gemini-2.5-pro-exp": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -660,8 +660,8 @@
     "cooloff_until": 0
   },
   "lyria-3-clip": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -670,8 +670,8 @@
     "cooloff_until": 0
   },
   "lyria-3-pro": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -680,8 +680,8 @@
     "cooloff_until": 0
   },
   "gemini-omni-1.1-flash": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -690,8 +690,8 @@
     "cooloff_until": 0
   },
   "gemini-omni-flash": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -700,8 +700,8 @@
     "cooloff_until": 0
   },
   "gdm-eval-model-stp": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -710,8 +710,8 @@
     "cooloff_until": 0
   },
   "gemini-2.0": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -720,8 +720,8 @@
     "cooloff_until": 0
   },
   "gemini-2.5": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -730,8 +730,8 @@
     "cooloff_until": 0
   },
   "gemini-3": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -740,8 +740,8 @@
     "cooloff_until": 0
   },
   "gdm-lc-eval-phase-0": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -750,8 +750,8 @@
     "cooloff_until": 0
   },
   "gdm-lc-eval-phase-1": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -760,8 +760,8 @@
     "cooloff_until": 0
   },
   "oswk9grrjt": {
-    "minute_start": 1789397839.982,
-    "day_start": 1789397839.982,
+    "minute_start": 1789415545.972,
+    "day_start": 1789415545.972,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
@@ -770,18 +770,18 @@
     "cooloff_until": 0
   },
   "test-primary": {
-    "minute_start": 1789397839.983,
-    "day_start": 1789397839.983,
+    "minute_start": 1789415545.973,
+    "day_start": 1789415545.973,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
     "errors_429": 1,
-    "cooloff_until": 1789397869.983
+    "cooloff_until": 1789415575.973
   },
   "test-secondary": {
-    "minute_start": 1789397839.983,
-    "day_start": 1789397839.983,
+    "minute_start": 1789415545.973,
+    "day_start": 1789415545.973,
     "day": "2026-09-14",
     "rpm_used": 1,
     "tpm_used": 40,
@@ -790,18 +790,18 @@
     "cooloff_until": 0
   },
   "claude-term-primary": {
-    "minute_start": 1789397839.984,
-    "day_start": 1789397839.984,
+    "minute_start": 1789415545.974,
+    "day_start": 1789415545.974,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
     "errors_429": 1,
-    "cooloff_until": 1789397854.984
+    "cooloff_until": 1789415560.974
   },
   "claude-term-backup": {
-    "minute_start": 1789397839.984,
-    "day_start": 1789397839.984,
+    "minute_start": 1789415545.974,
+    "day_start": 1789415545.974,
     "day": "2026-09-14",
     "rpm_used": 1,
     "tpm_used": 30,
@@ -810,28 +810,28 @@
     "cooloff_until": 0
   },
   "hop-1": {
-    "minute_start": 1789397839.985,
-    "day_start": 1789397839.985,
+    "minute_start": 1789415545.975,
+    "day_start": 1789415545.975,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
     "errors_429": 1,
-    "cooloff_until": 1789397869.985
+    "cooloff_until": 1789415575.975
   },
   "hop-2": {
-    "minute_start": 1789397839.986,
-    "day_start": 1789397839.986,
+    "minute_start": 1789415545.975,
+    "day_start": 1789415545.975,
     "day": "2026-09-14",
     "rpm_used": 0,
     "tpm_used": 0,
     "rpd_used": 0,
     "errors_429": 1,
-    "cooloff_until": 1789397899.986
+    "cooloff_until": 1789415605.975
   },
   "hop-3": {
-    "minute_start": 1789397839.986,
-    "day_start": 1789397839.986,
+    "minute_start": 1789415545.975,
+    "day_start": 1789415545.975,
     "day": "2026-09-14",
     "rpm_used": 1,
     "tpm_used": 40,
@@ -840,8 +840,8 @@
     "cooloff_until": 0
   },
   "mock-fast-model": {
-    "minute_start": 1789397839.987,
-    "day_start": 1789397839.987,
+    "minute_start": 1789415545.976,
+    "day_start": 1789415545.976,
     "day": "2026-09-14",
     "rpm_used": 21,
     "tpm_used": 2372,

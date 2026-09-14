@@ -11,7 +11,7 @@ export interface TeamRunOptions {
   codingAgent?: 'jules' | 'mock' | 'none';
   repository?: string;
   branch?: string;
-  automationMode?: 'AUTO_CREATE_PR' | 'MANUAL';
+  automationMode?: 'AUTOMATION_MODE_UNSPECIFIED' | 'AUTO_CREATE_PR' | 'MANUAL';
   title?: string;
   createRepository?: boolean;
   repositoryName?: string;

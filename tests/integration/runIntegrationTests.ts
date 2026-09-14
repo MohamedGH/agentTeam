@@ -4,6 +4,7 @@ import { runJulesAgentTeamIntegrationTests } from './julesAgentTeam.test';
 import { runJulesAsyncMonitoringIntegrationTests } from './julesAsyncMonitoring.test';
 import { runJulesComprehensiveScenariosTest } from './julesComprehensiveScenarios.test';
 import { runGitHubWorkflowIntegrationTests } from './githubWorkflow.test';
+import { runWorkflowOrchestratorIntegrationTests } from './workflowOrchestratorIntegration.test';
 
 export async function runAllIntegrationTests() {
   console.log('====================================================');
@@ -16,13 +17,16 @@ export async function runAllIntegrationTests() {
   await runJulesAsyncMonitoringIntegrationTests();
   await runJulesComprehensiveScenariosTest();
   await runGitHubWorkflowIntegrationTests();
+  await runWorkflowOrchestratorIntegrationTests();
 
   console.log('\n🎉 ALL INTEGRATION TESTS PASSED (100%)\n');
 }
 
 if (import.meta.url.endsWith(process.argv[1]) || process.argv[1]?.includes('runIntegrationTests')) {
-  runAllIntegrationTests().catch((err) => {
-    console.error('Integration tests failed:', err);
-    process.exit(1);
-  });
+  runAllIntegrationTests()
+    .then(() => process.exit(0))
+    .catch((err) => {
+      console.error('Integration tests failed:', err);
+      process.exit(1);
+    });
 }

@@ -63,11 +63,11 @@ export function isValidStateTransition(current?: string, next?: string): boolean
   // Strict non-terminal progression
   switch (current) {
     case 'QUEUED':
-      return ['PLANNING', 'IN_PROGRESS', 'AWAITING_PLAN_APPROVAL', 'PAUSED'].includes(next);
+      return ['PLANNING', 'IN_PROGRESS', 'AWAITING_PLAN_APPROVAL', 'PAUSED', 'COMPLETED'].includes(next);
     case 'PLANNING':
-      return ['IN_PROGRESS', 'AWAITING_PLAN_APPROVAL', 'PAUSED'].includes(next);
+      return ['IN_PROGRESS', 'AWAITING_PLAN_APPROVAL', 'PAUSED', 'COMPLETED'].includes(next);
     case 'AWAITING_PLAN_APPROVAL':
-      return ['IN_PROGRESS', 'PLANNING', 'PAUSED'].includes(next);
+      return ['IN_PROGRESS', 'PLANNING', 'PAUSED', 'COMPLETED'].includes(next);
     case 'IN_PROGRESS':
       return ['COMPLETED', 'PAUSED', 'AWAITING_PLAN_APPROVAL'].includes(next);
     case 'PAUSED':
@@ -147,7 +147,7 @@ export interface CodingAgentTask {
   branch?: string; // e.g. "main"
   task: string; // task prompt/instructions
   title?: string;
-  automationMode?: 'AUTO_CREATE_PR' | 'MANUAL';
+  automationMode?: JulesAutomationMode;
   requirePlanApproval?: boolean;
   timeoutSeconds?: number;
   pollIntervalSeconds?: number;
@@ -211,3 +211,78 @@ export interface CodingAgentInfo {
   supportedAutomationModes: JulesAutomationMode[];
   description: string;
 }
+
+export type WorkflowStage =
+  | 'INITIALIZING'
+  | 'JULES_RUNNING'
+  | 'GITHUB_DELIVERY'
+  | 'TESTING'
+  | 'REVIEW'
+  | 'CORRECTION'
+  | 'COMPLETED'
+  | 'FAILED'
+  | 'CANCELLED'
+  | 'AWAITING_PLAN_APPROVAL';
+
+export interface WorkflowOptions {
+  workflowId?: string;
+  sessionId?: string;
+  taskId?: string;
+  taskPrompt: string;
+  repository: string;
+  branch?: string;
+  agent?: string; // 'jules' | 'mock'
+  automationMode?: JulesAutomationMode;
+  title?: string;
+  createRepository?: boolean;
+  repositoryName?: string;
+  private?: boolean;
+  git?: {
+    commit?: boolean;
+    push?: boolean;
+    createPullRequest?: boolean;
+    runTests?: boolean;
+    branch?: string;
+    commitMessage?: string;
+    pullRequestTitle?: string;
+    pullRequestBody?: string;
+  };
+  commitAndPush?: boolean;
+  commitPushAndCreatePR?: boolean;
+  testCommand?: string;
+  tier?: string;
+  model?: string;
+  provider?: string;
+  pollIntervalMs?: number;
+  maxPollAttempts?: number;
+}
+
+export interface WorkflowState {
+  workflowId: string;
+  sessionId: string;
+  agentId: string;
+  repository: string;
+  branch: string;
+  task: string;
+  title?: string;
+  stage: WorkflowStage;
+  status: JulesSessionState;
+  executionStatus: ExecutionStatus;
+  options: WorkflowOptions;
+  createdAt: string;
+  updatedAt: string;
+  lastPolledAt?: string;
+  pollCount?: number;
+  prUrl?: string;
+  gitBranch?: string;
+  commitSha?: string;
+  commitUrl?: string;
+  pullRequestUrl?: string;
+  testsPassed?: boolean;
+  git?: any;
+  steps: any[];
+  finalReport?: any;
+  error?: string;
+  summary?: string;
+}
+
