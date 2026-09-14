@@ -3,7 +3,7 @@ import { providerManager } from './providerManager';
 import { quotaManager } from './quotaManager';
 import { workspace, VirtualWorkspace } from './virtualWorkspace';
 import { codingAgentManager, CodingAgentTask, CodingAgentResult } from './codingAgents';
-import { AgentStep, FinalReport, TeamRunResult, AgentRole, ExecutionStatus, deriveExecutionStatus } from '../src/types';
+import { AgentStep, FinalReport, TeamRunResult, AgentRole, ExecutionStatus, deriveExecutionStatus, FailoverRecord } from '../src/types';
 
 export interface TeamRunOptions {
   provider?: any;
@@ -65,6 +65,7 @@ export class AgentTeamEngine {
     let anyRealUsage = false;
     const initialFiles = { ...workspace.getFiles() };
     const changedFileList = new Set<string>();
+    const allFailoverHistory: FailoverRecord[] = [];
 
     let julesResult: CodingAgentResult | null = null;
     const codingAgentToUse = options.codingAgent && options.codingAgent !== 'none' ? options.codingAgent : null;
@@ -88,6 +89,10 @@ Provide your architectural breakdown and delegation plan.`;
         activeProvider
       );
 
+      if (phase1Res.failoverHistory && phase1Res.failoverHistory.length > 0) {
+        allFailoverHistory.push(...phase1Res.failoverHistory);
+      }
+
       totalTokens += phase1Res.totalTokens;
       totalPromptTokens += phase1Res.promptTokens;
       totalCompletionTokens += phase1Res.completionTokens;
@@ -100,6 +105,9 @@ Provide your architectural breakdown and delegation plan.`;
         thought: phase1Res.text,
         status: `Delegated to ${delegationTarget}`,
         output: `Architecture confirmed. Scope dispatched to ${delegationTarget}.`,
+        provider: phase1Res.provider,
+        model: phase1Res.model,
+        failoverHistory: phase1Res.failoverHistory,
         promptTokens: phase1Res.promptTokens,
         completionTokens: phase1Res.completionTokens,
         totalTokens: phase1Res.totalTokens,
@@ -375,6 +383,10 @@ Describe how you are patching the code.`;
             activeProvider
           );
 
+          if (devRes.failoverHistory && devRes.failoverHistory.length > 0) {
+            allFailoverHistory.push(...devRes.failoverHistory);
+          }
+
           // Perform actual virtual file operations according to the task
           const toolCalls = this.executeDeveloperActions(taskPrompt, developerCycle, changedFileList);
 
@@ -391,6 +403,9 @@ Describe how you are patching the code.`;
             toolCalls,
             status: 'Implementation Ready for QA',
             output: `Modified/Created: ${Array.from(changedFileList).join(', ') || 'Code updated'}`,
+            provider: devRes.provider,
+            model: devRes.model,
+            failoverHistory: devRes.failoverHistory,
             promptTokens: devRes.promptTokens,
             completionTokens: devRes.completionTokens,
             totalTokens: devRes.totalTokens,
@@ -420,6 +435,10 @@ Provide QA evaluation and regression analysis.`;
           'tester',
           activeProvider
         );
+
+        if (testerRes.failoverHistory && testerRes.failoverHistory.length > 0) {
+          allFailoverHistory.push(...testerRes.failoverHistory);
+        }
 
         const testToolCalls = [
           {
@@ -453,6 +472,9 @@ Provide QA evaluation and regression analysis.`;
             toolCalls: testToolCalls,
             status: 'STATUS: PASS',
             output: 'All tests passed. No regressions detected. Ready for Reviewer approval.',
+            provider: testerRes.provider,
+            model: testerRes.model,
+            failoverHistory: testerRes.failoverHistory,
             promptTokens: testerRes.promptTokens,
             completionTokens: testerRes.completionTokens,
             totalTokens: testerRes.totalTokens,
@@ -469,6 +491,9 @@ Provide QA evaluation and regression analysis.`;
             toolCalls: testToolCalls,
             status: 'STATUS: FAIL (Regressions Found)',
             output: `Tests failed: ${testOutput.slice(0, 120)}... Re-delegating to Developer for fix.`,
+            provider: testerRes.provider,
+            model: testerRes.model,
+            failoverHistory: testerRes.failoverHistory,
             promptTokens: testerRes.promptTokens,
             completionTokens: testerRes.completionTokens,
             totalTokens: testerRes.totalTokens,
@@ -504,6 +529,10 @@ Evaluate code quality, security implications, maintainability, and clean archite
           activeProvider
         );
 
+        if (revRes.failoverHistory && revRes.failoverHistory.length > 0) {
+          allFailoverHistory.push(...revRes.failoverHistory);
+        }
+
         const reviewToolCalls = [
           {
             id: 'tc_' + Math.random().toString(36).substring(2, 7),
@@ -528,6 +557,9 @@ Evaluate code quality, security implications, maintainability, and clean archite
           toolCalls: reviewToolCalls,
           status: 'STATUS: APPROVED',
           output: `Strengths: Clean modular code, proper error guards, full test coverage.\nSecurity: No exposed keys or unsafe operations.\nArchitecture: Follows SOLID principles.\nFinal recommendation: Approved for merge.`,
+          provider: revRes.provider,
+          model: revRes.model,
+          failoverHistory: revRes.failoverHistory,
           promptTokens: revRes.promptTokens,
           completionTokens: revRes.completionTokens,
           totalTokens: revRes.totalTokens,
@@ -550,6 +582,10 @@ Evaluate code quality, security implications, maintainability, and clean archite
         'manager',
         activeProvider
       );
+
+      if (delivRes.failoverHistory && delivRes.failoverHistory.length > 0) {
+        allFailoverHistory.push(...delivRes.failoverHistory);
+      }
 
       totalTokens += delivRes.totalTokens;
       totalPromptTokens += delivRes.promptTokens;
@@ -590,6 +626,7 @@ Evaluate code quality, security implications, maintainability, and clean archite
           totalTokens: totalTokens,
           isRealTokenUsage: anyRealUsage,
           tokenAccountingType: primaryAccountingType,
+          failoverHistory: allFailoverHistory.length > 0 ? allFailoverHistory : undefined,
         },
       };
 
@@ -600,6 +637,9 @@ Evaluate code quality, security implications, maintainability, and clean archite
         thought: delivRes.text,
         status: 'COMPLETED',
         output: `Workflow completed successfully with ${finalReport.filesChanged.length} files changed and all verification gates passed.${julesResult?.prUrl ? ` PR: ${julesResult.prUrl}` : ''}`,
+        provider: delivRes.provider,
+        model: delivRes.model,
+        failoverHistory: delivRes.failoverHistory,
         promptTokens: delivRes.promptTokens,
         completionTokens: delivRes.completionTokens,
         totalTokens: delivRes.totalTokens,
@@ -614,6 +654,7 @@ Evaluate code quality, security implications, maintainability, and clean archite
         executionStatus: 'COMPLETED',
         modelUsed: chosenModel,
         codingAgentUsed: codingAgentToUse || undefined,
+        failoverHistory: allFailoverHistory.length > 0 ? allFailoverHistory : undefined,
         prUrl: julesResult?.pullRequestUrl || julesResult?.prUrl,
         gitBranch: julesResult?.git?.branch || julesResult?.gitBranch,
         commitSha: julesResult?.commitSha,

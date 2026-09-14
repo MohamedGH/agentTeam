@@ -340,20 +340,28 @@ export class QuotaManager {
     this.saveState();
   }
 
-  public handle429Error(model: string, retryAfterSeconds = 60) {
+  public handleCooldown(model: string, retryAfterSeconds = 30, reason?: string) {
     this.initModel(model);
     const s = this.state[model];
     s.errors_429 += 1;
-    s.cooloff_until = Date.now() / 1000 + retryAfterSeconds;
+    const newCooloff = Date.now() / 1000 + retryAfterSeconds;
+    // Preserve existing cooldown if longer (do not destroy existing cooldown state)
+    s.cooloff_until = Math.max(s.cooloff_until || 0, newCooloff);
     this.saveState();
   }
 
+  public handle429Error(model: string, retryAfterSeconds = 60) {
+    this.handleCooldown(model, retryAfterSeconds, 'RATE_LIMIT');
+  }
+
   public handle503Error(model: string, retryAfterSeconds = 30) {
-    this.initModel(model);
-    const s = this.state[model];
-    s.errors_429 += 1;
-    s.cooloff_until = Date.now() / 1000 + retryAfterSeconds;
-    this.saveState();
+    this.handleCooldown(model, retryAfterSeconds, 'HIGH_DEMAND');
+  }
+
+  public getCooldownRemainingSeconds(model: string): number {
+    if (!this.state[model]) return 0;
+    const remaining = this.state[model].cooloff_until - Date.now() / 1000;
+    return remaining > 0 ? Math.ceil(remaining) : 0;
   }
 
   public isModelInCooldown(model: string): boolean {

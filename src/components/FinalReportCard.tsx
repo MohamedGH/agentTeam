@@ -1,6 +1,6 @@
 import React from 'react';
 import { FinalReport } from '../types';
-import { Award, CheckCircle2, XCircle, FileCheck, Layers, Clock, Cpu, Sparkles, AlertCircle, Loader2 } from 'lucide-react';
+import { Award, CheckCircle2, XCircle, FileCheck, Layers, Clock, Cpu, Sparkles, AlertCircle, Loader2, RefreshCw } from 'lucide-react';
 
 interface FinalReportCardProps {
   report: FinalReport;
@@ -215,6 +215,35 @@ export const FinalReportCard: React.FC<FinalReportCardProps> = ({ report, onView
                 {f}
               </span>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Failover Telemetry Summary */}
+      {report.metrics.failoverHistory && report.metrics.failoverHistory.length > 0 && (
+        <div className="mb-4 bg-amber-500/10 p-3.5 rounded-xl border border-amber-500/30 text-xs">
+          <div className="flex items-center gap-2 text-amber-300 font-semibold mb-2">
+            <RefreshCw className="w-4 h-4 text-amber-400 animate-spin" />
+            <span>Automatic Model Failover Succeeded</span>
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/20 text-amber-200 border border-amber-500/30">
+              {report.metrics.failoverHistory.length} Failover Event{report.metrics.failoverHistory.length > 1 ? 's' : ''} Handled
+            </span>
+          </div>
+          <p className="text-slate-300 text-xs mb-2">
+            A temporary upstream model or provider issue was automatically bypassed: <strong>Primary model failed → fallback model succeeded</strong> without interrupting the task.
+          </p>
+          <div className="space-y-1 bg-slate-950/80 p-2.5 rounded-lg border border-slate-800 text-[11px] font-mono">
+            {report.metrics.failoverHistory.map((rec, idx) => (
+              <div key={idx} className="flex flex-wrap items-center gap-1.5 text-slate-400">
+                <span className="text-amber-300 font-semibold">{rec.provider}/{rec.model}</span>
+                <span className="text-rose-400 font-medium">({rec.reason})</span>
+                <span className="text-slate-500">→</span>
+                <span className="text-slate-300 truncate max-w-md">{rec.error}</span>
+              </div>
+            ))}
+            <div className="text-emerald-400 font-medium pt-1 border-t border-slate-800/80">
+              ✓ Resolved successfully using provider: <span className="font-bold text-emerald-300">{report.metrics.providerUsed || 'configured'}</span> (Model: <span className="font-bold text-emerald-300">{report.metrics.modelUsed}</span>)
+            </div>
           </div>
         </div>
       )}

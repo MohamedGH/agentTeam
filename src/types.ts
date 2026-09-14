@@ -10,7 +10,27 @@ export interface ToolCallRecord {
   timestamp: number;
 }
 
-export type AIProviderId = 'gemini' | 'openai' | 'anthropic' | 'groq' | 'deepseek' | 'custom';
+export type AIProviderId = 'gemini' | 'openai' | 'anthropic' | 'groq' | 'deepseek' | 'custom' | 'mock';
+
+export type ProviderErrorReason =
+  | 'RATE_LIMIT'
+  | 'QUOTA'
+  | 'HIGH_DEMAND'
+  | 'TEMPORARY_UNAVAILABLE'
+  | 'MODEL_EXECUTION_ERROR'
+  | 'AUTHENTICATION'
+  | 'INVALID_REQUEST'
+  | 'CONFIGURATION'
+  | 'UNKNOWN';
+
+export interface FailoverRecord {
+  provider: AIProviderId;
+  model: string;
+  reason: ProviderErrorReason;
+  retryable: boolean;
+  error: string;
+  timestamp: number;
+}
 
 export interface ProviderInfo {
   id: AIProviderId;
@@ -41,11 +61,13 @@ export interface AgentStep {
   output?: string;
   timestamp: number;
   provider?: AIProviderId | string;
+  model?: string;
   promptTokens?: number;
   completionTokens?: number;
   totalTokens?: number;
   isRealTokenUsage?: boolean;
   tokenAccountingType?: TokenAccountingType;
+  failoverHistory?: FailoverRecord[];
 }
 
 export type ExecutionStatus = 'FAILED' | 'RUNNING' | 'COMPLETED';
@@ -99,6 +121,7 @@ export interface FinalReport {
     totalTokens?: number;
     isRealTokenUsage?: boolean;
     tokenAccountingType?: TokenAccountingType;
+    failoverHistory?: FailoverRecord[];
   };
 }
 
@@ -109,6 +132,7 @@ export interface TeamRunResult {
   executionStatus?: ExecutionStatus;
   modelUsed: string;
   codingAgentUsed?: string;
+  failoverHistory?: FailoverRecord[];
   prUrl?: string;
   gitBranch?: string;
   commitSha?: string;

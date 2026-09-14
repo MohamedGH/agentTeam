@@ -1,5 +1,30 @@
 import { GoogleGenAI } from '@google/genai';
-import { IAIProvider, AIProviderId, ProviderModelConfig, GenerationUsageResult, TokenCountResult } from './providers/types';
+import {
+  IAIProvider,
+  AIProviderId,
+  ProviderModelConfig,
+  GenerationUsageResult,
+  TokenCountResult,
+} from './providers/types';
+import {
+  classifyProviderError,
+  sanitizeErrorMessage,
+} from './providers/errorClassifier';
+import type {
+  FailoverRecord,
+  ProviderErrorReason,
+  ClassifiedProviderError,
+} from './providers/errorClassifier';
+
+export {
+  classifyProviderError,
+  sanitizeErrorMessage,
+};
+export type {
+  FailoverRecord,
+  ProviderErrorReason,
+  ClassifiedProviderError,
+};
 import { GeminiProvider } from './providers/geminiProvider';
 import { OpenAIProvider } from './providers/openaiProvider';
 import { AnthropicProvider } from './providers/anthropicProvider';
@@ -194,9 +219,13 @@ export class ProviderManager {
     providerOverride?: AIProviderId
   ): Promise<GenerationUsageResult> {
     const targetProviderId = providerOverride || this.inferProviderFromModel(model) || this.activeProvider;
-    const failoverHistory: Array<{ provider: AIProviderId; model: string; error?: string }> = [];
+    const failoverHistory: FailoverRecord[] = [];
+    const attempted = new Set<string>();
+    const blockedProviders = new Set<AIProviderId>();
+    const MAX_FAILOVER_BUDGET = 8;
 
-    // Construct an ordered failover sequence of providers
+    // Construct an ordered failover sequence of providers:
+    // Preferred provider -> other configured providers in priority order
     const providerPriority: AIProviderId[] = targetProviderId === 'mock'
       ? ['mock']
       : [
@@ -211,20 +240,65 @@ export class ProviderManager {
     const uniqueProviders = Array.from(new Set(providerPriority));
 
     for (const provId of uniqueProviders) {
+      if (blockedProviders.has(provId)) {
+        continue;
+      }
+
       const provider = this.providers.get(provId);
       if (!provider || !provider.isConfigured()) {
         continue;
       }
 
-      // Candidate models for this provider
-      const candidateModels = provId === targetProviderId
-        ? Array.from(new Set([model, this.activeModelOverrides[provId], ...provider.models.map((m) => m.name)].filter(Boolean))) as string[]
-        : provider.models.map((m) => m.name);
+      // Candidate models for this provider:
+      // If primary target provider: requested model first, then active override, then remaining models
+      // If alternative provider: models sorted by quota availability and readiness
+      let rawCandidateModels: string[] = [];
+      if (provId === targetProviderId) {
+        const remaining = provider.models.map((m) => m.name).filter((n) => n !== model && n !== this.activeModelOverrides[provId]);
+        rawCandidateModels = [
+          model,
+          this.activeModelOverrides[provId],
+          ...remaining,
+        ].filter(Boolean) as string[];
+      } else {
+        // Alternative provider: prioritize default model, then other models
+        const def = this.activeModelOverrides[provId] || provider.defaultModel;
+        const others = provider.models.map((m) => m.name).filter((n) => n !== def);
+        rawCandidateModels = [def, ...others];
+      }
+
+      // Deduplicate candidate models
+      const candidateModels = Array.from(new Set(rawCandidateModels));
 
       for (const candidateModel of candidateModels) {
-        if (quotaManager.isModelInCooldown(candidateModel)) {
+        const attemptKey = `${provId}:${candidateModel}`;
+
+        // Never attempt the same provider/model twice in a single request
+        if (attempted.has(attemptKey)) {
           continue;
         }
+
+        // Avoid models currently in cooldown
+        if (quotaManager.isModelInCooldown(candidateModel)) {
+          const remainingSec = quotaManager.getCooldownRemainingSeconds(candidateModel);
+          console.log(`[ProviderManager] Candidate ${provId}/${candidateModel} is in cooldown (${remainingSec}s remaining). Skipping.`);
+          continue;
+        }
+
+        // Avoid models with exhausted quota if headroom check is possible
+        if (!quotaManager.canUseModel(candidateModel, 'tier_3', 1000)) {
+          console.log(`[ProviderManager] Candidate ${provId}/${candidateModel} has exhausted quota headroom. Skipping.`);
+          continue;
+        }
+
+        // Check failover budget
+        if (attempted.size >= MAX_FAILOVER_BUDGET) {
+          console.warn(`[ProviderManager] Max failover budget reached (${MAX_FAILOVER_BUDGET} attempts). Halting further failover attempts.`);
+          break;
+        }
+
+        attempted.add(attemptKey);
+        console.log(`[ProviderManager] Attempting ${provId}/${candidateModel}`);
 
         try {
           const res = await provider.generateContent({
@@ -234,6 +308,8 @@ export class ProviderManager {
             role,
           });
 
+          console.log(`[ProviderManager] Success using ${provId}/${candidateModel}`);
+
           this.recordModelUsage(candidateModel, {
             promptTokenCount: res.promptTokens,
             candidatesTokenCount: res.completionTokens,
@@ -242,29 +318,68 @@ export class ProviderManager {
 
           return {
             ...res,
+            provider: provId,
+            model: candidateModel,
             failoverHistory: failoverHistory.length > 0 ? failoverHistory : undefined,
           };
         } catch (err: any) {
-          const errMsg = err?.message || String(err);
-          failoverHistory.push({ provider: provId, model: candidateModel, error: errMsg });
+          const classified = classifyProviderError(err);
 
-          const is503 = errMsg.includes('503') || errMsg.includes('UNAVAILABLE') || errMsg.includes('high demand');
-          const is429 = errMsg.includes('429') || errMsg.includes('RESOURCE_EXHAUSTED') || errMsg.includes('quota');
+          failoverHistory.push({
+            provider: provId,
+            model: candidateModel,
+            reason: classified.reason,
+            retryable: classified.retryable,
+            error: classified.sanitizedMessage,
+            timestamp: Date.now(),
+          });
 
-          if (is503) {
-            console.warn(`[ProviderManager] 503 High Demand on ${provId} (${candidateModel}). Triggering cooldown & automatic failover.`);
-            quotaManager.handle503Error(candidateModel, 30);
-          } else if (is429) {
-            console.warn(`[ProviderManager] 429 Rate Limit on ${provId} (${candidateModel}). Triggering cooldown & automatic failover.`);
-            quotaManager.handle429Error(candidateModel, 60);
+          if (classified.retryable) {
+            console.warn(
+              `[ProviderManager] Retryable failure: ${classified.reason} on ${provId}/${candidateModel} - ${classified.sanitizedMessage}`
+            );
           } else {
-            console.warn(`[ProviderManager] Error on ${provId} (${candidateModel}): ${errMsg.substring(0, 100)}. Failing over...`);
+            console.warn(
+              `[ProviderManager] Non-retryable failure: ${classified.reason} on ${provId}/${candidateModel} - ${classified.sanitizedMessage}`
+            );
           }
+
+          // Calculate cooldown duration based on error classification and retry-after header
+          let cooldownSec = classified.retryAfterSeconds;
+          if (!cooldownSec || cooldownSec <= 0) {
+            if (classified.reason === 'RATE_LIMIT') cooldownSec = 60;
+            else if (classified.reason === 'QUOTA') cooldownSec = 120;
+            else if (classified.reason === 'HIGH_DEMAND') cooldownSec = 30;
+            else if (classified.reason === 'TEMPORARY_UNAVAILABLE') cooldownSec = 20;
+            else if (classified.reason === 'MODEL_EXECUTION_ERROR') cooldownSec = 15;
+            else cooldownSec = 30;
+          }
+
+          // Handle non-retryable authentication or configuration errors
+          if (classified.reason === 'AUTHENTICATION' || classified.reason === 'CONFIGURATION') {
+            blockedProviders.add(provId);
+            console.warn(
+              `[ProviderManager] Provider "${provId}" encountered non-retryable ${classified.reason}. Blocking provider for remainder of request.`
+            );
+            // Break from candidate models loop for this provider, move to next provider
+            break;
+          }
+
+          // Apply cooldown to this candidate model without destroying longer existing cooldowns
+          quotaManager.handleCooldown(candidateModel, cooldownSec, classified.reason);
+          console.log(`[ProviderManager] Cooling down ${provId}/${candidateModel} for ${cooldownSec} seconds`);
+
+          console.log(`[ProviderManager] Failing over to next candidate model/provider...`);
         }
+      }
+
+      if (attempted.size >= MAX_FAILOVER_BUDGET) {
+        break;
       }
     }
 
-    // If all configured providers fail or none are configured, return clean graceful fallback with 0/unknown tokens
+    // If all configured providers fail or none are configured, return clean graceful fallback
+    console.warn(`[ProviderManager] All candidate models/providers exhausted or unconfigured. Returning graceful fallback.`);
     return {
       text: fallbackText,
       promptTokens: 0,

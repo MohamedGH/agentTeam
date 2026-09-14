@@ -16,6 +16,8 @@ import {
   BarChart3,
   ChevronDown,
   ChevronUp,
+  AlertTriangle,
+  RefreshCw,
 } from 'lucide-react';
 import Markdown from 'react-markdown';
 
@@ -355,6 +357,31 @@ export const ExecutionTimeline: React.FC<ExecutionTimelineProps> = ({ steps, isR
                   </span>
                 </div>
               </div>
+
+              {/* Automatic Failover Telemetry */}
+              {step.failoverHistory && step.failoverHistory.length > 0 && (
+                <div className="mb-3 bg-amber-950/30 border border-amber-500/30 rounded-lg p-2.5 text-xs">
+                  <div className="flex items-center gap-1.5 text-amber-400 font-semibold mb-1">
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-400" />
+                    <span>Automatic Model Failover Succeeded</span>
+                    <span className="text-[10px] font-mono text-amber-400/80">({step.failoverHistory.length} fallback{step.failoverHistory.length > 1 ? 's' : ''})</span>
+                  </div>
+                  <div className="space-y-1 font-mono text-[11px]">
+                    {step.failoverHistory.map((rec, idx) => (
+                      <div key={idx} className="flex flex-wrap items-center gap-1 text-slate-400">
+                        <span className="text-amber-300 font-semibold">{rec.provider}/{rec.model}</span>
+                        <span className="text-rose-400 font-medium">failed ({rec.reason})</span>
+                        <span className="text-slate-500">→</span>
+                        <span className="text-slate-300 truncate max-w-sm">{rec.error}</span>
+                      </div>
+                    ))}
+                    <div className="text-emerald-400 font-medium pt-0.5 flex items-center gap-1">
+                      <span>✓</span>
+                      <span>Primary model failed → fallback model succeeded ({step.provider || 'fallback'}{step.model ? `/${step.model}` : ''})</span>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Agent Thought / Reasoning */}
               {step.thought && (
