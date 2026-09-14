@@ -5,9 +5,11 @@ import {
   CodingAgentInfo,
   CodingAgentResult,
   CodingAgentTask,
+  ExecutionStatus,
   JulesActivity,
   JulesSession,
   JulesSource,
+  deriveExecutionStatus,
 } from './types';
 import {
   ICodingAgentSessionStore,
@@ -100,7 +102,8 @@ export class CodingAgentManager {
     });
 
     const result = await agent.executeTask(task, onProgress);
-    result.success = result.status === 'COMPLETED' && !result.error;
+    result.executionStatus = result.executionStatus || deriveExecutionStatus(result.status, Boolean(result.error));
+    result.success = result.executionStatus === 'COMPLETED' && !result.error;
 
     // Git / GitHub automation integration
     const gitRequested = Boolean(
@@ -116,12 +119,18 @@ export class CodingAgentManager {
       if (!this.githubManager.isConfigured()) {
         result.success = false;
         result.error = 'GITHUB_TOKEN is not configured';
-      } else if (result.status === 'FAILED' || !result.success) {
+        result.executionStatus = 'FAILED';
+      } else if (result.executionStatus === 'FAILED') {
         // Critical safety rule: Never automatically push if task or tests failed!
         result.success = false;
         result.testsPassed = false;
         result.error = result.error || result.summary || 'Coding task failed: skipping git push and PR.';
-      } else {
+      } else if (result.executionStatus === 'RUNNING') {
+        // Jules session is still in flight in the cloud (e.g. QUEUED, PLANNING, IN_PROGRESS).
+        // Do NOT push to git or create PR yet, but DO NOT treat as failed!
+        result.testsPassed = undefined;
+        result.success = false;
+      } else if (result.executionStatus === 'COMPLETED') {
         const repoTarget = task.repositoryName || task.repository;
         const targetBranch =
           task.branch ||
@@ -152,6 +161,7 @@ export class CodingAgentManager {
         if (!gitRes.success) {
           result.error = gitRes.error;
           result.status = 'FAILED';
+          result.executionStatus = 'FAILED';
           result.success = false;
         }
       }

@@ -48,10 +48,22 @@ export interface AgentStep {
   tokenAccountingType?: TokenAccountingType;
 }
 
+export type ExecutionStatus = 'FAILED' | 'RUNNING' | 'COMPLETED';
+
+export function deriveExecutionStatus(status?: string, hasError?: boolean): ExecutionStatus {
+  if (hasError || status === 'FAILED' || status === 'CANCELLED') {
+    return 'FAILED';
+  }
+  if (status === 'COMPLETED') {
+    return 'COMPLETED';
+  }
+  return 'RUNNING';
+}
+
 export interface FinalReport {
-  implementation: 'PASS' | 'FAIL';
-  tests: 'PASS' | 'FAIL' | 'SKIPPED';
-  review: 'APPROVED' | 'CHANGES_REQUIRED' | 'SKIPPED';
+  implementation: 'PASS' | 'FAIL' | 'RUNNING';
+  tests: 'PASS' | 'FAIL' | 'SKIPPED' | 'RUNNING';
+  review: 'APPROVED' | 'CHANGES_REQUIRED' | 'SKIPPED' | 'RUNNING';
   filesChanged: string[];
   testSummary: string;
   reviewSummary: string;
@@ -94,6 +106,7 @@ export interface TeamRunResult {
   taskId: string;
   taskPrompt: string;
   success: boolean;
+  executionStatus?: ExecutionStatus;
   modelUsed: string;
   codingAgentUsed?: string;
   prUrl?: string;

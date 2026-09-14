@@ -7,6 +7,8 @@ import {
   JulesSession,
   JulesSessionState,
   JulesSource,
+  ExecutionStatus,
+  deriveExecutionStatus,
 } from './types';
 
 export interface MockTimelineStep {
@@ -144,12 +146,27 @@ export class MockCodingAgent implements ICodingAgent {
       ? task.task.split('TASK_TRIGGER_FAILURE:')[1]?.trim() || 'Simulated task execution failure'
       : undefined;
 
+    let simulatedState: JulesSessionState = 'COMPLETED';
+    if (isFailureTrigger) {
+      simulatedState = 'FAILED';
+    } else if (task.task.includes('TASK_SIMULATE_QUEUED') || (!task.timeoutSeconds && task.timeoutSeconds !== undefined)) {
+      simulatedState = 'QUEUED';
+    } else if (task.task.includes('TASK_SIMULATE_PLANNING')) {
+      simulatedState = 'PLANNING';
+    } else if (task.task.includes('TASK_SIMULATE_AWAITING_PLAN_APPROVAL')) {
+      simulatedState = 'AWAITING_PLAN_APPROVAL';
+    } else if (task.task.includes('TASK_SIMULATE_IN_PROGRESS')) {
+      simulatedState = 'IN_PROGRESS';
+    } else if (task.task.includes('TASK_SIMULATE_PAUSED')) {
+      simulatedState = 'PAUSED';
+    }
+
     const session: JulesSession = {
       name: `sessions/${sessionId}`,
       id: sessionId,
       prompt: task.task,
       title: task.title || `Task on ${task.repository}`,
-      state: isFailureTrigger ? 'FAILED' : 'COMPLETED',
+      state: simulatedState,
       sourceContext: {
         source: `sources/github/${task.repository}`,
         githubRepoContext: {
@@ -160,12 +177,14 @@ export class MockCodingAgent implements ICodingAgent {
       createTime: new Date().toISOString(),
       updateTime: new Date().toISOString(),
       gitBranch: isFailureTrigger ? undefined : `jules/patch-${sessionId.slice(-4)}`,
-      prUrl: !isFailureTrigger && isAutoPr ? `https://github.com/${task.repository}/pull/42` : undefined,
+      prUrl: !isFailureTrigger && isAutoPr && simulatedState === 'COMPLETED' ? `https://github.com/${task.repository}/pull/42` : undefined,
       resultSummary: isFailureTrigger
         ? `Task execution failed: ${failureReason}`
-        : `Autonomous patch verified. Created branch jules/patch-${sessionId.slice(-4)}${
+        : simulatedState === 'COMPLETED'
+        ? `Autonomous patch verified. Created branch jules/patch-${sessionId.slice(-4)}${
         isAutoPr ? ` and PR https://github.com/${task.repository}/pull/42` : ''
-      }.`,
+      }.`
+        : `Google Jules session started asynchronously (State: ${simulatedState}). Session ID: ${sessionId}`,
     };
 
     const activities: JulesActivity[] = [
@@ -426,7 +445,17 @@ export class MockCodingAgent implements ICodingAgent {
       }
     }
 
+    const isFailed = session.state === 'FAILED' || session.state === 'CANCELLED';
+    const isCompleted = session.state === 'COMPLETED';
+    const executionStatus: ExecutionStatus = isFailed
+      ? 'FAILED'
+      : isCompleted
+      ? 'COMPLETED'
+      : 'RUNNING';
+
     return {
+      success: isCompleted,
+      executionStatus,
       agentId: this.id,
       sessionId: session.id,
       status: session.state,
@@ -436,8 +465,14 @@ export class MockCodingAgent implements ICodingAgent {
       prompt: task.task,
       prUrl: session.prUrl,
       gitBranch: session.gitBranch,
-      summary: session.resultSummary || (session.state === 'FAILED' ? 'Task execution failed' : 'Task completed successfully'),
-      error: session.state === 'FAILED' ? (session.resultSummary || 'Task execution failed') : undefined,
+      summary:
+        session.resultSummary ||
+        (isFailed
+          ? 'Task execution failed'
+          : isCompleted
+          ? 'Task completed successfully'
+          : `Google Jules session started asynchronously (State: ${session.state}). Session ID: ${session.id}`),
+      error: isFailed ? (session.resultSummary || 'Task execution failed') : undefined,
       activities,
       rawSession: session,
       durationMs: Date.now() - startMs,

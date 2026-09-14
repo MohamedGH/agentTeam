@@ -82,6 +82,7 @@ export async function runJulesAgentTeamIntegrationTests() {
   );
 
   assert.strictEqual(failureResult.success, false, 'Workflow MUST fail when coding agent fails');
+  assert.strictEqual(failureResult.executionStatus, 'FAILED', 'Workflow executionStatus MUST be FAILED');
   assert.ok(failureResult.error, 'Error must be preserved in workflow result');
   
   // Verify that subsequent agents (Tester, Reviewer) WERE NOT RUN!
@@ -93,11 +94,86 @@ export async function runJulesAgentTeamIntegrationTests() {
   const failedDevStep = failureResult.steps.find((s) => s.agent === 'developer' && s.status === 'STATUS: FAILED');
   assert.ok(failedDevStep, 'Jules failure step must be recorded in steps');
   assert.strictEqual(failedDevStep?.status, 'STATUS: FAILED');
+  const failureToolCalls = failedDevStep?.toolCalls || [];
+  assert.ok(
+    failureToolCalls.some((tc) => tc.name === 'jules_session_error'),
+    'Failed session must record jules_session_error tool call'
+  );
   assert.strictEqual(failureResult.finalReport?.implementation, 'FAIL');
   assert.strictEqual(failureResult.finalReport?.tests, 'SKIPPED');
   assert.strictEqual(failureResult.finalReport?.review, 'SKIPPED');
 
-  console.log('✅ PASS: Coding agent failure strictly halts team orchestration, prevents subsequent agents, and returns success=false');
+  console.log('✅ PASS: Coding agent failure strictly halts team orchestration, triggers jules_session_error, and sets executionStatus=FAILED');
+
+  // Test Asynchronous Running State: QUEUED -> RUNNING
+  // MUST NEVER trigger jules_session_error, MUST set executionStatus='RUNNING', and MUST NOT run subsequent agents prematurely
+  const queuedResult = await agentTeamEngine.runWorkflow(
+    'TASK_SIMULATE_QUEUED: Async cloud processing',
+    'tier_3',
+    undefined,
+    {
+      provider: 'mock',
+      codingAgent: 'mock',
+      repository: 'MohamedGH/agentTeam',
+      branch: 'main',
+    }
+  );
+
+  assert.strictEqual(queuedResult.executionStatus, 'RUNNING', 'Queued session must result in executionStatus=RUNNING');
+  assert.strictEqual(queuedResult.success, false, 'Queued session is in flight, so success is false until finished');
+  
+  // Verify that QUEUED DOES NOT trigger jules_session_error!
+  const allQueuedToolCalls = queuedResult.steps.filter((s) => s.agent === 'developer').flatMap((s) => s.toolCalls || []);
+  const hasErrorCall = allQueuedToolCalls.some((tc) => tc.name === 'jules_session_error');
+  assert.strictEqual(hasErrorCall, false, 'CRITICAL: QUEUED state MUST NEVER trigger jules_session_error!');
+  const hasRunningCall = allQueuedToolCalls.some((tc) => tc.name === 'jules_session_running');
+  assert.strictEqual(hasRunningCall, true, 'QUEUED state must record jules_session_running tool call');
+
+  // Verify subsequent agents are not run prematurely
+  const queuedTesterSteps = queuedResult.steps.filter((s) => s.agent === 'tester');
+  const queuedReviewerSteps = queuedResult.steps.filter((s) => s.agent === 'reviewer');
+  assert.strictEqual(queuedTesterSteps.length, 0, 'Tester must NOT run prematurely while Jules is RUNNING');
+  assert.strictEqual(queuedReviewerSteps.length, 0, 'Reviewer must NOT run prematurely while Jules is RUNNING');
+  assert.strictEqual(queuedResult.finalReport?.implementation, 'RUNNING');
+  assert.strictEqual(queuedResult.finalReport?.tests, 'SKIPPED');
+  assert.strictEqual(queuedResult.finalReport?.review, 'SKIPPED');
+  console.log('✅ PASS: QUEUED state maps to executionStatus=RUNNING, never triggers jules_session_error, and does not execute downstream agents prematurely');
+
+  // Test Asynchronous Running State: PLANNING -> RUNNING
+  const planningResult = await agentTeamEngine.runWorkflow(
+    'TASK_SIMULATE_PLANNING: Plan generation in cloud',
+    'tier_3',
+    undefined,
+    {
+      provider: 'mock',
+      codingAgent: 'mock',
+      repository: 'MohamedGH/agentTeam',
+      branch: 'main',
+    }
+  );
+  assert.strictEqual(planningResult.executionStatus, 'RUNNING');
+  const allPlanningToolCalls = planningResult.steps.filter((s) => s.agent === 'developer').flatMap((s) => s.toolCalls || []);
+  const planningErrorCall = allPlanningToolCalls.some((tc) => tc.name === 'jules_session_error');
+  assert.strictEqual(planningErrorCall, false, 'CRITICAL: PLANNING state MUST NEVER trigger jules_session_error!');
+  console.log('✅ PASS: PLANNING state maps to executionStatus=RUNNING and never triggers jules_session_error');
+
+  // Test Asynchronous Running State: IN_PROGRESS -> RUNNING
+  const inProgressResult = await agentTeamEngine.runWorkflow(
+    'TASK_SIMULATE_IN_PROGRESS: Multi-step edits in cloud',
+    'tier_3',
+    undefined,
+    {
+      provider: 'mock',
+      codingAgent: 'mock',
+      repository: 'MohamedGH/agentTeam',
+      branch: 'main',
+    }
+  );
+  assert.strictEqual(inProgressResult.executionStatus, 'RUNNING');
+  const allInProgressToolCalls = inProgressResult.steps.filter((s) => s.agent === 'developer').flatMap((s) => s.toolCalls || []);
+  const inProgressErrorCall = allInProgressToolCalls.some((tc) => tc.name === 'jules_session_error');
+  assert.strictEqual(inProgressErrorCall, false, 'CRITICAL: IN_PROGRESS state MUST NEVER trigger jules_session_error!');
+  console.log('✅ PASS: IN_PROGRESS state maps to executionStatus=RUNNING and never triggers jules_session_error');
 
   console.log('✅ Jules Team Integration Tests Passed');
 }

@@ -9,6 +9,7 @@ import {
   JulesSession,
   JulesSessionState,
   JulesSource,
+  deriveExecutionStatus,
 } from './types';
 
 export interface JulesAgentOptions {
@@ -375,6 +376,7 @@ export class JulesAgent implements ICodingAgent {
     if (!this.isConfigured()) {
       return {
         success: false,
+        executionStatus: 'FAILED',
         agentId: this.id,
         sessionId: 'unconfigured_session',
         status: 'FAILED',
@@ -411,6 +413,7 @@ export class JulesAgent implements ICodingAgent {
       if (!task.timeoutSeconds || task.timeoutSeconds <= 0) {
         return {
           success: false,
+          executionStatus: deriveExecutionStatus(currentStatus, false),
           agentId: this.id,
           sessionId,
           status: currentStatus,
@@ -500,6 +503,7 @@ export class JulesAgent implements ICodingAgent {
         const errorMsg = terminalError || session.resultSummary || 'Google Jules task failed';
         return {
           success: false,
+          executionStatus: 'FAILED',
           agentId: this.id,
           sessionId,
           status: 'FAILED',
@@ -517,16 +521,17 @@ export class JulesAgent implements ICodingAgent {
         };
       }
 
-      const isStillRunning = currentStatus !== 'COMPLETED';
+      const isCompleted = currentStatus === 'COMPLETED';
 
       const summary =
         session.resultSummary ||
-        (currentStatus === 'COMPLETED'
+        (isCompleted
           ? `Google Jules autonomously completed task on ${task.repository} (${branch}).${session.prUrl ? ` Pull Request created: ${session.prUrl}` : ''}`
           : `Google Jules session is active and executing in the cloud (State: ${currentStatus}). Session ID: ${sessionId}. Execution continues beyond local HTTP wait window (${task.timeoutSeconds}s). Session remains active and can be monitored asynchronously via getSession.`);
 
       return {
-        success: currentStatus === 'COMPLETED',
+        success: isCompleted,
+        executionStatus: isCompleted ? 'COMPLETED' : deriveExecutionStatus(currentStatus, false),
         agentId: this.id,
         sessionId,
         status: currentStatus,
@@ -544,6 +549,7 @@ export class JulesAgent implements ICodingAgent {
     } catch (err: any) {
       return {
         success: false,
+        executionStatus: 'FAILED',
         agentId: this.id,
         sessionId: 'error_session',
         status: 'FAILED',

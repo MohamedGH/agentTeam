@@ -1,6 +1,6 @@
 import React from 'react';
 import { FinalReport } from '../types';
-import { Award, CheckCircle2, XCircle, FileCheck, Layers, Clock, Cpu, Sparkles, AlertCircle } from 'lucide-react';
+import { Award, CheckCircle2, XCircle, FileCheck, Layers, Clock, Cpu, Sparkles, AlertCircle, Loader2 } from 'lucide-react';
 
 interface FinalReportCardProps {
   report: FinalReport;
@@ -8,6 +8,7 @@ interface FinalReportCardProps {
 }
 
 export const FinalReportCard: React.FC<FinalReportCardProps> = ({ report, onViewFiles }) => {
+  const isRunning = report.implementation === 'RUNNING' || report.tests === 'RUNNING' || report.review === 'RUNNING';
   const isAllGreen = report.implementation === 'PASS' && report.tests === 'PASS' && report.review === 'APPROVED';
 
   return (
@@ -21,7 +22,12 @@ export const FinalReportCard: React.FC<FinalReportCardProps> = ({ report, onView
           <div>
             <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
               Autonomous Team Delivery Report
-              {isAllGreen ? (
+              {isRunning ? (
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 flex items-center gap-1">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Execution In Progress
+                </span>
+              ) : isAllGreen ? (
                 <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
                   <CheckCircle2 className="w-3.5 h-3.5" />
                   All Gates Passed
@@ -63,10 +69,18 @@ export const FinalReportCard: React.FC<FinalReportCardProps> = ({ report, onView
             className={`text-xs font-bold font-mono px-2.5 py-1 rounded-lg border flex items-center gap-1 ${
               report.implementation === 'PASS'
                 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                : report.implementation === 'RUNNING'
+                ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30 animate-pulse'
                 : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
             }`}
           >
-            {report.implementation === 'PASS' ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
+            {report.implementation === 'PASS' ? (
+              <CheckCircle2 className="w-3.5 h-3.5" />
+            ) : report.implementation === 'RUNNING' ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <XCircle className="w-3.5 h-3.5" />
+            )}
             {report.implementation}
           </span>
         </div>
@@ -83,10 +97,22 @@ export const FinalReportCard: React.FC<FinalReportCardProps> = ({ report, onView
             className={`text-xs font-bold font-mono px-2.5 py-1 rounded-lg border flex items-center gap-1 ${
               report.tests === 'PASS'
                 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                : report.tests === 'RUNNING'
+                ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30 animate-pulse'
+                : report.tests === 'SKIPPED'
+                ? 'bg-slate-800/60 text-slate-400 border-slate-700/50'
                 : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
             }`}
           >
-            {report.tests === 'PASS' ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
+            {report.tests === 'PASS' ? (
+              <CheckCircle2 className="w-3.5 h-3.5" />
+            ) : report.tests === 'RUNNING' ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : report.tests === 'SKIPPED' ? (
+              <Clock className="w-3.5 h-3.5" />
+            ) : (
+              <XCircle className="w-3.5 h-3.5" />
+            )}
             {report.tests}
           </span>
         </div>
@@ -103,10 +129,22 @@ export const FinalReportCard: React.FC<FinalReportCardProps> = ({ report, onView
             className={`text-xs font-bold font-mono px-2.5 py-1 rounded-lg border flex items-center gap-1 ${
               report.review === 'APPROVED'
                 ? 'bg-purple-500/10 text-purple-400 border-purple-500/30'
+                : report.review === 'RUNNING'
+                ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30 animate-pulse'
+                : report.review === 'SKIPPED'
+                ? 'bg-slate-800/60 text-slate-400 border-slate-700/50'
                 : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
             }`}
           >
-            {report.review === 'APPROVED' ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
+            {report.review === 'APPROVED' ? (
+              <CheckCircle2 className="w-3.5 h-3.5" />
+            ) : report.review === 'RUNNING' ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : report.review === 'SKIPPED' ? (
+              <Clock className="w-3.5 h-3.5" />
+            ) : (
+              <XCircle className="w-3.5 h-3.5" />
+            )}
             {report.review}
           </span>
         </div>

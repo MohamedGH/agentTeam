@@ -14,6 +14,19 @@ export type JulesSessionState =
   | 'CANCELLED'
   | string;
 
+export type ExecutionStatus = 'FAILED' | 'RUNNING' | 'COMPLETED';
+
+export function deriveExecutionStatus(status?: string, hasError?: boolean): ExecutionStatus {
+  if (hasError || status === 'FAILED' || status === 'CANCELLED') {
+    return 'FAILED';
+  }
+  if (status === 'COMPLETED') {
+    return 'COMPLETED';
+  }
+  // QUEUED, PLANNING, AWAITING_PLAN_APPROVAL, IN_PROGRESS, PAUSED, etc.
+  return 'RUNNING';
+}
+
 export const TERMINAL_STATES: ReadonlySet<string> = new Set(['FAILED', 'COMPLETED', 'CANCELLED']);
 
 export function isTerminalState(state?: string): boolean {
@@ -151,6 +164,7 @@ export interface CodingAgentTask {
 
 export interface CodingAgentResult {
   success?: boolean;
+  executionStatus?: ExecutionStatus;
   agentId: string;
   sessionId: string;
   status: JulesSessionState;

@@ -323,7 +323,7 @@ async function startServer() {
           });
         }
 
-        return res.status(result.success ? 200 : 500).json(result);
+        return res.status(result.executionStatus === 'FAILED' ? 500 : 200).json(result);
       }
 
       // Default asynchronous flow: startSession immediately returns sessionId and status
@@ -339,6 +339,7 @@ async function startServer() {
 
       res.status(200).json({
         success: true,
+        executionStatus: 'RUNNING',
         sessionId: session.id,
         status: session.state || 'QUEUED',
         repository: repoTarget,
@@ -426,8 +427,9 @@ async function startServer() {
           });
         }
 
-        return res.status(result.success ? 200 : (result.testsPassed === false ? 422 : 500)).json({
+        return res.status(result.executionStatus === 'FAILED' ? (result.testsPassed === false ? 422 : 500) : 200).json({
           success: result.success,
+          executionStatus: result.executionStatus,
           sessionId: result.sessionId,
           status: result.status,
           error: result.error,

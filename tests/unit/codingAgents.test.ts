@@ -198,5 +198,21 @@ export async function runCodingAgentsUnitTests() {
   assert.ok(failingTaskResult.error, 'Error must be populated');
   console.log('✅ PASS: CodingAgentManager.execute strictly sets success=false and preserves error on failure');
 
+  // 14. ExecutionStatus mapping & deriveExecutionStatus
+  const { deriveExecutionStatus } = await import('../../server/codingAgents/types');
+  assert.strictEqual(deriveExecutionStatus('QUEUED', false), 'RUNNING');
+  assert.strictEqual(deriveExecutionStatus('PLANNING', false), 'RUNNING');
+  assert.strictEqual(deriveExecutionStatus('AWAITING_PLAN_APPROVAL', false), 'RUNNING');
+  assert.strictEqual(deriveExecutionStatus('IN_PROGRESS', false), 'RUNNING');
+  assert.strictEqual(deriveExecutionStatus('PAUSED', false), 'RUNNING');
+  assert.strictEqual(deriveExecutionStatus('FAILED', false), 'FAILED');
+  assert.strictEqual(deriveExecutionStatus('FAILED', true), 'FAILED');
+  assert.strictEqual(deriveExecutionStatus('CANCELLED', false), 'FAILED');
+  assert.strictEqual(deriveExecutionStatus('COMPLETED', false), 'COMPLETED');
+  assert.strictEqual(deriveExecutionStatus('COMPLETED', true), 'FAILED', 'Error flag overrides COMPLETED to FAILED');
+  assert.strictEqual(mockResult.executionStatus, 'COMPLETED');
+  assert.strictEqual(failingTaskResult.executionStatus, 'FAILED');
+  console.log('✅ PASS: ExecutionStatus mappings (QUEUED->RUNNING, FAILED->FAILED, COMPLETED->COMPLETED) strictly verified');
+
   console.log('✅ Jules & CodingAgentManager Unit Tests Passed');
 }

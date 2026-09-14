@@ -3,7 +3,7 @@ import { providerManager } from './providerManager';
 import { quotaManager } from './quotaManager';
 import { workspace, VirtualWorkspace } from './virtualWorkspace';
 import { codingAgentManager, CodingAgentTask, CodingAgentResult } from './codingAgents';
-import { AgentStep, FinalReport, TeamRunResult, AgentRole } from '../src/types';
+import { AgentStep, FinalReport, TeamRunResult, AgentRole, ExecutionStatus, deriveExecutionStatus } from '../src/types';
 
 export interface TeamRunOptions {
   provider?: any;
@@ -160,7 +160,11 @@ Provide your architectural breakdown and delegation plan.`;
             }
           );
 
-          if (julesResult.status === 'FAILED' || !julesResult.success) {
+          const executionStatus: ExecutionStatus =
+            julesResult.executionStatus ||
+            deriveExecutionStatus(julesResult.status, Boolean(julesResult.error));
+
+          if (executionStatus === 'FAILED') {
             const errorMsg = julesResult.error || julesResult.summary || 'Google Jules coding agent failed.';
             addStep({
               phase: 2,
@@ -184,6 +188,7 @@ Provide your architectural breakdown and delegation plan.`;
               taskId,
               taskPrompt,
               success: false,
+              executionStatus: 'FAILED',
               modelUsed: chosenModel,
               codingAgentUsed: codingAgentToUse || undefined,
               prUrl: julesResult.pullRequestUrl || julesResult.prUrl,
@@ -216,6 +221,73 @@ Provide your architectural breakdown and delegation plan.`;
               },
               virtualFiles: workspace.getFiles(),
               error: errorMsg,
+            };
+          }
+
+          if (executionStatus === 'RUNNING') {
+            // Asynchronous session actively running in the cloud (QUEUED, PLANNING, IN_PROGRESS, etc.)
+            // CRITICAL ORCHESTRATION RULES:
+            // 1. NEVER trigger jules_session_error!
+            // 2. Do NOT mark as FAILED!
+            // 3. Do NOT mark as COMPLETED!
+            // 4. Do NOT launch subsequent agents (Tester, Reviewer) prematurely!
+            addStep({
+              phase: 2,
+              phaseName: 'Implementation (Jules)',
+              agent: 'developer',
+              thought: julesResult.summary,
+              toolCalls: [
+                {
+                  id: 'tc_jules_active',
+                  name: 'jules_session_running',
+                  args: {
+                    sessionId: julesResult.sessionId,
+                    status: julesResult.status,
+                    executionStatus: 'RUNNING',
+                  },
+                  result: `Session active (State: ${julesResult.status}). Session ID: ${julesResult.sessionId}`,
+                  timestamp: Date.now(),
+                },
+              ],
+              status: `STATUS: RUNNING (${julesResult.status})`,
+              output: julesResult.summary,
+            });
+
+            return {
+              taskId,
+              taskPrompt,
+              success: false,
+              executionStatus: 'RUNNING',
+              modelUsed: chosenModel,
+              codingAgentUsed: codingAgentToUse || undefined,
+              prUrl: julesResult.pullRequestUrl || julesResult.prUrl,
+              gitBranch: julesResult.git?.branch || julesResult.gitBranch,
+              commitSha: julesResult.commitSha,
+              commitUrl: julesResult.commitUrl,
+              pullRequestUrl: julesResult.pullRequestUrl || julesResult.prUrl,
+              testsPassed: undefined,
+              git: julesResult.git,
+              steps,
+              finalReport: {
+                implementation: 'RUNNING',
+                tests: 'SKIPPED',
+                review: 'SKIPPED',
+                filesChanged: [],
+                testSummary: `Tests pending: Google Jules session ${julesResult.sessionId} is currently ${julesResult.status}. Subsequent validation will run once implementation completes.`,
+                reviewSummary: `Review pending: Google Jules session ${julesResult.sessionId} is currently ${julesResult.status}. Architecture review will run once implementation completes.`,
+                remainingIssues: [],
+                totalCycles: {
+                  testerCorrections: 0,
+                  reviewerCorrections: 0,
+                },
+                metrics: {
+                  durationMs: Date.now() - startTime,
+                  modelUsed: chosenModel,
+                  providerUsed: activeProvider,
+                  codingAgentUsed: codingAgentToUse || undefined,
+                },
+              },
+              virtualFiles: workspace.getFiles(),
             };
           }
 
@@ -539,6 +611,7 @@ Evaluate code quality, security implications, maintainability, and clean archite
         taskId,
         taskPrompt,
         success: true,
+        executionStatus: 'COMPLETED',
         modelUsed: chosenModel,
         codingAgentUsed: codingAgentToUse || undefined,
         prUrl: julesResult?.pullRequestUrl || julesResult?.prUrl,
@@ -558,6 +631,7 @@ Evaluate code quality, security implications, maintainability, and clean archite
         taskId,
         taskPrompt,
         success: false,
+        executionStatus: 'FAILED',
         modelUsed: chosenModel,
         codingAgentUsed: codingAgentToUse || undefined,
         steps,
