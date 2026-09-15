@@ -60,6 +60,9 @@ export class GeminiProvider implements IAIProvider {
     const completionTokens = usage?.candidatesTokenCount ?? Math.max(1, Math.ceil(text.length / 4));
     const totalTokens = usage?.totalTokenCount ?? (promptTokens + completionTokens);
 
+    const hasRealText = Boolean(response.text?.trim());
+    const isRealProviderUsage = Boolean(usage && (usage.promptTokenCount !== undefined || usage.totalTokenCount !== undefined)) && hasRealText;
+
     return {
       text,
       promptTokens,
@@ -67,8 +70,9 @@ export class GeminiProvider implements IAIProvider {
       totalTokens,
       provider: 'gemini',
       model,
-      isRealProviderUsage: Boolean(usage && (usage.promptTokenCount !== undefined || usage.totalTokenCount !== undefined)),
+      isRealProviderUsage,
       tokenAccountingType: 'real_provider',
+      generationOutcome: hasRealText ? 'REAL_PROVIDER_SUCCESS' : 'DEGRADED_FALLBACK',
     };
   }
 

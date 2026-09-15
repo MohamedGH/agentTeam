@@ -52,8 +52,8 @@ export type TokenAccountingType = 'real_provider' | 'mock' | 'fallback_unknown';
 
 export type GenerationOutcome =
   | 'REAL_PROVIDER_SUCCESS'
+  | 'MOCK_SUCCESS'
   | 'DEGRADED_FALLBACK'
-  | 'PROVIDER_FAILURE'
   | 'TASK_FAILURE';
 
 export interface AgentStep {

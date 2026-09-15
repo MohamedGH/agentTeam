@@ -305,6 +305,129 @@ export async function runWorkflowOrchestratorUnitTests() {
     console.log('✅ PASS: Server restart recovery successfully resumed and drove workflow to completion');
   }
 
+  // -------------------------------------------------------------
+  // TEST 6: Concurrency Coalescing (inFlightPolls guard)
+  // -------------------------------------------------------------
+  {
+    console.log('\nTest 6: Concurrency coalescing prevents duplicate concurrent pollWorkflow calls');
+    const { orchestrator, codingAgentManager } = setupTestHarness();
+
+    let getSessionCount = 0;
+    const origGetSession = codingAgentManager.getSession.bind(codingAgentManager);
+    codingAgentManager.getSession = async (sessionId: string, agentId?: string) => {
+      getSessionCount++;
+      // Delay slightly to ensure concurrent calls overlap
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      return origGetSession(sessionId, agentId);
+    };
+
+    const workflow = await orchestrator.startWorkflow({
+      agent: 'mock',
+      repository: 'MohamedGH/agentTeam',
+      branch: 'main',
+      taskPrompt: 'Test concurrency coalescing',
+    });
+
+    // Fire 5 concurrent polls simultaneously using both sessionId and workflowId
+    const [p1, p2, p3, p4, p5] = await Promise.all([
+      orchestrator.pollWorkflow(workflow.sessionId),
+      orchestrator.pollWorkflow(workflow.workflowId),
+      orchestrator.pollWorkflow(workflow.sessionId),
+      orchestrator.pollWorkflow(workflow.workflowId),
+      orchestrator.pollWorkflow(workflow.sessionId),
+    ]);
+
+    // All should return identical results and getSession should only have been called once for this poll wave
+    assert.strictEqual(p1.status, p2.status);
+    assert.strictEqual(p2.status, p3.status);
+    assert.strictEqual(getSessionCount, 1, `Expected 1 call to getSession due to coalescing, got ${getSessionCount}`);
+    console.log('✅ PASS: Concurrent polling calls cleanly coalesced');
+  }
+
+  // -------------------------------------------------------------
+  // TEST 7: Single Downstream Execution Owner (Exact-Once Guarantee)
+  // -------------------------------------------------------------
+  {
+    console.log('\nTest 7: Downstream verification & delivery executes EXACTLY ONCE');
+    const { orchestrator, mockAgent, githubManager } = setupTestHarness();
+
+    let githubDeliveryCount = 0;
+    githubManager.processTaskResult = async () => {
+      githubDeliveryCount++;
+      return {
+        success: true,
+        commitSha: 'commit_test_123',
+        pullRequestUrl: 'https://github.com/MohamedGH/agentTeam/pull/99',
+      };
+    };
+
+    const workflow = await orchestrator.startWorkflow({
+      agent: 'mock',
+      repository: 'MohamedGH/agentTeam',
+      branch: 'main',
+      taskPrompt: 'Ensure downstream executes once',
+      commitPushAndCreatePR: true,
+    });
+
+    mockAgent.setMockSession({
+      state: 'COMPLETED',
+      resultSummary: 'Finished initial coding pass',
+    });
+
+    // First completion poll
+    const firstPoll = await orchestrator.pollWorkflow(workflow.sessionId);
+    assert.strictEqual(firstPoll.stage, 'COMPLETED');
+    assert.strictEqual(firstPoll.downstreamExecuted, true);
+    assert.strictEqual(githubDeliveryCount, 1, 'GitHub delivery must run once on initial completion');
+
+    // Attempt second poll or direct handleJulesCompleted invocation
+    const secondPoll = await orchestrator.pollWorkflow(workflow.sessionId);
+    assert.strictEqual(githubDeliveryCount, 1, 'GitHub delivery must NOT run a second time');
+    assert.strictEqual(secondPoll.downstreamExecuted, true);
+
+    const directCall = await orchestrator.handleJulesCompleted(firstPoll, null);
+    assert.strictEqual(githubDeliveryCount, 1, 'Direct call to handleJulesCompleted must NOT run downstream a second time');
+    assert.strictEqual(directCall.downstreamExecuted, true);
+
+    console.log('✅ PASS: Downstream execution strictly guaranteed exactly once');
+  }
+
+  // -------------------------------------------------------------
+  // TEST 8: Workflow ID & Session ID bi-directional resolution
+  // -------------------------------------------------------------
+  {
+    console.log('\nTest 8: Workflow ID and Session ID resolve to same state');
+    const { orchestrator, sessionStore } = setupTestHarness();
+
+    const customWorkflowId = 'wf_custom_test_identity_999';
+    const workflow = await orchestrator.startWorkflow({
+      workflowId: customWorkflowId,
+      agent: 'mock',
+      repository: 'MohamedGH/agentTeam',
+      branch: 'main',
+      taskPrompt: 'Identity resolution test',
+    });
+
+    assert.strictEqual(workflow.workflowId, customWorkflowId);
+
+    // Retrieve via workflowId
+    const stateByWf = await orchestrator.getWorkflow(customWorkflowId);
+    assert.ok(stateByWf);
+    assert.strictEqual(stateByWf.sessionId, workflow.sessionId);
+
+    // Retrieve via sessionId
+    const stateBySession = await orchestrator.getWorkflow(workflow.sessionId);
+    assert.ok(stateBySession);
+    assert.strictEqual(stateBySession.workflowId, customWorkflowId);
+
+    // Retrieve via sessionStore directly by workflowId
+    const storedByWf = await sessionStore.getSession(customWorkflowId);
+    assert.ok(storedByWf);
+    assert.strictEqual(storedByWf.sessionId, workflow.sessionId);
+
+    console.log('✅ PASS: Both workflowId and sessionId reliably resolve the same workflow state');
+  }
+
   // Cleanup test directory
   if (fs.existsSync(testDataDir)) {
     fs.rmSync(testDataDir, { recursive: true, force: true });

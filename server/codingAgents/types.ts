@@ -284,5 +284,7 @@ export interface WorkflowState {
   finalReport?: any;
   error?: string;
   summary?: string;
+  downstreamExecuted?: boolean;
+  downstreamExecuting?: boolean;
 }
 

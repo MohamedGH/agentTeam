@@ -5,6 +5,7 @@ import {
   ProviderModelConfig,
   GenerationUsageResult,
   TokenCountResult,
+  GenerationOutcome,
 } from './providers/types';
 import {
   classifyProviderError,
@@ -292,8 +293,9 @@ export class ProviderManager {
         }
 
         // Avoid models with exhausted quota if headroom check is possible
-        if (!quotaManager.canUseModel(candidateModel, 'tier_3', 1000)) {
-          console.log(`[ProviderManager] Candidate ${provId}/${candidateModel} has exhausted quota headroom. Skipping.`);
+        const quotaCheck = quotaManager.canUseModel(candidateModel, 'tier_3', 1000);
+        if (!quotaCheck.ok) {
+          console.log(`[ProviderManager] Candidate ${provId}/${candidateModel} skipped due to quota: ${quotaCheck.reason}`);
           continue;
         }
 
@@ -322,12 +324,20 @@ export class ProviderManager {
             totalTokenCount: res.totalTokens,
           });
 
+          const generationOutcome: GenerationOutcome =
+            res.generationOutcome ||
+            (provId === 'mock'
+              ? 'MOCK_SUCCESS'
+              : (res.isRealProviderUsage && res.text !== fallbackText
+                  ? 'REAL_PROVIDER_SUCCESS'
+                  : 'DEGRADED_FALLBACK'));
+
           return {
             ...res,
             provider: provId,
             model: candidateModel,
             failoverHistory: failoverHistory.length > 0 ? failoverHistory : undefined,
-            generationOutcome: res.generationOutcome || (res.isRealProviderUsage ? 'REAL_PROVIDER_SUCCESS' : 'DEGRADED_FALLBACK'),
+            generationOutcome,
           };
         } catch (err: any) {
           const classified = classifyProviderError(err);

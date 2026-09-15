@@ -628,6 +628,7 @@ async function startServer() {
   app.post('/api/workflows', async (req, res) => {
     try {
       const {
+        workflowId,
         agent = 'jules',
         repository,
         branch = 'main',
@@ -648,6 +649,7 @@ async function startServer() {
       }
 
       const workflow = await workflowOrchestrator.startWorkflow({
+        workflowId,
         agent,
         repository,
         branch,

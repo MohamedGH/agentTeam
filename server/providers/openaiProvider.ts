@@ -44,12 +44,16 @@ export class OpenAIProvider implements IAIProvider {
     }
 
     const data = await res.json();
-    const text = data.choices?.[0]?.message?.content?.trim() || fallbackText;
+    const rawText = data.choices?.[0]?.message?.content;
+    const text = rawText?.trim() || fallbackText;
     const usage = data.usage;
 
     const promptTokens = usage?.prompt_tokens ?? Math.max(1, Math.ceil(prompt.length / 4));
     const completionTokens = usage?.completion_tokens ?? Math.max(1, Math.ceil(text.length / 4));
     const totalTokens = usage?.total_tokens ?? (promptTokens + completionTokens);
+
+    const hasRealText = Boolean(rawText?.trim());
+    const isRealProviderUsage = Boolean(usage) && hasRealText;
 
     return {
       text,
@@ -58,8 +62,9 @@ export class OpenAIProvider implements IAIProvider {
       totalTokens,
       provider: 'openai',
       model,
-      isRealProviderUsage: Boolean(usage),
+      isRealProviderUsage,
       tokenAccountingType: 'real_provider',
+      generationOutcome: hasRealText ? 'REAL_PROVIDER_SUCCESS' : 'DEGRADED_FALLBACK',
     };
   }
 

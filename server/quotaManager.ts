@@ -272,6 +272,13 @@ export class QuotaManager {
       return { ok: false, reason: `Cooldown active (${remainingCooldown}s remaining due to 429/503)` };
     }
 
+    // Non-Gemini models (e.g. OpenAI, Anthropic, Groq, DeepSeek, Custom, Mock)
+    // are not subject to Gemini Google Service Usage quotas unless explicitly configured.
+    const isGeminiModel = model.startsWith('gemini-');
+    if (!isGeminiModel && !this.limits[model]) {
+      return { ok: true, reason: 'OK' };
+    }
+
     const limits = this.limits[model]?.[tier] || this.limits[model]?.['tier_3'];
 
     // If explicit limits exist from Cloud Monitoring / quota descriptor, enforce them

@@ -44,6 +44,15 @@ export class WorkflowOrchestrator {
 
   // Active in-memory tracking map (workflowId / sessionId -> WorkflowState)
   private activeWorkflows: Map<string, WorkflowState> = new Map();
+  private workflowToSessionMap: Map<string, string> = new Map();
+  private sessionToWorkflowMap: Map<string, string> = new Map();
+
+  // In-flight concurrency lock to coalesce simultaneous polls for the same session/workflow
+  private inFlightPolls: Map<string, Promise<WorkflowState>> = new Map();
+
+  // Polling backoff tracking for transient errors (429, 500, 502, 503, network)
+  private workflowBackoff: Map<string, { consecutiveFailures: number; nextAllowedPollTime: number }> = new Map();
+
   private pollerTimer: NodeJS.Timeout | null = null;
   private isPollingActive = false;
   private pollIntervalMs: number = 2500;
@@ -150,6 +159,10 @@ export class WorkflowOrchestrator {
       summary: session.resultSummary || `Google Jules session active (${session.state})`,
     };
 
+    // Register mapping between workflowId and sessionId
+    this.workflowToSessionMap.set(workflowId, cleanSessionId);
+    this.sessionToWorkflowMap.set(cleanSessionId, workflowId);
+
     // Persist to session store
     await this.persistWorkflow(workflowState);
 
@@ -168,45 +181,38 @@ export class WorkflowOrchestrator {
    * Resume an existing workflow by sessionId or workflowId
    */
   public async resumeWorkflow(id: string): Promise<WorkflowState | null> {
-    const cleanId = id.replace(/^sessions\//, '').replace(/^wf_/, '');
-    
-    // Check active cache first
-    let state = this.activeWorkflows.get(cleanId) || this.activeWorkflows.get(`wf_${cleanId}`) || this.activeWorkflows.get(id);
+    let state = await this.getWorkflow(id);
 
     if (!state) {
-      // Load from durable session store
-      const stored = await this.sessionStore.getSession(cleanId) || await this.sessionStore.getSession(id);
+      // Check if stored session exists without workflowState yet
+      const stored = await this.sessionStore.getSession(id);
       if (stored) {
-        if (stored.workflowState) {
-          state = stored.workflowState;
-        } else {
-          // Construct workflow state from stored session
-          state = {
-            workflowId: `wf_${stored.sessionId}`,
-            sessionId: stored.sessionId,
-            agentId: stored.agentId || 'jules',
+        const canonicalWorkflowId = stored.metadata?.workflowId || (id.startsWith('wf_') ? id : `wf_${stored.sessionId}`);
+        state = {
+          workflowId: canonicalWorkflowId,
+          sessionId: stored.sessionId,
+          agentId: stored.agentId || 'jules',
+          repository: stored.repository,
+          branch: stored.branch || 'main',
+          task: stored.task,
+          title: stored.title,
+          stage: isTerminalState(stored.status) ? (stored.status === 'COMPLETED' ? 'COMPLETED' : 'FAILED') : 'JULES_RUNNING',
+          status: stored.status,
+          executionStatus: deriveExecutionStatus(stored.status, Boolean(stored.error)),
+          options: {
+            taskPrompt: stored.task,
             repository: stored.repository,
-            branch: stored.branch || 'main',
-            task: stored.task,
-            title: stored.title,
-            stage: isTerminalState(stored.status) ? (stored.status === 'COMPLETED' ? 'COMPLETED' : 'FAILED') : 'JULES_RUNNING',
-            status: stored.status,
-            executionStatus: deriveExecutionStatus(stored.status, Boolean(stored.error)),
-            options: {
-              taskPrompt: stored.task,
-              repository: stored.repository,
-              branch: stored.branch,
-              agent: stored.agentId,
-            },
-            createdAt: stored.createdAt,
-            updatedAt: stored.updatedAt,
-            prUrl: stored.prUrl,
-            gitBranch: stored.gitBranch,
-            error: stored.error,
-            summary: stored.summary,
-            steps: [],
-          };
-        }
+            branch: stored.branch,
+            agent: stored.agentId,
+          },
+          createdAt: stored.createdAt,
+          updatedAt: stored.updatedAt,
+          prUrl: stored.prUrl,
+          gitBranch: stored.gitBranch,
+          error: stored.error,
+          summary: stored.summary,
+          steps: [],
+        };
       }
     }
 
@@ -214,6 +220,9 @@ export class WorkflowOrchestrator {
       console.warn(`[WorkflowOrchestrator] Cannot resume workflow: session "${id}" not found.`);
       return null;
     }
+
+    this.workflowToSessionMap.set(state.workflowId, state.sessionId);
+    this.sessionToWorkflowMap.set(state.sessionId, state.workflowId);
 
     console.log(`[WorkflowOrchestrator] Resuming workflow ${state.workflowId} (Stage: ${state.stage}, Status: ${state.status})`);
 
@@ -227,29 +236,59 @@ export class WorkflowOrchestrator {
     this.activeWorkflows.set(state.workflowId, state);
     this.ensurePollerRunning();
 
-    return this.pollWorkflow(state.sessionId);
+    return this.pollWorkflow(state.sessionId, { force: true });
   }
 
   /**
    * Poll a single workflow to check Jules status and advance downstream stages if completed.
+   * Concurrency-guarded to prevent duplicate overlapping poll invocations.
    */
-  public async pollWorkflow(sessionIdOrWorkflowId: string): Promise<WorkflowState> {
-    const cleanId = sessionIdOrWorkflowId.replace(/^sessions\//, '').replace(/^wf_/, '');
-    let state = this.activeWorkflows.get(cleanId) || this.activeWorkflows.get(`wf_${cleanId}`) || this.activeWorkflows.get(sessionIdOrWorkflowId);
+  public async pollWorkflow(sessionIdOrWorkflowId: string, options?: { force?: boolean }): Promise<WorkflowState> {
+    const cleanSessionId = sessionIdOrWorkflowId.replace(/^sessions\//, '');
+    const mappedSessionId = this.workflowToSessionMap.get(sessionIdOrWorkflowId);
+    const lockKey = mappedSessionId || cleanSessionId;
+
+    // Check concurrency lock: coalesce duplicate in-flight polls
+    const existingInFlight = this.inFlightPolls.get(lockKey) || this.inFlightPolls.get(sessionIdOrWorkflowId);
+    if (existingInFlight) {
+      console.log(`[WorkflowOrchestrator] In-flight poll in progress for ${sessionIdOrWorkflowId}. Coalescing request.`);
+      return existingInFlight;
+    }
+
+    const pollPromise = this.executePoll(sessionIdOrWorkflowId, options);
+    this.inFlightPolls.set(lockKey, pollPromise);
+    this.inFlightPolls.set(sessionIdOrWorkflowId, pollPromise);
+
+    try {
+      return await pollPromise;
+    } finally {
+      this.inFlightPolls.delete(lockKey);
+      this.inFlightPolls.delete(sessionIdOrWorkflowId);
+    }
+  }
+
+  /**
+   * Internal polling execution with backoff and error classification
+   */
+  private async executePoll(sessionIdOrWorkflowId: string, options?: { force?: boolean }): Promise<WorkflowState> {
+    let state = await this.getWorkflow(sessionIdOrWorkflowId);
 
     if (!state) {
-      const stored = await this.sessionStore.getSession(cleanId);
-      if (stored?.workflowState) {
-        state = stored.workflowState;
-      } else {
-        throw new Error(`Workflow with ID ${sessionIdOrWorkflowId} not found.`);
-      }
+      throw new Error(`Workflow with ID ${sessionIdOrWorkflowId} not found.`);
     }
 
     // Guard if already terminal
     if (state.stage === 'COMPLETED' || state.stage === 'FAILED' || state.stage === 'CANCELLED') {
       this.activeWorkflows.delete(state.sessionId);
       this.activeWorkflows.delete(state.workflowId);
+      return state;
+    }
+
+    // Transient error backoff check: skip polling if within cooldown window unless force=true
+    const backoff = this.workflowBackoff.get(state.sessionId);
+    const now = Date.now();
+    if (!options?.force && backoff && now < backoff.nextAllowedPollTime) {
+      console.log(`[WorkflowOrchestrator] Backoff active for ${state.sessionId} (${Math.ceil((backoff.nextAllowedPollTime - now) / 1000)}s remaining). Skipping live poll.`);
       return state;
     }
 
@@ -262,6 +301,10 @@ export class WorkflowOrchestrator {
     try {
       // Query live session from agent
       const liveSession = await this.codingAgentManager.getSession(state.sessionId, state.agentId);
+
+      // On successful poll, reset transient failure backoff
+      this.workflowBackoff.delete(state.sessionId);
+
       state.status = liveSession.state;
       state.executionStatus = deriveExecutionStatus(liveSession.state, false);
 
@@ -320,17 +363,35 @@ export class WorkflowOrchestrator {
     } catch (pollErr: any) {
       console.error(`[WorkflowOrchestrator] Polling error on session ${state.sessionId}:`, pollErr.message);
 
-      // Distinguish fatal entity-not-found / auth errors from transient network disconnects
-      if (
-        pollErr.message?.includes('404') ||
-        pollErr.message?.includes('401') ||
-        pollErr.message?.includes('403') ||
-        pollErr.message?.includes('Requested entity was not found')
-      ) {
+      const errMsg = pollErr.message || '';
+      const isFatal =
+        errMsg.includes('404') ||
+        errMsg.includes('401') ||
+        errMsg.includes('403') ||
+        errMsg.includes('Requested entity was not found') ||
+        errMsg.includes('Not Found') ||
+        errMsg.includes('Unauthorized') ||
+        errMsg.includes('invalid key');
+
+      if (isFatal) {
+        this.workflowBackoff.delete(state.sessionId);
         return await this.handleJulesFailed(state, null, pollErr.message);
       }
 
-      // For transient polling failures, maintain RUNNING state and do NOT mark failed
+      // For transient polling failures (e.g. 429, 500, 503, network glitch),
+      // compute exponential backoff with jitter and maintain RUNNING state
+      const currentFailures = (this.workflowBackoff.get(state.sessionId)?.consecutiveFailures || 0) + 1;
+      const baseDelay = Math.min(60000, 2000 * Math.pow(2, currentFailures - 1));
+      const jitter = Math.floor(Math.random() * 500 - 250);
+      const delayMs = Math.max(1000, baseDelay + jitter);
+
+      this.workflowBackoff.set(state.sessionId, {
+        consecutiveFailures: currentFailures,
+        nextAllowedPollTime: Date.now() + delayMs,
+      });
+
+      console.warn(`[WorkflowOrchestrator] Transient error on ${state.sessionId} (failures: ${currentFailures}). Backoff delay: ${delayMs}ms.`);
+
       state.updatedAt = new Date().toISOString();
       await this.persistWorkflow(state);
       return state;
@@ -342,6 +403,19 @@ export class WorkflowOrchestrator {
    * Executes GitHub automation, QA testing, Architectural review, and Manager report in sequence.
    */
   public async handleJulesCompleted(state: WorkflowState, liveSession: JulesSession | null): Promise<WorkflowState> {
+    // Safety check: handleJulesCompleted MUST only be called when status is terminal COMPLETED
+    if (state.status !== 'COMPLETED') {
+      console.warn(`[WorkflowOrchestrator] Safety violation: handleJulesCompleted called with non-COMPLETED status (${state.status}). Refusing GitHub delivery.`);
+      return state;
+    }
+
+    // Single Execution Owner: guarantee downstream execution (GitHub/QA/Review/Report) happens EXACTLY once
+    if (state.downstreamExecuted || state.stage === 'COMPLETED' || state.downstreamExecuting) {
+      console.log(`[WorkflowOrchestrator] Downstream pipeline already executed or currently executing for ${state.sessionId}. Skipping duplicate execution.`);
+      return state;
+    }
+
+    state.downstreamExecuting = true;
     console.log(`[WorkflowOrchestrator] Jules session ${state.sessionId} COMPLETED. Initiating downstream verification & delivery pipeline...`);
 
     const taskPrompt = state.task;
@@ -414,6 +488,7 @@ export class WorkflowOrchestrator {
         state.error = gitRes.error || 'GitHub workflow execution failed.';
         state.stage = 'FAILED';
         state.executionStatus = 'FAILED';
+        state.downstreamExecuting = false;
         await this.persistWorkflow(state);
         this.activeWorkflows.delete(state.sessionId);
         this.activeWorkflows.delete(state.workflowId);
@@ -506,6 +581,8 @@ export class WorkflowOrchestrator {
     state.finalReport = finalReport;
     state.stage = 'COMPLETED';
     state.executionStatus = 'COMPLETED';
+    state.downstreamExecuted = true;
+    state.downstreamExecuting = false;
     state.summary = `Workflow completed successfully. PR: ${state.pullRequestUrl || state.prUrl || 'Delivered'}`;
 
     state.steps.push({

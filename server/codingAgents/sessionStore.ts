@@ -46,6 +46,7 @@ export interface ICodingAgentSessionStore {
   getActivities(sessionId: string, sinceIsoTimestamp?: string): Promise<JulesActivity[]>;
   listActiveWorkflows?(): Promise<StoredCodingSession[]>;
   saveWorkflowState?(sessionId: string, workflowState: WorkflowState): Promise<StoredCodingSession | null>;
+  getSessionByWorkflowId?(workflowId: string): Promise<StoredCodingSession | null>;
   deleteSession?(sessionId: string): Promise<boolean>;
 }
 
@@ -152,10 +153,28 @@ export class FileBackedCodingAgentSessionStore implements ICodingAgentSessionSto
     return merged;
   }
 
-  public async getSession(sessionId: string): Promise<StoredCodingSession | null> {
+  public async getSession(sessionIdOrWorkflowId: string): Promise<StoredCodingSession | null> {
     this.loadFromDisk();
-    const cleanId = sessionId.replace(/^sessions\//, '');
-    return this.cache.get(cleanId) || this.cache.get(sessionId) || null;
+    const cleanId = sessionIdOrWorkflowId.replace(/^sessions\//, '');
+    const direct = this.cache.get(cleanId) || this.cache.get(sessionIdOrWorkflowId);
+    if (direct) return direct;
+
+    // Resolve by workflowId (custom workflow ID or prefixed wf_*)
+    for (const session of this.cache.values()) {
+      if (
+        session.workflowState?.workflowId === sessionIdOrWorkflowId ||
+        session.workflowState?.workflowId === cleanId ||
+        session.metadata?.workflowId === sessionIdOrWorkflowId ||
+        session.metadata?.workflowId === cleanId
+      ) {
+        return session;
+      }
+    }
+    return null;
+  }
+
+  public async getSessionByWorkflowId(workflowId: string): Promise<StoredCodingSession | null> {
+    return this.getSession(workflowId);
   }
 
   public async updateSession(
@@ -281,8 +300,14 @@ export class FileBackedCodingAgentSessionStore implements ICodingAgentSessionSto
   }
 
   public async saveWorkflowState(sessionId: string, workflowState: WorkflowState): Promise<StoredCodingSession | null> {
+    const cleanId = sessionId.replace(/^sessions\//, '');
+    const current = this.cache.get(cleanId) || this.cache.get(sessionId);
     return this.updateSession(sessionId, {
       workflowState,
+      metadata: {
+        ...(current?.metadata || {}),
+        workflowId: workflowState.workflowId,
+      },
       status: workflowState.status || undefined,
       prUrl: workflowState.prUrl || undefined,
       gitBranch: workflowState.gitBranch || undefined,

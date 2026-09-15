@@ -46,12 +46,16 @@ export class AnthropicProvider implements IAIProvider {
     }
 
     const data = await res.json();
-    const text = data.content?.[0]?.text?.trim() || fallbackText;
+    const rawText = data.content?.[0]?.text;
+    const text = rawText?.trim() || fallbackText;
     const usage = data.usage;
 
     const promptTokens = usage?.input_tokens ?? Math.max(1, Math.ceil(prompt.length / 4));
     const completionTokens = usage?.output_tokens ?? Math.max(1, Math.ceil(text.length / 4));
     const totalTokens = promptTokens + completionTokens;
+
+    const hasRealText = Boolean(rawText?.trim());
+    const isRealProviderUsage = Boolean(usage) && hasRealText;
 
     return {
       text,
@@ -60,8 +64,9 @@ export class AnthropicProvider implements IAIProvider {
       totalTokens,
       provider: 'anthropic',
       model,
-      isRealProviderUsage: Boolean(usage),
+      isRealProviderUsage,
       tokenAccountingType: 'real_provider',
+      generationOutcome: hasRealText ? 'REAL_PROVIDER_SUCCESS' : 'DEGRADED_FALLBACK',
     };
   }
 
