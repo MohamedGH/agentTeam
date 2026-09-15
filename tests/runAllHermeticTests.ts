@@ -1,5 +1,6 @@
 import { runAllUnitTests } from './unit/runUnitTests';
 import { runAllIntegrationTests } from './integration/runIntegrationTests';
+import { runWorkflowPipelineE2ETests } from './e2e/workflowPipelineE2E.test';
 
 async function main() {
   console.log('====================================================');
@@ -8,9 +9,10 @@ async function main() {
 
   await runAllUnitTests();
   await runAllIntegrationTests();
+  await runWorkflowPipelineE2ETests();
 
   console.log('====================================================');
-  console.log('✨ ALL HERMETIC TESTS (UNIT + INTEGRATION) PASSED 100%');
+  console.log('✨ ALL HERMETIC TESTS (UNIT + INTEGRATION + E2E) PASSED 100%');
   console.log('====================================================');
   process.exit(0);
 }

@@ -432,16 +432,16 @@ export class WorkflowOrchestrator {
 
     const issues: string[] = [];
     const securityIssues: string[] = [];
-    const diffLines = gitDiff ? gitDiff.split('\n').length : 0;
+    const diffLines = gitDiff ? gitDiff.split('\n').filter((l) => l.trim().length > 0).length : 0;
 
     // 1. Tests must pass
     if (!testPassed) {
-      issues.push('Automated test suite failed: QA test validation detected regressions or unhandled test assertions.');
+      issues.push('Automated QA test suite failed: Quality gate rejected due to test assertion or regression failures.');
     }
 
     const diffText = gitDiff || '';
 
-    // 3. Detect exposed secrets / private API keys in diff
+    // 2. Detect exposed secrets / private API keys in diff
     const secretPatterns = [
       { pattern: /(?:api[_-]?key|secret[_-]?key|private[_-]?key|auth_token)\s*[:=]\s*['"][a-zA-Z0-9_\-\.]{16,}['"]/i, name: 'Hardcoded credential (API key or private secret)' },
       { pattern: /ghp_[a-zA-Z0-9]{15,}/, name: 'Hardcoded credential (GitHub personal access token)' },
@@ -458,7 +458,7 @@ export class WorkflowOrchestrator {
       }
     }
 
-    // 4. Prohibit newly introduced .env files (except .env.example)
+    // 3. Prohibit newly introduced .env files (except .env.example)
     for (const file of filesChanged) {
       const base = file.replace(/\\/g, '/').split('/').pop() || '';
       if ((base === '.env' || base.startsWith('.env.') || base.endsWith('.env')) && !base.endsWith('.example')) {
@@ -468,7 +468,7 @@ export class WorkflowOrchestrator {
       }
     }
 
-    // 5. Prohibit dangerous shell executions
+    // 4. Prohibit dangerous shell executions
     const dangerousShell = /\b(rm\s+-rf\s+[\/\*]|curl\s+[^|\n]+\|\s*(?:ba)?sh|wget\s+[^|\n]+\|\s*(?:ba)?sh|eval\s*\()/i;
     if (dangerousShell.test(diffText)) {
       const msg = 'Security violation: Dangerous unvalidated shell command (e.g. recursive delete, curl-to-sh, or eval) detected in diff.';
@@ -476,18 +476,27 @@ export class WorkflowOrchestrator {
       securityIssues.push(msg);
     }
 
-    // 6. Prohibit committing runtime / generated artifacts
+    // 5. Prohibit committing runtime / generated artifacts
     const prohibitedArtifacts = /\+\+\+ b\/(?:node_modules|data\/coding_agent_sessions\.json|quota_state\.json|\.DS_Store)/;
     if (prohibitedArtifacts.test(diffText)) {
-      issues.push('Hygiene violation: Generated runtime artifact or system cache file detected in diff.');
+      const msg = 'Hygiene violation: Generated runtime artifact or system cache file detected in diff.';
+      issues.push(msg);
+      securityIssues.push(msg);
     }
 
     const approved = issues.length === 0;
     const status: 'APPROVED' | 'CHANGES_REQUESTED' = approved ? 'APPROVED' : 'CHANGES_REQUESTED';
 
-    const summary = approved
-      ? `Automated architectural review passed: ${filesChanged.length} files reviewed (${diffLines} diff lines). Tests passed, no exposed credentials or unsafe patterns detected.`
-      : `Automated review requested changes (${issues.length} issue(s) identified): ${issues.join('; ')}`;
+    let summary: string;
+    if (approved) {
+      if (diffLines === 0) {
+        summary = 'Automated architectural review passed: Empty diff, zero code modifications verified.';
+      } else {
+        summary = `Automated architectural review passed: ${filesChanged.length} file(s) reviewed (${diffLines} diff lines). Tests passed, no exposed credentials or unsafe patterns detected.`;
+      }
+    } else {
+      summary = `Automated review requested changes (${issues.length} issue(s) identified): ${issues.join('; ')}`;
+    }
 
     return {
       approved,
@@ -502,7 +511,13 @@ export class WorkflowOrchestrator {
 
   /**
    * Handlers for when Jules reaches COMPLETED status.
-   * Executes GitHub automation, QA testing, Architectural review, and Manager report in sequence.
+   * Strict Mandatory Pipeline:
+   * 1. Jules COMPLETED
+   * 2. QA Testing (real/structured command execution)
+   * 3. Deterministic Architectural Review
+   * 4. Quality Gate Check (If QA fails OR Review changes requested -> halt without Git/PR)
+   * 5. If QA PASS + REVIEW APPROVED -> GitHub Delivery (Commit / Push / PR)
+   * 6. Honest Final Report Generation
    */
   public async handleJulesCompleted(state: WorkflowState, liveSession: JulesSession | null): Promise<WorkflowState> {
     // Safety check: handleJulesCompleted MUST only be called when status is terminal COMPLETED
@@ -511,7 +526,7 @@ export class WorkflowOrchestrator {
       return state;
     }
 
-    // Single Execution Owner: guarantee downstream execution (GitHub/QA/Review/Report) happens EXACTLY once
+    // Single Execution Owner: guarantee downstream execution happens EXACTLY once
     if (
       state.downstreamExecuted ||
       state.stage === 'COMPLETED' ||
@@ -532,11 +547,146 @@ export class WorkflowOrchestrator {
     const targetBranch = state.gitBranch || liveSession?.gitBranch || `jules/task-${state.sessionId.slice(-6)}`;
 
     state.status = 'COMPLETED';
-    state.stage = 'GITHUB_DELIVERY';
     state.updatedAt = new Date().toISOString();
 
     try {
-      // 1. GITHUB INTEGRATION & DELIVERY
+      // -------------------------------------------------------------
+      // 1. QUALITY ASSURANCE & TESTING (Tester Agent)
+      // -------------------------------------------------------------
+      state.stage = 'TESTING';
+      const testCommand = state.options.testCommand || 'npm test';
+      console.log(`[WorkflowOrchestrator] Running QA test validation for session ${state.sessionId} (${testCommand})...`);
+      
+      const testExec = this.workspace.executeCommand(testCommand);
+      const testPassed = testExec.exitCode === 0 && testExec.success;
+      state.testsPassed = testPassed;
+
+      state.steps.push({
+        id: `step_qa_${Date.now()}`,
+        phase: 3,
+        phaseName: 'Quality Assurance & Testing',
+        agent: 'tester',
+        thought: `Ran test suite via '${testCommand}'. Exit code: ${testExec.exitCode} (${testExec.simulated ? 'workspace simulation' : 'real execution'}). Analyzing regressions.`,
+        toolCalls: [
+          {
+            id: `tc_test_${Date.now()}`,
+            name: 'run_command',
+            args: { command: testCommand },
+            result: testExec.output,
+            timestamp: Date.now(),
+          },
+        ],
+        status: testPassed ? 'STATUS: PASS' : 'STATUS: FAIL (Regressions Found)',
+        output: testPassed
+          ? `QA test suite succeeded via '${testCommand}' (exit code: 0, ${testExec.simulated ? 'simulated' : 'real execution'}).`
+          : `QA test suite failed via '${testCommand}' (exit code: ${testExec.exitCode}): ${testExec.output.slice(0, 150)}`,
+        timestamp: Date.now(),
+      });
+
+      // -------------------------------------------------------------
+      // 2. ARCHITECTURAL REVIEW (Reviewer Agent)
+      // -------------------------------------------------------------
+      state.stage = 'REVIEW';
+      console.log(`[WorkflowOrchestrator] Running architectural code review for session ${state.sessionId}...`);
+      const gitDiff = this.workspace.gitDiff();
+      const filesChanged = Object.keys(this.workspace.getFiles());
+
+      const reviewResult = this.performDeterministicReview({
+        testPassed,
+        gitDiff,
+        filesChanged,
+      });
+
+      state.steps.push({
+        id: `step_rev_${Date.now()}`,
+        phase: 5,
+        phaseName: 'Architectural Review',
+        agent: 'reviewer',
+        thought: `Evaluating code changes (${reviewResult.diffLines} lines across ${filesChanged.length} files), QA test verification, and security hygiene.`,
+        toolCalls: [
+          {
+            id: `tc_diff_${Date.now()}`,
+            name: 'git_diff',
+            args: {},
+            result: gitDiff ? `${reviewResult.diffLines} lines modified` : 'Empty diff',
+            timestamp: Date.now(),
+          },
+        ],
+        status: `STATUS: ${reviewResult.status}`,
+        output: reviewResult.summary,
+        timestamp: Date.now(),
+      });
+
+      // -------------------------------------------------------------
+      // 3. QUALITY & SECURITY GATES ENFORCEMENT
+      // -------------------------------------------------------------
+      const gatePassed = testPassed && reviewResult.approved;
+
+      if (!gatePassed) {
+        console.warn(`[WorkflowOrchestrator] Quality/Review gate failed for session ${state.sessionId}. Blocking Git commit/push/PR.`);
+        const failureReason = !testPassed
+          ? `QA test validation failed (exit code ${testExec.exitCode})`
+          : `Architectural review rejected: ${reviewResult.issues.join('; ')}`;
+
+        const finalReport: FinalReport = {
+          implementation: 'PASS',
+          tests: testPassed ? 'PASS' : 'FAIL',
+          review: reviewResult.approved ? 'APPROVED' : 'CHANGES_REQUIRED',
+          filesChanged,
+          testSummary: testPassed
+            ? `QA test suite '${testCommand}' succeeded (exit code: 0, ${testExec.simulated ? 'simulated' : 'real'}).`
+            : `QA test suite '${testCommand}' failed with exit code ${testExec.exitCode}.`,
+          reviewSummary: reviewResult.summary,
+          remainingIssues: [
+            ...(testPassed ? [] : [`QA test suite '${testCommand}' exited with non-zero exit code (${testExec.exitCode}).`]),
+            ...reviewResult.issues,
+          ],
+          realExecution: testExec.realExecution,
+          simulated: testExec.simulated,
+          totalCycles: {
+            testerCorrections: 0,
+            reviewerCorrections: 0,
+          },
+          metrics: {
+            durationMs: Date.now() - new Date(state.createdAt).getTime(),
+            modelUsed: state.options.model || 'gemini-3.7-flash',
+            codingAgentUsed: state.agentId,
+            testsPassed: false,
+            reviewApproved: reviewResult.approved,
+            realExecution: testExec.realExecution,
+            simulated: testExec.simulated,
+          },
+        };
+
+        state.finalReport = finalReport;
+        state.status = 'FAILED';
+        state.stage = 'FAILED';
+        state.executionStatus = 'FAILED';
+        state.error = `Workflow gates failed: ${failureReason}`;
+        state.summary = `Workflow failed downstream quality gates. Tests: ${finalReport.tests}, Review: ${finalReport.review}. Git delivery blocked.`;
+        state.downstreamExecuting = false;
+        state.downstreamExecuted = true;
+
+        state.steps.push({
+          id: `step_deliv_${Date.now()}`,
+          phase: 7,
+          phaseName: 'Final Delivery & Gate Report',
+          agent: 'manager',
+          thought: `Workflow halted due to downstream quality gate failure. Git operations blocked.`,
+          status: 'FAILED',
+          output: `Downstream quality gates rejected: Tests: ${finalReport.tests} | Review: ${finalReport.review}. No Git commit or PR was created.`,
+          timestamp: Date.now(),
+        });
+
+        await this.persistWorkflow(state);
+        this.activeWorkflows.delete(state.sessionId);
+        this.activeWorkflows.delete(state.workflowId);
+        return state;
+      }
+
+      // -------------------------------------------------------------
+      // 4. GITHUB INTEGRATION & DELIVERY (Only executed if QA + Review pass)
+      // -------------------------------------------------------------
       const gitRequested = Boolean(
         state.options.git?.commit ||
         state.options.git?.push ||
@@ -547,6 +697,7 @@ export class WorkflowOrchestrator {
       );
 
       if (gitRequested) {
+        state.stage = 'GITHUB_DELIVERY';
         if (!this.githubManager.isConfigured()) {
           console.warn(`[WorkflowOrchestrator] GITHUB_TOKEN is not configured for requested git delivery on ${state.sessionId}`);
           state.error = 'GITHUB_TOKEN is not configured';
@@ -569,6 +720,8 @@ export class WorkflowOrchestrator {
           sessionId: state.sessionId,
           sessionStatus: state.status,
           executionStatus: state.executionStatus,
+          testsPassed: true,
+          reviewApproved: true,
           createRepository: state.options.createRepository,
           private: state.options.private,
           git: state.options.git,
@@ -610,83 +763,19 @@ export class WorkflowOrchestrator {
         }
       }
 
-      // 2. QUALITY ASSURANCE & TESTING (Tester Agent)
-      state.stage = 'TESTING';
-      const testCommand = state.options.testCommand || 'npm test';
-      console.log(`[WorkflowOrchestrator] Running QA test validation for session ${state.sessionId} (${testCommand})...`);
-      
-      const testExec = this.workspace.executeCommand(testCommand);
-      const testPassed = testExec.exitCode === 0 && testExec.success;
-      state.testsPassed = testPassed;
-
-      state.steps.push({
-        id: `step_qa_${Date.now()}`,
-        phase: 3,
-        phaseName: 'Quality Assurance & Testing',
-        agent: 'tester',
-        thought: `Ran test suite via '${testCommand}'. Exit code: ${testExec.exitCode}. Analyzing regressions.`,
-        toolCalls: [
-          {
-            id: `tc_test_${Date.now()}`,
-            name: 'run_command',
-            args: { command: testCommand },
-            result: testExec.output,
-            timestamp: Date.now(),
-          },
-        ],
-        status: testPassed ? 'STATUS: PASS' : 'STATUS: FAIL (Regressions Found)',
-        output: testPassed
-          ? `All tests passed via '${testCommand}' (exit code: 0).`
-          : `Tests failed via '${testCommand}' (exit code: ${testExec.exitCode}): ${testExec.output.slice(0, 150)}`,
-        timestamp: Date.now(),
-      });
-
-      // 3. ARCHITECTURAL REVIEW (Reviewer Agent)
-      state.stage = 'REVIEW';
-      console.log(`[WorkflowOrchestrator] Running architectural code review for session ${state.sessionId}...`);
-      const gitDiff = this.workspace.gitDiff();
-      const filesChanged = Object.keys(this.workspace.getFiles());
-
-      const reviewResult = this.performDeterministicReview({
-        testPassed,
-        gitDiff,
-        filesChanged,
-      });
-
-      state.steps.push({
-        id: `step_rev_${Date.now()}`,
-        phase: 5,
-        phaseName: 'Architectural Review',
-        agent: 'reviewer',
-        thought: `Evaluating code changes (${reviewResult.diffLines} lines across ${filesChanged.length} files), QA test verification, and security hygiene.`,
-        toolCalls: [
-          {
-            id: `tc_diff_${Date.now()}`,
-            name: 'git_diff',
-            args: {},
-            result: gitDiff ? `${reviewResult.diffLines} lines modified` : 'Empty diff',
-            timestamp: Date.now(),
-          },
-        ],
-        status: `STATUS: ${reviewResult.status}`,
-        output: reviewResult.summary,
-        timestamp: Date.now(),
-      });
-
-      // 4. FINAL DELIVERY & SYNTHESIS REPORT (Manager Agent)
+      // -------------------------------------------------------------
+      // 5. FINAL DELIVERY & HONEST SYNTHESIS REPORT (Manager Agent)
+      // -------------------------------------------------------------
       const finalReport: FinalReport = {
-        implementation: state.status === 'COMPLETED' ? 'PASS' : 'FAIL',
-        tests: testPassed ? 'PASS' : 'FAIL',
-        review: reviewResult.approved ? 'APPROVED' : 'CHANGES_REQUIRED',
+        implementation: 'PASS',
+        tests: 'PASS',
+        review: 'APPROVED',
         filesChanged,
-        testSummary: testPassed
-          ? `QA test suite '${testCommand}' succeeded with exit code 0.`
-          : `QA test suite '${testCommand}' failed with exit code ${testExec.exitCode}.`,
+        testSummary: `QA test suite '${testCommand}' succeeded (exit code: 0, ${testExec.simulated ? 'simulated' : 'real execution'}).`,
         reviewSummary: reviewResult.summary,
-        remainingIssues: [
-          ...(testPassed ? [] : [`QA test suite '${testCommand}' exited with non-zero exit code (${testExec.exitCode}).`]),
-          ...reviewResult.issues,
-        ],
+        remainingIssues: reviewResult.issues,
+        realExecution: testExec.realExecution,
+        simulated: testExec.simulated,
         totalCycles: {
           testerCorrections: 0,
           reviewerCorrections: 0,
@@ -700,7 +789,10 @@ export class WorkflowOrchestrator {
           commitSha: state.commitSha,
           commitUrl: state.commitUrl,
           pullRequestUrl: state.pullRequestUrl || state.prUrl,
-          testsPassed: state.testsPassed,
+          testsPassed: true,
+          reviewApproved: true,
+          realExecution: testExec.realExecution,
+          simulated: testExec.simulated,
           git: state.git,
         },
       };

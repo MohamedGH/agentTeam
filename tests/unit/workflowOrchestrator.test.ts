@@ -465,12 +465,13 @@ export async function runWorkflowOrchestratorUnitTests() {
 
     const resultState = await orchestrator.pollWorkflow(workflow.sessionId);
 
-    assert.strictEqual(resultState.stage, 'COMPLETED');
+    assert.strictEqual(resultState.stage, 'FAILED');
+    assert.strictEqual(resultState.executionStatus, 'FAILED');
     assert.strictEqual(resultState.testsPassed, false, 'testsPassed must be false when QA fails');
     assert.ok(resultState.finalReport, 'finalReport must be generated');
     assert.strictEqual(resultState.finalReport.tests, 'FAIL', 'finalReport.tests must be FAIL');
     assert.strictEqual(resultState.finalReport.review, 'CHANGES_REQUIRED', 'Review must be CHANGES_REQUIRED when tests fail');
-    assert.ok(resultState.finalReport.remainingIssues.some((issue) => issue.includes('Automated test suite failed')));
+    assert.ok(resultState.finalReport.remainingIssues.some((issue) => issue.includes('Automated QA test suite failed') || issue.includes('QA test validation failed')));
 
     console.log('✅ PASS: Real QA failure correctly marked in tests and final report');
   }

@@ -100,6 +100,8 @@ export interface FinalReport {
   testSummary: string;
   reviewSummary: string;
   remainingIssues: string[];
+  realExecution?: boolean;
+  simulated?: boolean;
   totalCycles: {
     testerCorrections: number;
     reviewerCorrections: number;
@@ -116,6 +118,9 @@ export interface FinalReport {
     commitUrl?: string;
     pullRequestUrl?: string;
     testsPassed?: boolean;
+    reviewApproved?: boolean;
+    realExecution?: boolean;
+    simulated?: boolean;
     git?: {
       committed?: boolean;
       pushed?: boolean;

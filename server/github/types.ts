@@ -102,6 +102,8 @@ export interface GitWorkflowOptions {
   sessionId?: string;
   sessionStatus?: string;
   executionStatus?: string;
+  testsPassed?: boolean;
+  reviewApproved?: boolean;
   createRepository?: boolean;
   repositoryName?: string;
   private?: boolean;

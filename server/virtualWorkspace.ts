@@ -3,6 +3,8 @@ export interface CommandExecutionResult {
   exitCode: number;
   output: string;
   success: boolean;
+  simulated: boolean;
+  realExecution: boolean;
 }
 
 export interface VirtualWorkspaceState {
@@ -196,6 +198,8 @@ Managed by agentTeam (Manager, Developer, Tester, Reviewer).
           exitCode: override.exitCode,
           output: override.output,
           success: override.exitCode === 0,
+          simulated: true,
+          realExecution: false,
         };
       }
     }
@@ -217,6 +221,8 @@ Managed by agentTeam (Manager, Developer, Tester, Reviewer).
         exitCode: 0,
         output: statusOutput,
         success: true,
+        simulated: true,
+        realExecution: false,
       };
     }
 
@@ -227,6 +233,8 @@ Managed by agentTeam (Manager, Developer, Tester, Reviewer).
         exitCode: 0,
         output: diffOutput,
         success: true,
+        simulated: true,
+        realExecution: false,
       };
     }
 
@@ -236,6 +244,8 @@ Managed by agentTeam (Manager, Developer, Tester, Reviewer).
         exitCode: 0,
         output: 'EXIT CODE: 0\nAll checks passed! No lint errors found.',
         success: true,
+        simulated: true,
+        realExecution: false,
       };
     }
 
@@ -245,6 +255,8 @@ Managed by agentTeam (Manager, Developer, Tester, Reviewer).
         exitCode: 0,
         output: 'EXIT CODE: 0\nBuild completed successfully.',
         success: true,
+        simulated: true,
+        realExecution: false,
       };
     }
 
@@ -254,6 +266,8 @@ Managed by agentTeam (Manager, Developer, Tester, Reviewer).
         exitCode: 0,
         output: 'EXIT CODE: 0\nExecution completed successfully.',
         success: true,
+        simulated: true,
+        realExecution: false,
       };
     }
 
@@ -262,6 +276,8 @@ Managed by agentTeam (Manager, Developer, Tester, Reviewer).
       exitCode: 0,
       output: `EXIT CODE: 0\nCommand executed: ${cmd}\nOutput: OK`,
       success: true,
+      simulated: true,
+      realExecution: false,
     };
   }
 
@@ -293,6 +309,8 @@ Managed by agentTeam (Manager, Developer, Tester, Reviewer).
         exitCode: 1,
         output,
         success: false,
+        simulated: true,
+        realExecution: false,
       };
     }
 
@@ -302,6 +320,8 @@ Managed by agentTeam (Manager, Developer, Tester, Reviewer).
       exitCode: 0,
       output,
       success: true,
+      simulated: true,
+      realExecution: false,
     };
   }
 
@@ -336,6 +356,8 @@ ${failureDetails}
         exitCode: 1,
         output,
         success: false,
+        simulated: true,
+        realExecution: false,
       };
     }
 
@@ -353,6 +375,8 @@ ${testFiles.map(t => `${t} .`).join('\n')}
       exitCode: 0,
       output,
       success: true,
+      simulated: true,
+      realExecution: false,
     };
   }
 
@@ -372,11 +396,11 @@ ${testFiles.map(t => `${t} .`).join('\n')}
     const diffs: string[] = [];
     for (const [path, content] of this.files.entries()) {
       if (!this.originalFiles.has(path)) {
-        diffs.push(`+++ b/${path} (new file, ${content.split('\n').length} lines)`);
+        diffs.push(`+++ b/${path} (new file, ${content.split('\n').length} lines)\n${content}`);
       } else if (this.originalFiles.get(path) !== content) {
         const origLines = this.originalFiles.get(path)!.split('\n').length;
         const newLines = content.split('\n').length;
-        diffs.push(` M ${path} | ${Math.abs(newLines - origLines) + 2} +/-\n--- a/${path}\n+++ b/${path}`);
+        diffs.push(` M ${path} | ${Math.abs(newLines - origLines) + 2} +/-\n--- a/${path}\n+++ b/${path}\n${content}`);
       }
     }
     return diffs.length > 0 ? diffs.join('\n\n') : '';

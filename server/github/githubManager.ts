@@ -98,7 +98,7 @@ export class GitHubManager {
     const baseBranch = options.baseBranch || 'main';
     const cwd = options.workingDirectory || process.cwd();
 
-    // 0. Strict session status check: Git operations are strictly forbidden unless session status is COMPLETED
+    // 0. Strict session status & quality gates check: Git operations are strictly forbidden unless session status is COMPLETED and quality gates pass
     if (options.sessionStatus && options.sessionStatus !== 'COMPLETED') {
       return {
         success: false,
@@ -117,6 +117,26 @@ export class GitHubManager {
         branch: targetBranch,
         testsPassed: false,
         error: `Refusing Git operations: execution status is "${options.executionStatus}". Only COMPLETED sessions may trigger Git or PR operations.`,
+      };
+    }
+    if (options.testsPassed === false) {
+      return {
+        success: false,
+        sessionId: options.sessionId,
+        repository: options.repository,
+        branch: targetBranch,
+        testsPassed: false,
+        error: 'Refusing Git operations: QA test validation failed. Code cannot be committed or pushed when tests fail.',
+      };
+    }
+    if (options.reviewApproved === false) {
+      return {
+        success: false,
+        sessionId: options.sessionId,
+        repository: options.repository,
+        branch: targetBranch,
+        testsPassed: options.testsPassed ?? true,
+        error: 'Refusing Git operations: Architectural review requested changes or was not approved. Code cannot be committed or pushed with security/architectural violations.',
       };
     }
 

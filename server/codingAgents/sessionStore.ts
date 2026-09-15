@@ -302,18 +302,21 @@ export class FileBackedCodingAgentSessionStore implements ICodingAgentSessionSto
   public async saveWorkflowState(sessionId: string, workflowState: WorkflowState): Promise<StoredCodingSession | null> {
     const cleanId = sessionId.replace(/^sessions\//, '');
     const current = this.cache.get(cleanId) || this.cache.get(sessionId);
-    return this.updateSession(sessionId, {
+    const updates: Partial<StoredCodingSession> = {
       workflowState,
       metadata: {
         ...(current?.metadata || {}),
         workflowId: workflowState.workflowId,
       },
-      status: workflowState.status || undefined,
       prUrl: workflowState.prUrl || undefined,
       gitBranch: workflowState.gitBranch || undefined,
       error: workflowState.error || undefined,
       updatedAt: new Date().toISOString(),
-    });
+    };
+    if (current && !isTerminalState(current.status) && workflowState.status) {
+      updates.status = workflowState.status;
+    }
+    return this.updateSession(sessionId, updates);
   }
 
   public async deleteSession(sessionId: string): Promise<boolean> {
