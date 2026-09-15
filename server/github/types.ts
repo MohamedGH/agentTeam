@@ -100,6 +100,8 @@ export interface GitWorkflowOptions {
   baseBranch?: string;
   taskPrompt: string;
   sessionId?: string;
+  sessionStatus?: string;
+  executionStatus?: string;
   createRepository?: boolean;
   repositoryName?: string;
   private?: boolean;

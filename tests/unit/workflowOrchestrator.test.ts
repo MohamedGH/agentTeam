@@ -428,6 +428,191 @@ export async function runWorkflowOrchestratorUnitTests() {
     console.log('✅ PASS: Both workflowId and sessionId reliably resolve the same workflow state');
   }
 
+  // -------------------------------------------------------------
+  // TEST 9: Real QA failure blocks successful completion and delivery
+  // -------------------------------------------------------------
+  {
+    console.log('\nTest 9: Real QA failure blocks successful completion and requires changes');
+    const { orchestrator, mockAgent, workspace, githubManager } = setupTestHarness();
+
+    // Configure test failure in workspace
+    workspace.setCommandResult('npm test', {
+      exitCode: 1,
+      output: 'FAIL tests/auth.test.ts\n● Auth validator › invalid token rejected\nAssertionError: expected false to be true',
+      success: false,
+    });
+
+    githubManager.processTaskResult = async () => ({
+      success: true,
+      commitSha: 'commit_qa_fail',
+      pullRequestUrl: 'https://github.com/MohamedGH/agentTeam/pull/101',
+      testsPassed: true,
+    });
+
+    const workflow = await orchestrator.startWorkflow({
+      agent: 'mock',
+      repository: 'MohamedGH/agentTeam',
+      branch: 'main',
+      taskPrompt: 'Implement token validator with test verification',
+      testCommand: 'npm test',
+      commitPushAndCreatePR: true,
+    });
+
+    mockAgent.setMockSession({
+      state: 'COMPLETED',
+      resultSummary: 'Code generated with a failing unit test',
+    });
+
+    const resultState = await orchestrator.pollWorkflow(workflow.sessionId);
+
+    assert.strictEqual(resultState.stage, 'COMPLETED');
+    assert.strictEqual(resultState.testsPassed, false, 'testsPassed must be false when QA fails');
+    assert.ok(resultState.finalReport, 'finalReport must be generated');
+    assert.strictEqual(resultState.finalReport.tests, 'FAIL', 'finalReport.tests must be FAIL');
+    assert.strictEqual(resultState.finalReport.review, 'CHANGES_REQUIRED', 'Review must be CHANGES_REQUIRED when tests fail');
+    assert.ok(resultState.finalReport.remainingIssues.some((issue) => issue.includes('Automated test suite failed')));
+
+    console.log('✅ PASS: Real QA failure correctly marked in tests and final report');
+  }
+
+  // -------------------------------------------------------------
+  // TEST 10: Strict Refusal of Git/PR operations when session is not COMPLETED
+  // -------------------------------------------------------------
+  {
+    console.log('\nTest 10: Strict refusal of Git/PR operations if Jules is not COMPLETED');
+    const { githubManager, orchestrator } = setupTestHarness();
+
+    // 1. Direct call to githubManager.processTaskResult with non-COMPLETED sessionStatus
+    const nonCompletedRes = await githubManager.processTaskResult({
+      repository: 'MohamedGH/agentTeam',
+      branch: 'main',
+      sessionId: 'sess_running_123',
+      sessionStatus: 'IN_PROGRESS',
+      executionStatus: 'RUNNING',
+    });
+
+    assert.strictEqual(nonCompletedRes.success, false);
+    assert.ok(nonCompletedRes.error?.includes('Refusing Git operations'));
+    assert.ok(nonCompletedRes.error?.includes('IN_PROGRESS'));
+
+    // 2. Direct call with sessionStatus FAILED
+    const failedRes = await githubManager.processTaskResult({
+      repository: 'MohamedGH/agentTeam',
+      branch: 'main',
+      sessionId: 'sess_failed_123',
+      sessionStatus: 'FAILED',
+      executionStatus: 'FAILED',
+    });
+    assert.strictEqual(failedRes.success, false);
+    assert.ok(failedRes.error?.includes('Refusing Git operations'));
+
+    // 3. Ensure handleJulesCompleted aborts if state is not COMPLETED
+    const dummyState: any = {
+      sessionId: 'sess_abort_test',
+      workflowId: 'wf_abort_test',
+      status: 'IN_PROGRESS',
+      stage: 'JULES_RUNNING',
+      downstreamExecuted: false,
+      downstreamExecuting: false,
+      options: {},
+      steps: [],
+    };
+    const abortResult = await orchestrator.handleJulesCompleted(dummyState, null);
+    assert.strictEqual(abortResult.downstreamExecuted, false, 'Must not execute downstream when status != COMPLETED');
+
+    console.log('✅ PASS: Git operations strictly refused when session is not COMPLETED');
+  }
+
+  // -------------------------------------------------------------
+  // TEST 11: Deterministic Reviewer based on gitDiff and test outcome
+  // -------------------------------------------------------------
+  {
+    console.log('\nTest 11: Deterministic Reviewer evaluates gitDiff security and QA test results');
+    const { orchestrator, workspace } = setupTestHarness();
+
+    // Case A: Passed test + clean diff -> APPROVED
+    const passedTestResult = {
+      exitCode: 0,
+      stdout: 'All 15 tests passed',
+      stderr: '',
+      success: true,
+      output: 'All 15 tests passed',
+    };
+    const cleanReview = orchestrator.performDeterministicReview(passedTestResult, 'src/auth.ts\nsrc/utils.ts');
+    assert.strictEqual(cleanReview.approved, true);
+    assert.strictEqual(cleanReview.status, 'APPROVED');
+    assert.strictEqual(cleanReview.securityIssues.length, 0);
+
+    // Case B: Security leak detected in diff -> CHANGES_REQUESTED
+    const leakyDiff = '+++ b/src/config.ts\n+const apiKey = "ghp_xxxxxxxxxxxxxxxxxxxx";';
+    const leakedReview = orchestrator.performDeterministicReview(passedTestResult, leakyDiff);
+    assert.strictEqual(leakedReview.approved, false);
+    assert.strictEqual(leakedReview.status, 'CHANGES_REQUESTED');
+    assert.ok(leakedReview.securityIssues.some((issue) => issue.includes('Hardcoded credential')));
+
+    // Case C: Failed QA test -> CHANGES_REQUESTED
+    const failedTestResult = {
+      exitCode: 1,
+      stdout: '',
+      stderr: 'AssertionError: test failed',
+      success: false,
+      output: 'AssertionError: test failed',
+    };
+    const failedQaReview = orchestrator.performDeterministicReview(failedTestResult, 'src/auth.ts');
+    assert.strictEqual(failedQaReview.approved, false);
+    assert.strictEqual(failedQaReview.status, 'CHANGES_REQUESTED');
+    assert.ok(failedQaReview.qaPassed === false);
+
+    console.log('✅ PASS: Deterministic Reviewer accurately identifies security violations and QA failures');
+  }
+
+  // -------------------------------------------------------------
+  // TEST 12: Double-poll simultaneity does not duplicate downstream delivery
+  // -------------------------------------------------------------
+  {
+    console.log('\nTest 12: Double-poll simultaneity does not duplicate downstream delivery');
+    const { orchestrator, mockAgent, githubManager } = setupTestHarness();
+
+    let gitDeliveryCalls = 0;
+    githubManager.processTaskResult = async () => {
+      gitDeliveryCalls++;
+      // Simulate slight network delay to test concurrency window
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      return {
+        success: true,
+        commitSha: 'commit_concurrent_123',
+        pullRequestUrl: 'https://github.com/MohamedGH/agentTeam/pull/777',
+      };
+    };
+
+    const workflow = await orchestrator.startWorkflow({
+      agent: 'mock',
+      repository: 'MohamedGH/agentTeam',
+      branch: 'main',
+      taskPrompt: 'Double poll concurrency test',
+      commitPushAndCreatePR: true,
+    });
+
+    mockAgent.setMockSession({
+      state: 'COMPLETED',
+      resultSummary: 'Finished implementation',
+    });
+
+    // Fire 2 simultaneous polls on the same newly completed session
+    const [res1, res2] = await Promise.all([
+      orchestrator.pollWorkflow(workflow.sessionId),
+      orchestrator.pollWorkflow(workflow.sessionId),
+    ]);
+
+    assert.strictEqual(gitDeliveryCalls, 1, `Expected exactly 1 git delivery call, got ${gitDeliveryCalls}`);
+    assert.strictEqual(res1.stage, 'COMPLETED');
+    assert.strictEqual(res2.stage, 'COMPLETED');
+    assert.strictEqual(res1.downstreamExecuted, true);
+    assert.strictEqual(res2.downstreamExecuted, true);
+
+    console.log('✅ PASS: Double-poll concurrency window prevented duplicate downstream delivery');
+  }
+
   // Cleanup test directory
   if (fs.existsSync(testDataDir)) {
     fs.rmSync(testDataDir, { recursive: true, force: true });

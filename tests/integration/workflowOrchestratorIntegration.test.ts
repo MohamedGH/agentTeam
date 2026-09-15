@@ -184,6 +184,59 @@ export async function runWorkflowOrchestratorIntegrationTests() {
     console.log('✅ PASS: Multi-session recovery across reboot verified');
   }
 
+  // -------------------------------------------------------------
+  // TEST 3: Async Endpoint Unified Orchestrator Integration
+  // -------------------------------------------------------------
+  {
+    console.log('\nIntegration Test 3: Endpoint parameters route through WorkflowOrchestrator with dual ID resolution');
+    const testSessionFile = path.join(testDataDir, 'test_endpoints_route.json');
+    const store = new FileBackedCodingAgentSessionStore(testSessionFile);
+    const mockAgent = new MockCodingAgent(store);
+    const codingAgentManager = new CodingAgentManager({ sessionStore: store, mockAgent });
+    const orchestrator = new WorkflowOrchestrator({
+      codingAgentManager,
+      sessionStore: store,
+      pollIntervalMs: 50,
+    });
+
+    // 1. Emulate POST /api/coding-agents/execute asynchronous dispatch
+    const executePayload = {
+      workflowId: 'wf_exec_route_123',
+      agent: 'mock',
+      repository: 'MohamedGH/agentTeam',
+      branch: 'main',
+      taskPrompt: 'Async execute routing test',
+      automationMode: 'AUTO_CREATE_PR' as const,
+    };
+    const wfExec = await orchestrator.startWorkflow(executePayload);
+    assert.strictEqual(wfExec.workflowId, 'wf_exec_route_123');
+    assert.strictEqual(wfExec.executionStatus, 'RUNNING');
+    assert.strictEqual(wfExec.stage, 'JULES_RUNNING');
+
+    // 2. Emulate POST /api/coding-agents/jules/sessions routing
+    const julesPayload = {
+      agent: 'mock',
+      repository: 'MohamedGH/agentTeam',
+      branch: 'main',
+      taskPrompt: 'Jules session routing test',
+    };
+    const wfJules = await orchestrator.startWorkflow(julesPayload);
+    assert.ok(wfJules.workflowId.startsWith('wf_'));
+    assert.ok(wfJules.sessionId.startsWith('mock_sess_') || wfJules.sessionId.length > 0);
+
+    // 3. Verify dual-ID query resolution
+    const retrievedByWfId = await orchestrator.getWorkflow(wfExec.workflowId);
+    assert.ok(retrievedByWfId);
+    assert.strictEqual(retrievedByWfId.sessionId, wfExec.sessionId);
+
+    const retrievedBySessId = await orchestrator.getWorkflow(wfExec.sessionId);
+    assert.ok(retrievedBySessId);
+    assert.strictEqual(retrievedBySessId.workflowId, wfExec.workflowId);
+
+    orchestrator.stopBackgroundPoller();
+    console.log('✅ PASS: Async endpoint routing and dual ID resolution verified');
+  }
+
   // Cleanup
   if (fs.existsSync(testDataDir)) {
     fs.rmSync(testDataDir, { recursive: true, force: true });

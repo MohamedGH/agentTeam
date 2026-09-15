@@ -157,7 +157,7 @@ export class CodingAgentManager {
         result.success = false;
         result.error = 'GITHUB_TOKEN is not configured';
         result.executionStatus = 'FAILED';
-      } else if (result.executionStatus === 'COMPLETED') {
+      } else if (result.executionStatus === 'COMPLETED' && result.status === 'COMPLETED') {
         const repoTarget = task.repositoryName || task.repository;
         const targetBranch =
           task.branch ||
@@ -170,12 +170,14 @@ export class CodingAgentManager {
           baseBranch: 'main',
           taskPrompt: task.task,
           sessionId: result.sessionId,
+          sessionStatus: result.status,
+          executionStatus: result.executionStatus,
           createRepository: task.createRepository,
           private: task.private,
           git: task.git,
           commitAndPush: task.commitAndPush,
           commitPushAndCreatePR: task.commitPushAndCreatePR,
-          testCommand: task.testCommand || (task.git?.runTests !== false ? 'npm run lint' : undefined),
+          testCommand: task.testCommand || (task.git?.runTests !== false ? 'npm test' : undefined),
         });
 
         result.testsPassed = gitRes.testsPassed;

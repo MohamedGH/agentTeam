@@ -22,6 +22,16 @@ import { ProviderManager, providerManager as defaultProviderManager } from './pr
 import { VirtualWorkspace, workspace as defaultWorkspace } from './virtualWorkspace';
 import { AgentStep, FinalReport } from '../src/types';
 
+export interface DeterministicReviewResult {
+  approved: boolean;
+  status: 'APPROVED' | 'CHANGES_REQUESTED';
+  summary: string;
+  issues: string[];
+  diffLines: number;
+  securityIssues: string[];
+  qaPassed: boolean;
+}
+
 /**
  * WorkflowOrchestrator
  * 
@@ -278,7 +288,7 @@ export class WorkflowOrchestrator {
     }
 
     // Guard if already terminal
-    if (state.stage === 'COMPLETED' || state.stage === 'FAILED' || state.stage === 'CANCELLED') {
+    if (state.stage === 'COMPLETED' || state.stage === 'FAILED' || state.stage === 'CANCELLED' || state.downstreamExecuted) {
       this.activeWorkflows.delete(state.sessionId);
       this.activeWorkflows.delete(state.workflowId);
       return state;
@@ -399,18 +409,116 @@ export class WorkflowOrchestrator {
   }
 
   /**
+   * Perform deterministic architectural code review based on test results, git diff, and security hygiene.
+   */
+  public performDeterministicReview(
+    paramsOrTestResult: any,
+    gitDiffArg?: string,
+    filesChangedArg?: string[]
+  ): DeterministicReviewResult {
+    let testPassed: boolean;
+    let gitDiff: string;
+    let filesChanged: string[];
+
+    if (typeof paramsOrTestResult === 'object' && 'testPassed' in paramsOrTestResult) {
+      testPassed = Boolean(paramsOrTestResult.testPassed);
+      gitDiff = paramsOrTestResult.gitDiff || '';
+      filesChanged = paramsOrTestResult.filesChanged || [];
+    } else {
+      testPassed = Boolean(paramsOrTestResult?.success ?? (paramsOrTestResult?.exitCode === 0));
+      gitDiff = gitDiffArg || '';
+      filesChanged = filesChangedArg || [];
+    }
+
+    const issues: string[] = [];
+    const securityIssues: string[] = [];
+    const diffLines = gitDiff ? gitDiff.split('\n').length : 0;
+
+    // 1. Tests must pass
+    if (!testPassed) {
+      issues.push('Automated test suite failed: QA test validation detected regressions or unhandled test assertions.');
+    }
+
+    const diffText = gitDiff || '';
+
+    // 3. Detect exposed secrets / private API keys in diff
+    const secretPatterns = [
+      { pattern: /(?:api[_-]?key|secret[_-]?key|private[_-]?key|auth_token)\s*[:=]\s*['"][a-zA-Z0-9_\-\.]{16,}['"]/i, name: 'Hardcoded credential (API key or private secret)' },
+      { pattern: /ghp_[a-zA-Z0-9]{15,}/, name: 'Hardcoded credential (GitHub personal access token)' },
+      { pattern: /AIza[0-9A-Za-z-_]{35}/, name: 'Hardcoded credential (Google API key)' },
+      { pattern: /sk-[a-zA-Z0-9]{20,}/, name: 'Hardcoded credential (OpenAI API key)' },
+      { pattern: /xox[baprs]-[0-9a-zA-Z]{10,}/, name: 'Hardcoded credential (Slack token)' },
+    ];
+
+    for (const { pattern, name } of secretPatterns) {
+      if (pattern.test(diffText)) {
+        const msg = `Security violation: Detected ${name} in code diff.`;
+        issues.push(msg);
+        securityIssues.push(msg);
+      }
+    }
+
+    // 4. Prohibit newly introduced .env files (except .env.example)
+    for (const file of filesChanged) {
+      const base = file.replace(/\\/g, '/').split('/').pop() || '';
+      if ((base === '.env' || base.startsWith('.env.') || base.endsWith('.env')) && !base.endsWith('.example')) {
+        const msg = `Security violation: Environment credentials file '${file}' is not permitted in workspace commits.`;
+        issues.push(msg);
+        securityIssues.push(msg);
+      }
+    }
+
+    // 5. Prohibit dangerous shell executions
+    const dangerousShell = /\b(rm\s+-rf\s+[\/\*]|curl\s+[^|\n]+\|\s*(?:ba)?sh|wget\s+[^|\n]+\|\s*(?:ba)?sh|eval\s*\()/i;
+    if (dangerousShell.test(diffText)) {
+      const msg = 'Security violation: Dangerous unvalidated shell command (e.g. recursive delete, curl-to-sh, or eval) detected in diff.';
+      issues.push(msg);
+      securityIssues.push(msg);
+    }
+
+    // 6. Prohibit committing runtime / generated artifacts
+    const prohibitedArtifacts = /\+\+\+ b\/(?:node_modules|data\/coding_agent_sessions\.json|quota_state\.json|\.DS_Store)/;
+    if (prohibitedArtifacts.test(diffText)) {
+      issues.push('Hygiene violation: Generated runtime artifact or system cache file detected in diff.');
+    }
+
+    const approved = issues.length === 0;
+    const status: 'APPROVED' | 'CHANGES_REQUESTED' = approved ? 'APPROVED' : 'CHANGES_REQUESTED';
+
+    const summary = approved
+      ? `Automated architectural review passed: ${filesChanged.length} files reviewed (${diffLines} diff lines). Tests passed, no exposed credentials or unsafe patterns detected.`
+      : `Automated review requested changes (${issues.length} issue(s) identified): ${issues.join('; ')}`;
+
+    return {
+      approved,
+      status,
+      summary,
+      issues,
+      diffLines,
+      securityIssues,
+      qaPassed: testPassed,
+    };
+  }
+
+  /**
    * Handlers for when Jules reaches COMPLETED status.
    * Executes GitHub automation, QA testing, Architectural review, and Manager report in sequence.
    */
   public async handleJulesCompleted(state: WorkflowState, liveSession: JulesSession | null): Promise<WorkflowState> {
     // Safety check: handleJulesCompleted MUST only be called when status is terminal COMPLETED
     if (state.status !== 'COMPLETED') {
-      console.warn(`[WorkflowOrchestrator] Safety violation: handleJulesCompleted called with non-COMPLETED status (${state.status}). Refusing GitHub delivery.`);
+      console.warn(`[WorkflowOrchestrator] Safety violation: handleJulesCompleted called with non-COMPLETED status (${state.status}). Refusing downstream delivery.`);
       return state;
     }
 
     // Single Execution Owner: guarantee downstream execution (GitHub/QA/Review/Report) happens EXACTLY once
-    if (state.downstreamExecuted || state.stage === 'COMPLETED' || state.downstreamExecuting) {
+    if (
+      state.downstreamExecuted ||
+      state.stage === 'COMPLETED' ||
+      state.stage === 'FAILED' ||
+      state.executionStatus === 'FAILED' ||
+      state.downstreamExecuting
+    ) {
       console.log(`[WorkflowOrchestrator] Downstream pipeline already executed or currently executing for ${state.sessionId}. Skipping duplicate execution.`);
       return state;
     }
@@ -427,184 +535,215 @@ export class WorkflowOrchestrator {
     state.stage = 'GITHUB_DELIVERY';
     state.updatedAt = new Date().toISOString();
 
-    // 1. GITHUB INTEGRATION & DELIVERY
-    const gitRequested = Boolean(
-      state.options.git?.commit ||
-      state.options.git?.push ||
-      state.options.git?.createPullRequest ||
-      state.options.commitAndPush ||
-      state.options.commitPushAndCreatePR ||
-      state.options.createRepository
-    );
+    try {
+      // 1. GITHUB INTEGRATION & DELIVERY
+      const gitRequested = Boolean(
+        state.options.git?.commit ||
+        state.options.git?.push ||
+        state.options.git?.createPullRequest ||
+        state.options.commitAndPush ||
+        state.options.commitPushAndCreatePR ||
+        state.options.createRepository
+      );
 
-    if (gitRequested) {
-      if (!this.githubManager.isConfigured()) {
-        console.warn(`[WorkflowOrchestrator] GITHUB_TOKEN is not configured for requested git delivery on ${state.sessionId}`);
-        state.error = 'GITHUB_TOKEN is not configured';
-        state.executionStatus = 'FAILED';
-        state.stage = 'FAILED';
-        await this.persistWorkflow(state);
-        this.activeWorkflows.delete(state.sessionId);
-        this.activeWorkflows.delete(state.workflowId);
-        return state;
+      if (gitRequested) {
+        if (!this.githubManager.isConfigured()) {
+          console.warn(`[WorkflowOrchestrator] GITHUB_TOKEN is not configured for requested git delivery on ${state.sessionId}`);
+          state.error = 'GITHUB_TOKEN is not configured';
+          state.executionStatus = 'FAILED';
+          state.stage = 'FAILED';
+          state.downstreamExecuting = false;
+          state.downstreamExecuted = true;
+          await this.persistWorkflow(state);
+          this.activeWorkflows.delete(state.sessionId);
+          this.activeWorkflows.delete(state.workflowId);
+          return state;
+        }
+
+        console.log(`[WorkflowOrchestrator] Executing GitHub delivery for session ${state.sessionId} on ${repoTarget}...`);
+        const gitRes = await this.githubManager.processTaskResult({
+          repository: repoTarget,
+          branch: targetBranch,
+          baseBranch: branch,
+          taskPrompt,
+          sessionId: state.sessionId,
+          sessionStatus: state.status,
+          executionStatus: state.executionStatus,
+          createRepository: state.options.createRepository,
+          private: state.options.private,
+          git: state.options.git,
+          commitAndPush: state.options.commitAndPush,
+          commitPushAndCreatePR: state.options.commitPushAndCreatePR,
+          testCommand: state.options.testCommand || (state.options.git?.runTests !== false ? 'npm test' : undefined),
+        });
+
+        state.git = gitRes.git;
+        state.commitSha = gitRes.commitSha;
+        state.commitUrl = gitRes.commitUrl;
+        state.pullRequestUrl = gitRes.pullRequestUrl || liveSession?.prUrl || state.prUrl;
+        state.prUrl = state.pullRequestUrl;
+        state.testsPassed = gitRes.testsPassed;
+
+        state.steps.push({
+          id: `step_git_${Date.now()}`,
+          phase: 6,
+          phaseName: 'GitHub Workflow & Delivery',
+          agent: 'developer',
+          thought: `Automated Git delivery processed: commit=${Boolean(gitRes.commitSha)}, pushed=${Boolean(gitRes.commitUrl)}, PR=${state.pullRequestUrl || 'none'}`,
+          status: gitRes.success ? 'STATUS: VERIFIED & DELIVERED' : 'STATUS: BLOCKED',
+          output: state.pullRequestUrl
+            ? `GitHub PR: ${state.pullRequestUrl} | Commit: ${gitRes.commitSha || 'latest'}`
+            : `Git Commit: ${gitRes.commitSha || 'latest'} on ${targetBranch}`,
+          timestamp: Date.now(),
+        });
+
+        if (!gitRes.success) {
+          state.error = gitRes.error || 'GitHub workflow execution failed.';
+          state.stage = 'FAILED';
+          state.executionStatus = 'FAILED';
+          state.downstreamExecuting = false;
+          state.downstreamExecuted = true;
+          await this.persistWorkflow(state);
+          this.activeWorkflows.delete(state.sessionId);
+          this.activeWorkflows.delete(state.workflowId);
+          return state;
+        }
       }
 
-      console.log(`[WorkflowOrchestrator] Executing GitHub delivery for session ${state.sessionId} on ${repoTarget}...`);
-      const gitRes = await this.githubManager.processTaskResult({
-        repository: repoTarget,
-        branch: targetBranch,
-        baseBranch: branch,
-        taskPrompt,
-        sessionId: state.sessionId,
-        createRepository: state.options.createRepository,
-        private: state.options.private,
-        git: state.options.git,
-        commitAndPush: state.options.commitAndPush,
-        commitPushAndCreatePR: state.options.commitPushAndCreatePR,
-        testCommand: state.options.testCommand || (state.options.git?.runTests !== false ? 'npm run lint' : undefined),
-      });
-
-      state.git = gitRes.git;
-      state.commitSha = gitRes.commitSha;
-      state.commitUrl = gitRes.commitUrl;
-      state.pullRequestUrl = gitRes.pullRequestUrl || liveSession?.prUrl || state.prUrl;
-      state.prUrl = state.pullRequestUrl;
-      state.testsPassed = gitRes.testsPassed;
+      // 2. QUALITY ASSURANCE & TESTING (Tester Agent)
+      state.stage = 'TESTING';
+      const testCommand = state.options.testCommand || 'npm test';
+      console.log(`[WorkflowOrchestrator] Running QA test validation for session ${state.sessionId} (${testCommand})...`);
+      
+      const testExec = this.workspace.executeCommand(testCommand);
+      const testPassed = testExec.exitCode === 0 && testExec.success;
+      state.testsPassed = testPassed;
 
       state.steps.push({
-        id: `step_git_${Date.now()}`,
-        phase: 6,
-        phaseName: 'GitHub Workflow & Delivery',
-        agent: 'developer',
-        thought: `Automated Git delivery processed: commit=${Boolean(gitRes.commitSha)}, pushed=${Boolean(gitRes.commitUrl)}, PR=${state.pullRequestUrl || 'none'}`,
-        status: gitRes.success ? 'STATUS: VERIFIED & DELIVERED' : 'STATUS: BLOCKED',
-        output: state.pullRequestUrl
-          ? `GitHub PR: ${state.pullRequestUrl} | Commit: ${gitRes.commitSha || 'latest'}`
-          : `Git Commit: ${gitRes.commitSha || 'latest'} on ${targetBranch}`,
+        id: `step_qa_${Date.now()}`,
+        phase: 3,
+        phaseName: 'Quality Assurance & Testing',
+        agent: 'tester',
+        thought: `Ran test suite via '${testCommand}'. Exit code: ${testExec.exitCode}. Analyzing regressions.`,
+        toolCalls: [
+          {
+            id: `tc_test_${Date.now()}`,
+            name: 'run_command',
+            args: { command: testCommand },
+            result: testExec.output,
+            timestamp: Date.now(),
+          },
+        ],
+        status: testPassed ? 'STATUS: PASS' : 'STATUS: FAIL (Regressions Found)',
+        output: testPassed
+          ? `All tests passed via '${testCommand}' (exit code: 0).`
+          : `Tests failed via '${testCommand}' (exit code: ${testExec.exitCode}): ${testExec.output.slice(0, 150)}`,
         timestamp: Date.now(),
       });
 
-      if (!gitRes.success) {
-        state.error = gitRes.error || 'GitHub workflow execution failed.';
-        state.stage = 'FAILED';
-        state.executionStatus = 'FAILED';
-        state.downstreamExecuting = false;
-        await this.persistWorkflow(state);
-        this.activeWorkflows.delete(state.sessionId);
-        this.activeWorkflows.delete(state.workflowId);
-        return state;
-      }
+      // 3. ARCHITECTURAL REVIEW (Reviewer Agent)
+      state.stage = 'REVIEW';
+      console.log(`[WorkflowOrchestrator] Running architectural code review for session ${state.sessionId}...`);
+      const gitDiff = this.workspace.gitDiff();
+      const filesChanged = Object.keys(this.workspace.getFiles());
+
+      const reviewResult = this.performDeterministicReview({
+        testPassed,
+        gitDiff,
+        filesChanged,
+      });
+
+      state.steps.push({
+        id: `step_rev_${Date.now()}`,
+        phase: 5,
+        phaseName: 'Architectural Review',
+        agent: 'reviewer',
+        thought: `Evaluating code changes (${reviewResult.diffLines} lines across ${filesChanged.length} files), QA test verification, and security hygiene.`,
+        toolCalls: [
+          {
+            id: `tc_diff_${Date.now()}`,
+            name: 'git_diff',
+            args: {},
+            result: gitDiff ? `${reviewResult.diffLines} lines modified` : 'Empty diff',
+            timestamp: Date.now(),
+          },
+        ],
+        status: `STATUS: ${reviewResult.status}`,
+        output: reviewResult.summary,
+        timestamp: Date.now(),
+      });
+
+      // 4. FINAL DELIVERY & SYNTHESIS REPORT (Manager Agent)
+      const finalReport: FinalReport = {
+        implementation: state.status === 'COMPLETED' ? 'PASS' : 'FAIL',
+        tests: testPassed ? 'PASS' : 'FAIL',
+        review: reviewResult.approved ? 'APPROVED' : 'CHANGES_REQUIRED',
+        filesChanged,
+        testSummary: testPassed
+          ? `QA test suite '${testCommand}' succeeded with exit code 0.`
+          : `QA test suite '${testCommand}' failed with exit code ${testExec.exitCode}.`,
+        reviewSummary: reviewResult.summary,
+        remainingIssues: [
+          ...(testPassed ? [] : [`QA test suite '${testCommand}' exited with non-zero exit code (${testExec.exitCode}).`]),
+          ...reviewResult.issues,
+        ],
+        totalCycles: {
+          testerCorrections: 0,
+          reviewerCorrections: 0,
+        },
+        metrics: {
+          durationMs: Date.now() - new Date(state.createdAt).getTime(),
+          modelUsed: state.options.model || 'gemini-3.7-flash',
+          codingAgentUsed: state.agentId,
+          prUrl: state.pullRequestUrl || state.prUrl,
+          gitBranch: state.gitBranch,
+          commitSha: state.commitSha,
+          commitUrl: state.commitUrl,
+          pullRequestUrl: state.pullRequestUrl || state.prUrl,
+          testsPassed: state.testsPassed,
+          git: state.git,
+        },
+      };
+
+      state.finalReport = finalReport;
+      state.stage = 'COMPLETED';
+      state.executionStatus = 'COMPLETED';
+      state.downstreamExecuted = true;
+      state.downstreamExecuting = false;
+      state.summary = `Workflow completed. Implementation: ${finalReport.implementation}, Tests: ${finalReport.tests}, Review: ${finalReport.review}.${state.pullRequestUrl ? ` PR: ${state.pullRequestUrl}` : ''}`;
+
+      state.steps.push({
+        id: `step_deliv_${Date.now()}`,
+        phase: 7,
+        phaseName: 'Final Delivery',
+        agent: 'manager',
+        thought: `Autonomous workflow completed downstream verification. Implementation: ${finalReport.implementation}, Tests: ${finalReport.tests}, Review: ${finalReport.review}.`,
+        status: 'COMPLETED',
+        output: `Downstream execution completed. Tests: ${finalReport.tests} | Review: ${finalReport.review}${state.pullRequestUrl ? ` | PR: ${state.pullRequestUrl}` : ''}`,
+        timestamp: Date.now(),
+      });
+
+      // Persist final completed state
+      await this.persistWorkflow(state);
+
+      // Remove from active polling map
+      this.activeWorkflows.delete(state.sessionId);
+      this.activeWorkflows.delete(state.workflowId);
+
+      console.log(`[WorkflowOrchestrator] Workflow ${state.workflowId} (Session: ${state.sessionId}) successfully COMPLETED.`);
+      return state;
+    } catch (err: any) {
+      console.error(`[WorkflowOrchestrator] Downstream pipeline error for ${state.sessionId}:`, err?.message || err);
+      state.error = err?.message || 'Downstream processing failed.';
+      state.stage = 'FAILED';
+      state.executionStatus = 'FAILED';
+      state.downstreamExecuting = false;
+      state.downstreamExecuted = true; // Mark true so downstream is not re-attempted automatically
+      await this.persistWorkflow(state);
+      this.activeWorkflows.delete(state.sessionId);
+      this.activeWorkflows.delete(state.workflowId);
+      return state;
     }
-
-    // 2. QUALITY ASSURANCE & TESTING (Tester Agent)
-    state.stage = 'TESTING';
-    const testCommand = state.options.testCommand || 'pytest tests/ -v';
-    console.log(`[WorkflowOrchestrator] Running QA test validation for session ${state.sessionId} (${testCommand})...`);
-    
-    let testOutput = this.workspace.runCommand(testCommand);
-    let testPassed = !testOutput.includes('FAILED') && !testOutput.includes('EXIT CODE: 1');
-    state.testsPassed = testPassed;
-
-    state.steps.push({
-      id: `step_qa_${Date.now()}`,
-      phase: 3,
-      phaseName: 'Quality Assurance & Testing',
-      agent: 'tester',
-      thought: `Ran test suite via '${testCommand}'. Analyzing regression safety.`,
-      toolCalls: [
-        {
-          id: `tc_test_${Date.now()}`,
-          name: 'run_command',
-          args: { command: testCommand },
-          result: testOutput,
-          timestamp: Date.now(),
-        },
-      ],
-      status: testPassed ? 'STATUS: PASS' : 'STATUS: FAIL (Regressions Found)',
-      output: testPassed ? 'All tests passed. No regressions detected.' : `Tests failed: ${testOutput.slice(0, 100)}`,
-      timestamp: Date.now(),
-    });
-
-    // 3. ARCHITECTURAL REVIEW (Reviewer Agent)
-    state.stage = 'REVIEW';
-    console.log(`[WorkflowOrchestrator] Running architectural code review for session ${state.sessionId}...`);
-    const gitDiff = this.workspace.gitDiff();
-
-    state.steps.push({
-      id: `step_rev_${Date.now()}`,
-      phase: 5,
-      phaseName: 'Architectural Review',
-      agent: 'reviewer',
-      thought: 'Evaluating code quality, security implications, maintainability, and clean architecture.',
-      toolCalls: [
-        {
-          id: `tc_diff_${Date.now()}`,
-          name: 'git_diff',
-          args: {},
-          result: gitDiff ? `${gitDiff.split('\n').length} lines modified` : 'Empty diff',
-          timestamp: Date.now(),
-        },
-      ],
-      status: 'STATUS: APPROVED',
-      output: 'Strengths: Clean modular code, proper error guards, full test coverage. Final recommendation: Approved for merge.',
-      timestamp: Date.now(),
-    });
-
-    // 4. FINAL DELIVERY & SYNTHESIS REPORT (Manager Agent)
-    const filesChanged = Object.keys(this.workspace.getFiles());
-    const finalReport: FinalReport = {
-      implementation: 'PASS',
-      tests: testPassed ? 'PASS' : 'FAIL',
-      review: 'APPROVED',
-      filesChanged,
-      testSummary: testPassed ? 'Test suite passed 100% across all unit and edge-case suites.' : 'Test suite encountered issues.',
-      reviewSummary: 'Architectural and security standards verified. Zero critical vulnerabilities found.',
-      remainingIssues: testPassed ? [] : ['Some tests failed in QA verification.'],
-      totalCycles: {
-        testerCorrections: 0,
-        reviewerCorrections: 0,
-      },
-      metrics: {
-        durationMs: Date.now() - new Date(state.createdAt).getTime(),
-        modelUsed: state.options.model || 'gemini-3.7-flash',
-        codingAgentUsed: state.agentId,
-        prUrl: state.pullRequestUrl || state.prUrl,
-        gitBranch: state.gitBranch,
-        commitSha: state.commitSha,
-        commitUrl: state.commitUrl,
-        pullRequestUrl: state.pullRequestUrl || state.prUrl,
-        testsPassed: state.testsPassed,
-        git: state.git,
-      },
-    };
-
-    state.finalReport = finalReport;
-    state.stage = 'COMPLETED';
-    state.executionStatus = 'COMPLETED';
-    state.downstreamExecuted = true;
-    state.downstreamExecuting = false;
-    state.summary = `Workflow completed successfully. PR: ${state.pullRequestUrl || state.prUrl || 'Delivered'}`;
-
-    state.steps.push({
-      id: `step_deliv_${Date.now()}`,
-      phase: 7,
-      phaseName: 'Final Delivery',
-      agent: 'manager',
-      thought: `Autonomous workflow completed. Files changed: ${filesChanged.length}. All verification gates passed.`,
-      status: 'COMPLETED',
-      output: `Delivery successful.${state.pullRequestUrl ? ` Pull Request: ${state.pullRequestUrl}` : ''}`,
-      timestamp: Date.now(),
-    });
-
-    // Persist final completed state
-    await this.persistWorkflow(state);
-
-    // Remove from active polling map
-    this.activeWorkflows.delete(state.sessionId);
-    this.activeWorkflows.delete(state.workflowId);
-
-    console.log(`[WorkflowOrchestrator] Workflow ${state.workflowId} (Session: ${state.sessionId}) successfully COMPLETED.`);
-    return state;
   }
 
   /**
@@ -804,3 +943,11 @@ export class WorkflowOrchestrator {
 }
 
 export const workflowOrchestrator = new WorkflowOrchestrator();
+
+export const performDeterministicReview = (
+  paramsOrTestResult: any,
+  gitDiffArg?: string,
+  filesChangedArg?: string[]
+): DeterministicReviewResult => {
+  return workflowOrchestrator.performDeterministicReview(paramsOrTestResult, gitDiffArg, filesChangedArg);
+};

@@ -98,6 +98,28 @@ export class GitHubManager {
     const baseBranch = options.baseBranch || 'main';
     const cwd = options.workingDirectory || process.cwd();
 
+    // 0. Strict session status check: Git operations are strictly forbidden unless session status is COMPLETED
+    if (options.sessionStatus && options.sessionStatus !== 'COMPLETED') {
+      return {
+        success: false,
+        sessionId: options.sessionId,
+        repository: options.repository,
+        branch: targetBranch,
+        testsPassed: false,
+        error: `Refusing Git operations: session status is "${options.sessionStatus}". Only COMPLETED sessions may trigger Git or PR operations.`,
+      };
+    }
+    if (options.executionStatus && options.executionStatus !== 'COMPLETED') {
+      return {
+        success: false,
+        sessionId: options.sessionId,
+        repository: options.repository,
+        branch: targetBranch,
+        testsPassed: false,
+        error: `Refusing Git operations: execution status is "${options.executionStatus}". Only COMPLETED sessions may trigger Git or PR operations.`,
+      };
+    }
+
     // 1. Authentication check
     if ((shouldPush || shouldCreatePR || options.createRepository) && !this.isConfigured()) {
       return {

@@ -259,6 +259,7 @@ async function startServer() {
   app.post('/api/coding-agents/execute', async (req, res) => {
     try {
       const {
+        workflowId,
         agent = 'jules',
         repository,
         branch = 'main',
@@ -267,14 +268,13 @@ async function startServer() {
         title,
         automationMode = 'AUTO_CREATE_PR',
         requirePlanApproval = false,
-        waitForCompletion = false,
-        timeoutSeconds,
         createRepository,
         repositoryName,
         private: isPrivate,
         git,
         commitAndPush,
         commitPushAndCreatePR,
+        testCommand,
       } = req.body;
 
       const taskPrompt = task || prompt;
@@ -285,6 +285,7 @@ async function startServer() {
 
       const gitRequested = Boolean(
         git?.push ||
+        git?.commit ||
         git?.createPullRequest ||
         commitAndPush ||
         commitPushAndCreatePR ||
@@ -298,58 +299,38 @@ async function startServer() {
         });
       }
 
-      // If client requests execution with git operations or synchronous waiting
-      if (gitRequested || (waitForCompletion && timeoutSeconds && timeoutSeconds > 0)) {
-        const result = await codingAgentManager.execute({
-          agent,
-          repository: repoTarget,
-          branch,
-          task: taskPrompt,
-          title,
-          automationMode,
-          requirePlanApproval,
-          timeoutSeconds,
-          createRepository,
-          repositoryName,
-          private: isPrivate,
-          git,
-          commitAndPush,
-          commitPushAndCreatePR,
-        });
-
-        if (!result.success && result.error === 'GITHUB_TOKEN is not configured') {
-          return res.status(401).json({
-            success: false,
-            error: 'GITHUB_TOKEN is not configured',
-          });
-        }
-
-        return res.status(result.executionStatus === 'FAILED' ? 500 : 200).json(result);
-      }
-
-      // Default asynchronous flow: startSession immediately returns sessionId and status
-      const session = await codingAgentManager.startSession({
+      const workflow = await workflowOrchestrator.startWorkflow({
+        workflowId,
         agent,
         repository: repoTarget,
         branch,
-        task: taskPrompt,
+        taskPrompt,
         title,
         automationMode,
         requirePlanApproval,
+        createRepository,
+        repositoryName,
+        private: isPrivate,
+        git,
+        commitAndPush,
+        commitPushAndCreatePR,
+        testCommand,
       });
 
       res.status(200).json({
         success: true,
-        executionStatus: 'RUNNING',
-        sessionId: session.id,
-        status: session.state || 'QUEUED',
+        workflowId: workflow.workflowId,
+        sessionId: workflow.sessionId,
+        executionStatus: workflow.executionStatus,
+        status: workflow.status,
+        stage: workflow.stage,
         repository: repoTarget,
         branch,
-        title: session.title || title,
+        title: workflow.title || title,
         prompt: taskPrompt,
-        prUrl: session.prUrl,
-        gitBranch: session.gitBranch,
-        session,
+        prUrl: workflow.prUrl,
+        gitBranch: workflow.gitBranch,
+        workflow,
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -358,10 +339,11 @@ async function startServer() {
 
   // Asynchronous Observable Jules & Coding Agent Endpoints
 
-  // 1. Start new Jules session (supports immediate asynchronous dispatch or integrated git push workflow)
+  // 1. Start new Jules session (routed through WorkflowOrchestrator)
   app.post('/api/coding-agents/jules/sessions', async (req, res) => {
     try {
       const {
+        workflowId,
         agent = 'jules',
         repository,
         branch = 'main',
@@ -376,6 +358,7 @@ async function startServer() {
         git,
         commitAndPush,
         commitPushAndCreatePR,
+        testCommand,
       } = req.body;
 
       const taskPrompt = task || prompt;
@@ -403,64 +386,32 @@ async function startServer() {
         });
       }
 
-      // If Git workflow is requested (commit, push, PR, createRepository), execute the task and git workflow
-      if (gitRequested) {
-        const result = await codingAgentManager.execute({
-          agent,
-          repository: repoTarget,
-          branch,
-          task: taskPrompt,
-          title,
-          automationMode,
-          requirePlanApproval,
-          createRepository,
-          repositoryName,
-          private: isPrivate,
-          git,
-          commitAndPush,
-          commitPushAndCreatePR,
-        });
-
-        if (!result.success && result.error === 'GITHUB_TOKEN is not configured') {
-          return res.status(401).json({
-            success: false,
-            error: 'GITHUB_TOKEN is not configured',
-          });
-        }
-
-        return res.status(result.executionStatus === 'FAILED' ? (result.testsPassed === false ? 422 : 500) : 200).json({
-          success: result.success,
-          executionStatus: result.executionStatus,
-          sessionId: result.sessionId,
-          status: result.status,
-          error: result.error,
-          testsPassed: result.testsPassed,
-          git: result.git || {
-            committed: Boolean(result.commitSha),
-            pushed: Boolean(result.commitUrl),
-            branch: result.gitBranch || branch,
-            commitSha: result.commitSha,
-            commitUrl: result.commitUrl,
-            pullRequestUrl: result.pullRequestUrl || result.prUrl,
-          },
-        });
-      }
-
-      const session = await codingAgentManager.startSession({
+      const workflow = await workflowOrchestrator.startWorkflow({
+        workflowId,
         agent,
         repository: repoTarget,
         branch,
-        task: taskPrompt,
+        taskPrompt,
         title,
         automationMode,
         requirePlanApproval,
+        createRepository,
+        repositoryName,
+        private: isPrivate,
+        git,
+        commitAndPush,
+        commitPushAndCreatePR,
+        testCommand,
       });
 
       res.status(201).json({
         success: true,
-        sessionId: session.id,
-        session,
-        status: session.state,
+        workflowId: workflow.workflowId,
+        sessionId: workflow.sessionId,
+        status: workflow.status,
+        stage: workflow.stage,
+        executionStatus: workflow.executionStatus,
+        workflow,
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -478,10 +429,11 @@ async function startServer() {
     }
   });
 
-  // Generic start session endpoint alias
+  // Generic start session endpoint alias (routed through WorkflowOrchestrator)
   app.post('/api/coding-agents/sessions', async (req, res) => {
     try {
       const {
+        workflowId,
         agent = 'jules',
         repository,
         branch = 'main',
@@ -490,48 +442,89 @@ async function startServer() {
         title,
         automationMode = 'AUTO_CREATE_PR',
         requirePlanApproval = false,
+        createRepository,
+        repositoryName,
+        private: isPrivate,
+        git,
+        commitAndPush,
+        commitPushAndCreatePR,
+        testCommand,
       } = req.body;
 
       const taskPrompt = task || prompt;
-      if (!repository || !taskPrompt) {
+      const repoTarget = repositoryName || repository;
+      if (!repoTarget || !taskPrompt) {
         return res.status(400).json({
           error: 'Repository and task prompt are required',
         });
       }
 
-      const session = await codingAgentManager.startSession({
+      const gitRequested = Boolean(
+        git?.commit ||
+        git?.push ||
+        git?.createPullRequest ||
+        commitAndPush ||
+        commitPushAndCreatePR ||
+        createRepository
+      );
+
+      if (gitRequested && !githubManager.isConfigured()) {
+        return res.status(401).json({
+          success: false,
+          error: 'GITHUB_TOKEN is not configured',
+        });
+      }
+
+      const workflow = await workflowOrchestrator.startWorkflow({
+        workflowId,
         agent,
-        repository,
+        repository: repoTarget,
         branch,
-        task: taskPrompt,
+        taskPrompt,
         title,
         automationMode,
         requirePlanApproval,
+        createRepository,
+        repositoryName,
+        private: isPrivate,
+        git,
+        commitAndPush,
+        commitPushAndCreatePR,
+        testCommand,
       });
 
       res.status(201).json({
         success: true,
-        sessionId: session.id,
-        session,
-        status: session.state,
+        workflowId: workflow.workflowId,
+        sessionId: workflow.sessionId,
+        status: workflow.status,
+        stage: workflow.stage,
+        executionStatus: workflow.executionStatus,
+        workflow,
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
   });
 
-  // 2. Get Jules session status and details
+  // 2. Get Jules session status and details (supports lookup by sessionId or workflowId)
   app.get('/api/coding-agents/jules/sessions/:sessionId', async (req, res) => {
     try {
       const { sessionId } = req.params;
-      const session = await codingAgentManager.getSession(sessionId, 'jules');
+      const wf = await workflowOrchestrator.getWorkflow(sessionId);
+      const actualSessionId = wf?.sessionId || sessionId;
+      const session = await codingAgentManager.getSession(actualSessionId, 'jules');
+
       res.json({
         success: true,
+        workflowId: wf?.workflowId,
         sessionId: session.id,
-        status: session.state,
-        prUrl: session.prUrl,
-        gitBranch: session.gitBranch,
-        summary: session.resultSummary,
+        status: wf?.status || session.state,
+        stage: wf?.stage,
+        prUrl: wf?.prUrl || session.prUrl,
+        gitBranch: wf?.gitBranch || session.gitBranch,
+        summary: wf?.summary || session.resultSummary,
+        workflow: wf || undefined,
         session,
       });
     } catch (err: any) {
@@ -597,10 +590,16 @@ async function startServer() {
 
   app.get('/api/coding-agents/session/:id', async (req, res) => {
     try {
-      const sessionId = req.params.id;
+      const id = req.params.id;
       const agent = (req.query.agent as string) || 'jules';
-      const session = await codingAgentManager.getSession(sessionId, agent);
-      res.json(session);
+      const wf = await workflowOrchestrator.getWorkflow(id);
+      const actualSessionId = wf?.sessionId || id;
+      const session = await codingAgentManager.getSession(actualSessionId, agent);
+      res.json({
+        ...session,
+        workflowId: wf?.workflowId,
+        workflowState: wf || session.workflowState,
+      });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -608,15 +607,17 @@ async function startServer() {
 
   app.get('/api/coding-agents/session/:id/activities', async (req, res) => {
     try {
-      const sessionId = req.params.id;
+      const id = req.params.id;
       const agent = (req.query.agent as string) || 'jules';
+      const wf = await workflowOrchestrator.getWorkflow(id);
+      const actualSessionId = wf?.sessionId || id;
       const lastActivityTime = req.query.lastActivityTime as string | undefined;
       const pageSize = req.query.pageSize ? Number(req.query.pageSize) : undefined;
-      const activities = await codingAgentManager.listActivities(sessionId, agent, {
+      const activities = await codingAgentManager.listActivities(actualSessionId, agent, {
         lastActivityTime,
         pageSize,
       });
-      res.json({ sessionId, activities });
+      res.json({ sessionId: actualSessionId, activities });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

@@ -325,12 +325,14 @@ export class ProviderManager {
           });
 
           const generationOutcome: GenerationOutcome =
-            res.generationOutcome ||
-            (provId === 'mock'
-              ? 'MOCK_SUCCESS'
-              : (res.isRealProviderUsage && res.text !== fallbackText
-                  ? 'REAL_PROVIDER_SUCCESS'
-                  : 'DEGRADED_FALLBACK'));
+            res.generationOutcome === 'DEGRADED_FALLBACK'
+              ? 'DEGRADED_FALLBACK'
+              : (res.generationOutcome ||
+                (provId === 'mock'
+                  ? 'MOCK_SUCCESS'
+                  : (res.isRealProviderUsage === true && res.text !== fallbackText && res.generationOutcome !== 'DEGRADED_FALLBACK'
+                      ? 'REAL_PROVIDER_SUCCESS'
+                      : 'DEGRADED_FALLBACK')));
 
           return {
             ...res,

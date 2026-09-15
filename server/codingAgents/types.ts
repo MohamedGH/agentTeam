@@ -131,6 +131,7 @@ export interface JulesSession {
   prUrl?: string;
   gitBranch?: string;
   resultSummary?: string;
+  workflowState?: any;
 }
 
 export interface CreateJulesSessionRequest {
@@ -233,6 +234,7 @@ export interface WorkflowOptions {
   branch?: string;
   agent?: string; // 'jules' | 'mock'
   automationMode?: JulesAutomationMode;
+  requirePlanApproval?: boolean;
   title?: string;
   createRepository?: boolean;
   repositoryName?: string;

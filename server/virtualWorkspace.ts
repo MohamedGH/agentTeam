@@ -1,3 +1,10 @@
+export interface CommandExecutionResult {
+  command: string;
+  exitCode: number;
+  output: string;
+  success: boolean;
+}
+
 export interface VirtualWorkspaceState {
   files: Record<string, string>;
   gitHistory: Array<{ message: string; diff: string; timestamp: number }>;
@@ -9,6 +16,7 @@ export class VirtualWorkspace {
   private originalFiles: Map<string, string> = new Map();
   private commandLogs: string[] = [];
   private checkpoints: Array<{ timestamp: number; snapshot: Record<string, string> }> = [];
+  private commandOverrides: Map<string, { exitCode: number; output: string }> = new Map();
 
   private readonly PROTECTED_DIRS = ['.git', '.venv', 'node_modules', '__pycache__'];
   private readonly PROTECTED_FILES = ['.env', '.env.local'];
@@ -168,39 +176,136 @@ Managed by agentTeam (Manager, Developer, Tester, Reviewer).
     return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
-  public runCommand(command: string): string {
+  public setCommandResult(cmdPrefix: string, result: { exitCode: number; output: string }) {
+    this.commandOverrides.set(cmdPrefix.trim(), result);
+  }
+
+  public clearCommandResults() {
+    this.commandOverrides.clear();
+  }
+
+  public executeCommand(command: string): CommandExecutionResult {
     this.commandLogs.push(command);
     const cmd = command.trim();
 
-    // Simulated safe execution for pytest, npm test, lint, etc.
+    // Check manual test overrides first
+    for (const [prefix, override] of this.commandOverrides.entries()) {
+      if (cmd === prefix || cmd.startsWith(prefix)) {
+        return {
+          command: cmd,
+          exitCode: override.exitCode,
+          output: override.output,
+          success: override.exitCode === 0,
+        };
+      }
+    }
+
+    // Safe simulated npm test for Node / TypeScript projects
+    if (cmd.startsWith('npm test') || cmd.startsWith('npm run test')) {
+      return this.simulateNpmTest(cmd);
+    }
+
+    // Simulated safe execution for pytest
     if (cmd.startsWith('pytest') || cmd.startsWith('python -m pytest')) {
       return this.simulatePytest(cmd);
     }
 
     if (cmd.startsWith('git status')) {
-      return this.gitStatus();
+      const statusOutput = this.gitStatus();
+      return {
+        command: cmd,
+        exitCode: 0,
+        output: statusOutput,
+        success: true,
+      };
     }
 
     if (cmd.startsWith('git diff')) {
-      return this.gitDiff();
+      const diffOutput = this.gitDiff();
+      return {
+        command: cmd,
+        exitCode: 0,
+        output: diffOutput,
+        success: true,
+      };
     }
 
-    if (cmd.startsWith('ruff') || cmd.startsWith('flake8')) {
-      return `EXIT CODE: 0\nAll checks passed! No lint errors found.`;
+    if (cmd.startsWith('npm run lint') || cmd.startsWith('ruff') || cmd.startsWith('flake8')) {
+      return {
+        command: cmd,
+        exitCode: 0,
+        output: 'EXIT CODE: 0\nAll checks passed! No lint errors found.',
+        success: true,
+      };
     }
 
-    if (cmd.startsWith('mypy')) {
-      return `EXIT CODE: 0\nSuccess: no issues found in source files.`;
+    if (cmd.startsWith('npm run build') || cmd.startsWith('mypy')) {
+      return {
+        command: cmd,
+        exitCode: 0,
+        output: 'EXIT CODE: 0\nBuild completed successfully.',
+        success: true,
+      };
     }
 
     if (cmd.startsWith('python') || cmd.startsWith('python3')) {
-      return `EXIT CODE: 0\nExecution completed successfully.`;
+      return {
+        command: cmd,
+        exitCode: 0,
+        output: 'EXIT CODE: 0\nExecution completed successfully.',
+        success: true,
+      };
     }
 
-    return `EXIT CODE: 0\nCommand executed: ${cmd}\nOutput: OK`;
+    return {
+      command: cmd,
+      exitCode: 0,
+      output: `EXIT CODE: 0\nCommand executed: ${cmd}\nOutput: OK`,
+      success: true,
+    };
   }
 
-  private simulatePytest(cmd: string): string {
+  public runCommand(command: string): string {
+    const res = this.executeCommand(command);
+    return res.output;
+  }
+
+  private simulateNpmTest(cmd: string): CommandExecutionResult {
+    let hasFailure = false;
+    let failureDetails = '';
+
+    for (const [path, content] of this.files.entries()) {
+      if (
+        content.includes('TODO_FAIL') ||
+        content.includes('FAIL_TEST') ||
+        content.includes('throw new Error(\'FAIL_TEST\')') ||
+        content.includes('raise NotImplementedError')
+      ) {
+        hasFailure = true;
+        failureDetails += `\nFAIL ${path}\n  Error: Assertion or implementation error flagged in ${path}`;
+      }
+    }
+
+    if (hasFailure) {
+      const output = `EXIT CODE: 1\n> agent-team@1.0.0 test\n> tsx tests/runAllHermeticTests.ts\n${failureDetails}\n\nTests: 1 failed, total 1\nSnapshots: 0 total\nTime: 0.25s`;
+      return {
+        command: cmd,
+        exitCode: 1,
+        output,
+        success: false,
+      };
+    }
+
+    const output = `EXIT CODE: 0\n> agent-team@1.0.0 test\n> tsx tests/runAllHermeticTests.ts\n\nPASS tests/unit/agentTeam.test.ts\nPASS tests/unit/quotaManager.test.ts\nPASS tests/integration/workflowOrchestrator.test.ts\n\nTest Suites: 3 passed, 3 total\nTests:       18 passed, 18 total\nSnapshots:   0 total\nTime:        0.31s`;
+    return {
+      command: cmd,
+      exitCode: 0,
+      output,
+      success: true,
+    };
+  }
+
+  private simulatePytest(cmd: string): CommandExecutionResult {
     // Check if tests pass based on file contents
     const testFiles = Array.from(this.files.keys()).filter(k => k.startsWith('tests/') || k.includes('test_'));
     let totalTests = Math.max(3, testFiles.length * 2);
@@ -210,7 +315,7 @@ Managed by agentTeam (Manager, Developer, Tester, Reviewer).
 
     // Check for obvious syntax issues or placeholder errors
     for (const [path, content] of this.files.entries()) {
-      if (content.includes('raise NotImplementedError') || content.includes('TODO_FAIL')) {
+      if (content.includes('raise NotImplementedError') || content.includes('TODO_FAIL') || content.includes('FAIL_TEST')) {
         failedTests += 1;
         passedTests -= 1;
         failureDetails += `\nFAILED ${path}::test_feature - NotImplementedError: Missing feature implementation`;
@@ -218,7 +323,7 @@ Managed by agentTeam (Manager, Developer, Tester, Reviewer).
     }
 
     if (failedTests > 0) {
-      return `EXIT CODE: 1
+      const output = `EXIT CODE: 1
 ============================= test session starts ==============================
 rootdir: /workspace
 collected ${totalTests} items
@@ -226,9 +331,15 @@ collected ${totalTests} items
 ${failureDetails}
 
 ======================== ${failedTests} failed, ${passedTests} passed in 0.18s =========================`;
+      return {
+        command: cmd,
+        exitCode: 1,
+        output,
+        success: false,
+      };
     }
 
-    return `EXIT CODE: 0
+    const output = `EXIT CODE: 0
 ============================= test session starts ==============================
 platform linux -- Python 3.11.8, pytest-8.1.1
 rootdir: /workspace
@@ -237,6 +348,12 @@ collected ${totalTests} items
 ${testFiles.map(t => `${t} .`).join('\n')}
 
 ============================== ${totalTests} passed in 0.12s ==============================`;
+    return {
+      command: cmd,
+      exitCode: 0,
+      output,
+      success: true,
+    };
   }
 
   public gitStatus(): string {
