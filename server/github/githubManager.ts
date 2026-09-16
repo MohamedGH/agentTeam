@@ -61,7 +61,23 @@ export class GitHubManager {
     createRepository?: boolean;
     private?: boolean;
     description?: string;
+    sessionStatus?: string | null;
+    executionStatus?: string | null;
+    testsPassed?: boolean | null;
+    reviewApproved?: boolean | null;
   }): Promise<GitHubRepoDetails> {
+    if (options.createRepository) {
+      const gateCheck = evaluateQualityGate({
+        sessionStatus: options.sessionStatus,
+        executionStatus: options.executionStatus,
+        testsPassed: options.testsPassed,
+        reviewApproved: options.reviewApproved,
+      });
+
+      if (!gateCheck.authorized) {
+        throw new Error(gateCheck.reason || 'Quality Gate Refusal: Repository creation forbidden.');
+      }
+    }
     return await this.repositoryOps.ensureRepository(options);
   }
 
@@ -98,7 +114,11 @@ export class GitHubManager {
       `jules/task-${Date.now().toString(36)}`;
     const baseBranch = options.baseBranch || 'main';
     const cwd = options.workingDirectory || process.cwd();
-    const isGitOperationRequested = shouldCommit || shouldPush || shouldCreatePR;
+    const isGitOperationRequested =
+      shouldCommit ||
+      shouldPush ||
+      shouldCreatePR ||
+      Boolean(options.createRepository);
 
     // 0. Strict session status & quality gates check:
     // Any call to processTaskResult with non-COMPLETED session or execution status is refused immediately.
@@ -209,7 +229,7 @@ export class GitHubManager {
         }
       }
 
-      if (!status.hasChanges && !shouldPush) {
+      if (!status.hasChanges && !shouldPush && !options.createRepository) {
         return {
           success: true,
           sessionId: options.sessionId,

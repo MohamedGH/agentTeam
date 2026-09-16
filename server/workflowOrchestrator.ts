@@ -23,6 +23,7 @@ import { VirtualWorkspace, workspace as defaultWorkspace } from './virtualWorksp
 import { AgentStep, FinalReport } from '../src/types';
 
 export interface DeterministicReviewResult {
+  reviewExecuted?: boolean;
   approved: boolean;
   status: 'APPROVED' | 'CHANGES_REQUESTED';
   summary: string;
@@ -526,6 +527,7 @@ export class WorkflowOrchestrator {
     }
 
     return {
+      reviewExecuted: true,
       approved,
       status,
       summary,

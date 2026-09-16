@@ -781,7 +781,8 @@ async function startServer() {
       const shouldCommit = Boolean(req.body.git?.commit || req.body.commitAndPush || req.body.commitPushAndCreatePR);
       const shouldPush = Boolean(req.body.git?.push || req.body.commitAndPush || req.body.commitPushAndCreatePR);
       const shouldCreatePR = Boolean(req.body.git?.createPullRequest || req.body.commitPushAndCreatePR);
-      if (shouldCommit || shouldPush || shouldCreatePR) {
+      const shouldCreateRepo = Boolean(req.body.createRepository);
+      if (shouldCommit || shouldPush || shouldCreatePR || shouldCreateRepo) {
         const gateCheck = evaluateQualityGate({
           sessionStatus: req.body.sessionStatus,
           executionStatus: req.body.executionStatus,
@@ -816,10 +817,32 @@ async function startServer() {
       }
 
       const { repository, createRepository = true, private: isPrivate = false } = req.body;
+      if (createRepository) {
+        const gateCheck = evaluateQualityGate({
+          sessionStatus: req.body.sessionStatus,
+          executionStatus: req.body.executionStatus,
+          testsPassed: req.body.testsPassed,
+          reviewApproved: req.body.reviewApproved,
+        });
+
+        if (!gateCheck.authorized) {
+          return res.status(403).json({
+            success: false,
+            error: gateCheck.reason,
+            testsPassed: req.body.testsPassed === true,
+            gateAuthorized: false,
+          });
+        }
+      }
+
       const repo = await githubManager.ensureRepository({
         repository,
         createRepository,
         private: isPrivate,
+        sessionStatus: req.body.sessionStatus,
+        executionStatus: req.body.executionStatus,
+        testsPassed: req.body.testsPassed,
+        reviewApproved: req.body.reviewApproved,
       });
 
       res.json({ success: true, repository: repo });

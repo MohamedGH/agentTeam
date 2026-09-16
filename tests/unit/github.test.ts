@@ -142,6 +142,36 @@ export async function runGitHubUnitTests() {
   assert.strictEqual(resF.authorized, false, 'Scenario F must be REFUSÉ');
   console.log('✅ PASS [Scenario F]: sessionStatus=COMPLETED, executionStatus=RUNNING, testsPassed=true, reviewApproved=true => Git REFUSÉ');
 
+  // Scenario G: createRepository=true, sessionStatus=undefined, executionStatus=undefined, testsPassed=undefined, reviewApproved=undefined => REFUS
+  const resG = evaluateQualityGate({
+    sessionStatus: undefined,
+    executionStatus: undefined,
+    testsPassed: undefined,
+    reviewApproved: undefined,
+  });
+  assert.strictEqual(resG.authorized, false, 'Scenario G must be REFUSÉ');
+  console.log('✅ PASS [Scenario G]: createRepository=true, sessionStatus=undefined, executionStatus=undefined, testsPassed=undefined, reviewApproved=undefined => REFUS');
+
+  // Scenario H: createRepository=true, sessionStatus=COMPLETED, executionStatus=COMPLETED, testsPassed=true, reviewApproved=undefined => REFUS
+  const resH = evaluateQualityGate({
+    sessionStatus: 'COMPLETED',
+    executionStatus: 'COMPLETED',
+    testsPassed: true,
+    reviewApproved: undefined,
+  });
+  assert.strictEqual(resH.authorized, false, 'Scenario H must be REFUSÉ');
+  console.log('✅ PASS [Scenario H]: createRepository=true, COMPLETED + COMPLETED + true + undefined => REFUS');
+
+  // Scenario I: createRepository=true, sessionStatus=COMPLETED, executionStatus=COMPLETED, testsPassed=true, reviewApproved=true => AUTORISÉ
+  const resI = evaluateQualityGate({
+    sessionStatus: 'COMPLETED',
+    executionStatus: 'COMPLETED',
+    testsPassed: true,
+    reviewApproved: true,
+  });
+  assert.strictEqual(resI.authorized, true, 'Scenario I must be AUTORISÉ');
+  console.log('✅ PASS [Scenario I]: createRepository=true, COMPLETED + COMPLETED + true + true => AUTORISÉ');
+
   // Specific Test: testsPassed=true, aucune review exécutée, reviewApproved=undefined => aucun Commit => aucun Push => aucune PR
   let commitAttempted = false;
   let pushAttempted = false;
@@ -175,6 +205,33 @@ export async function runGitHubUnitTests() {
   assert.strictEqual(unreviewedResult.pullRequestUrl, undefined);
   assert.ok(unreviewedResult.error?.includes('reviewApproved must strictly be true'));
   console.log('✅ PASS [Specific Test]: testsPassed=true, aucune review exécutée, reviewApproved=undefined => aucun Commit, aucun Push, aucune PR (processTaskResult refusal verified)');
+
+  // Specific Test: createRepository=true, reviewApproved=undefined => repository creation NOT executed
+  let repoCreationAttempted = false;
+  const repoSpyService = new GitHubRepository(spyClient);
+  repoSpyService.ensureRepository = async () => {
+    repoCreationAttempted = true;
+    throw new Error('ensureRepository should NOT be called when review is unverified!');
+  };
+  repoSpyService.createRepository = async () => {
+    repoCreationAttempted = true;
+    throw new Error('createRepository should NOT be called when review is unverified!');
+  };
+  const unreviewedRepoManager = new GitHubManager(spyClient, spyGitOps, repoSpyService, spyPR);
+  const unreviewedRepoResult = await unreviewedRepoManager.processTaskResult({
+    repository: 'MohamedGH/new-repo',
+    createRepository: true,
+    taskPrompt: 'Create new repository without review approval',
+    sessionStatus: 'COMPLETED',
+    executionStatus: 'COMPLETED',
+    testsPassed: true,
+    reviewApproved: undefined, // NO review executed!
+  });
+
+  assert.strictEqual(unreviewedRepoResult.success, false);
+  assert.strictEqual(repoCreationAttempted, false, 'Repository creation MUST NOT be executed when review is unverified');
+  assert.ok(unreviewedRepoResult.error?.includes('reviewApproved must strictly be true'));
+  console.log('✅ PASS [Specific Test]: createRepository=true, reviewApproved=undefined => repository creation NOT executed');
 
   console.log('✅ PASS: evaluateQualityGate strictly enforces 4-condition invariant (sessionStatus, executionStatus, testsPassed, reviewApproved)');
 
