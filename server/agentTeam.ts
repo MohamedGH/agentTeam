@@ -477,8 +477,9 @@ Describe how you are patching the code.`;
         // PHASE 3: TESTING (Tester)
         // -------------------------------------------------------------
         const testCommand = 'pytest tests/ -v';
-        const testOutput = workspace.runCommand(testCommand);
-        const testPassed = !testOutput.includes('FAILED') && !testOutput.includes('EXIT CODE: 1');
+        const testExec = workspace.executeCommand(testCommand);
+        const testOutput = testExec.output;
+        const testPassed = testExec.exitCode === 0 && testExec.success;
 
         const testerPrompt = `You are the QA / Testing Agent.
 Running '${testCommand}'.
@@ -530,7 +531,9 @@ Provide QA evaluation and regression analysis.`;
             thought: testerRes.text,
             toolCalls: testToolCalls,
             status: 'STATUS: PASS',
-            output: 'All tests passed. No regressions detected. Ready for Reviewer approval.',
+            output: testExec.simulated
+              ? `Simulated test validation (${testCommand}): suite completed with exit code 0. Ready for Reviewer evaluation.`
+              : `QA test suite passed with exit code 0 (${testCommand}). Ready for Reviewer approval.`,
             provider: testerRes.provider,
             model: testerRes.model,
             failoverHistory: testerRes.failoverHistory,

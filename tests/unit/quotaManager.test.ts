@@ -47,5 +47,32 @@ export async function runQuotaManagerUnitTests() {
   quotaManager.resetState(testModel);
   assert(quotaManager.isModelInCooldown(testModel) === false, 'Resetting model clears cooldown state');
 
+  // 7. Multi-provider isolation: Non-Gemini models not blocked by Gemini quota
+  // Put gemini model in cooldown
+  quotaManager.handle429Error('gemini-2.5-flash', 60);
+  assert(quotaManager.canUseModel('gemini-2.5-flash').ok === false, 'Gemini model is blocked under cooldown');
+
+  // Verify non-Gemini models: OpenAI, Anthropic, Groq, DeepSeek, Custom, Mock
+  assert(quotaManager.canUseModel('gpt-4o').ok === true, 'OpenAI model is NOT blocked by Gemini quota');
+  assert(quotaManager.canUseModel('claude-3-5-sonnet-20241022').ok === true, 'Anthropic model is NOT blocked by Gemini quota');
+  assert(quotaManager.canUseModel('llama-3.3-70b-versatile').ok === true, 'Groq model is NOT blocked by Gemini quota');
+  assert(quotaManager.canUseModel('deepseek-chat').ok === true, 'DeepSeek model is NOT blocked by Gemini quota');
+  assert(quotaManager.canUseModel('custom-model-1').ok === true, 'Custom model is NOT blocked by Gemini quota');
+  assert(quotaManager.canUseModel('mock-model').ok === true, 'Mock model is NOT blocked by Gemini quota');
+
+  // 8. Explicit cooldown on non-Gemini model is still strictly respected
+  quotaManager.handleCooldown('gpt-4o', 60, 'RATE_LIMIT');
+  assert(quotaManager.canUseModel('gpt-4o').ok === false, 'OpenAI model respects its own explicit cooldown');
+  assert(quotaManager.canUseModel('claude-3-5-sonnet-20241022').ok === true, 'Other providers remain available when OpenAI is in cooldown');
+  quotaManager.resetState('gpt-4o');
+  quotaManager.resetState('gemini-2.5-flash');
+
   console.log('✅ QuotaManager Unit Tests Passed');
+}
+
+if (import.meta.url.endsWith(process.argv[1]) || process.argv[1]?.includes('quotaManager.test')) {
+  runQuotaManagerUnitTests().catch((err) => {
+    console.error('QuotaManager unit test failed:', err);
+    process.exit(1);
+  });
 }

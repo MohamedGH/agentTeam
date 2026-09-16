@@ -9,7 +9,7 @@ import { agentTeamEngine } from './server/agentTeam';
 import { codingAgentManager } from './server/codingAgents';
 import { workflowOrchestrator } from './server/workflowOrchestrator';
 import { cloudMonitoringQuotaService } from './server/cloudMonitoring';
-import { githubManager } from './server/github';
+import { githubManager, evaluateQualityGate } from './server/github';
 
 async function startServer() {
   const app = express();
@@ -775,6 +775,28 @@ async function startServer() {
           success: false,
           error: 'GITHUB_TOKEN is not configured',
         });
+      }
+
+      // Check Quality Gate before executing any Git mutations
+      const shouldCommit = Boolean(req.body.git?.commit || req.body.commitAndPush || req.body.commitPushAndCreatePR);
+      const shouldPush = Boolean(req.body.git?.push || req.body.commitAndPush || req.body.commitPushAndCreatePR);
+      const shouldCreatePR = Boolean(req.body.git?.createPullRequest || req.body.commitPushAndCreatePR);
+      if (shouldCommit || shouldPush || shouldCreatePR) {
+        const gateCheck = evaluateQualityGate({
+          sessionStatus: req.body.sessionStatus,
+          executionStatus: req.body.executionStatus,
+          testsPassed: req.body.testsPassed,
+          reviewApproved: req.body.reviewApproved,
+        });
+
+        if (!gateCheck.authorized) {
+          return res.status(403).json({
+            success: false,
+            error: gateCheck.reason,
+            testsPassed: req.body.testsPassed === true,
+            gateAuthorized: false,
+          });
+        }
       }
 
       const result = await githubManager.processTaskResult(req.body);

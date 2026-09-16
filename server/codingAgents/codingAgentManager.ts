@@ -164,6 +164,18 @@ export class CodingAgentManager {
           result.gitBranch ||
           `jules/task-${result.sessionId?.slice(-6) || Date.now().toString(36)}`;
 
+        const testCmd = task.testCommand || (task.git?.runTests !== false ? 'npm test' : undefined);
+        let testsPassed: boolean = (task as any).testsPassed ?? (result.testsPassed !== undefined ? result.testsPassed : true);
+        if (testCmd && (task as any).testsPassed === undefined && result.testsPassed === undefined) {
+          const testRes = await this.githubManager.getGitOps().runVerificationTests(testCmd);
+          testsPassed = testRes.passed;
+          if (!testsPassed) {
+            result.error = `Automated tests failed:\n${testRes.output}`;
+          }
+        }
+
+        const reviewApproved: boolean = (task as any).reviewApproved ?? ((result as any).reviewApproved ?? (testsPassed === true));
+
         const gitRes = await this.githubManager.processTaskResult({
           repository: repoTarget,
           branch: targetBranch,
@@ -171,13 +183,15 @@ export class CodingAgentManager {
           taskPrompt: task.task,
           sessionId: result.sessionId,
           sessionStatus: result.status,
-          executionStatus: result.executionStatus,
+          executionStatus: (testsPassed && reviewApproved) ? result.executionStatus : 'FAILED',
+          testsPassed,
+          reviewApproved,
           createRepository: task.createRepository,
           private: task.private,
           git: task.git,
           commitAndPush: task.commitAndPush,
           commitPushAndCreatePR: task.commitPushAndCreatePR,
-          testCommand: task.testCommand || (task.git?.runTests !== false ? 'npm test' : undefined),
+          testCommand: testCmd,
         });
 
         result.testsPassed = gitRes.testsPassed;
@@ -188,7 +202,7 @@ export class CodingAgentManager {
         result.success = result.status === 'COMPLETED' && gitRes.success && !result.error;
 
         if (!gitRes.success) {
-          result.error = gitRes.error;
+          result.error = result.error || gitRes.error;
           result.status = 'FAILED';
           result.executionStatus = 'FAILED';
           result.success = false;

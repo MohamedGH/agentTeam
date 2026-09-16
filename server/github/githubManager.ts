@@ -3,6 +3,7 @@ import { GitHubRepository } from './githubRepository';
 import { GitHubGitOperations, IGitExecutor } from './githubGitOperations';
 import { GitHubPullRequest } from './githubPullRequest';
 import { GitHubWorkflowResult, GitWorkflowOptions, GitHubRepoDetails } from './types';
+import { evaluateQualityGate } from './qualityGate';
 import fs from 'fs';
 import path from 'path';
 
@@ -97,47 +98,56 @@ export class GitHubManager {
       `jules/task-${Date.now().toString(36)}`;
     const baseBranch = options.baseBranch || 'main';
     const cwd = options.workingDirectory || process.cwd();
+    const isGitOperationRequested = shouldCommit || shouldPush || shouldCreatePR;
 
-    // 0. Strict session status & quality gates check: Git operations are strictly forbidden unless session status is COMPLETED and quality gates pass
+    // 0. Strict session status & quality gates check:
+    // Any call to processTaskResult with non-COMPLETED session or execution status is refused immediately.
     if (options.sessionStatus && options.sessionStatus !== 'COMPLETED') {
       return {
         success: false,
         sessionId: options.sessionId,
         repository: options.repository,
         branch: targetBranch,
-        testsPassed: false,
-        error: `Refusing Git operations: session status is "${options.sessionStatus}". Only COMPLETED sessions may trigger Git or PR operations.`,
+        testsPassed: options.testsPassed === true,
+        error: `Refusing Git operations: session status is ${options.sessionStatus}. Operations require COMPLETED.`,
       };
     }
+
     if (options.executionStatus && options.executionStatus !== 'COMPLETED') {
       return {
         success: false,
         sessionId: options.sessionId,
         repository: options.repository,
         branch: targetBranch,
-        testsPassed: false,
-        error: `Refusing Git operations: execution status is "${options.executionStatus}". Only COMPLETED sessions may trigger Git or PR operations.`,
+        testsPassed: options.testsPassed === true,
+        error: `Refusing Git operations: execution status is ${options.executionStatus}. Operations require COMPLETED.`,
       };
     }
-    if (options.testsPassed === false) {
-      return {
-        success: false,
-        sessionId: options.sessionId,
-        repository: options.repository,
-        branch: targetBranch,
-        testsPassed: false,
-        error: 'Refusing Git operations: QA test validation failed. Code cannot be committed or pushed when tests fail.',
-      };
-    }
-    if (options.reviewApproved === false) {
-      return {
-        success: false,
-        sessionId: options.sessionId,
-        repository: options.repository,
-        branch: targetBranch,
-        testsPassed: options.testsPassed ?? true,
-        error: 'Refusing Git operations: Architectural review requested changes or was not approved. Code cannot be committed or pushed with security/architectural violations.',
-      };
+
+    // Git operations (Commit / Push / PR) are strictly authorized ONLY IF:
+    // sessionStatus === 'COMPLETED'
+    // executionStatus === 'COMPLETED'
+    // testsPassed === true
+    // reviewApproved === true
+    // undefined or false => refusal. Only exact combination of the 4 conditions authorizes Git.
+    if (isGitOperationRequested) {
+      const gateCheck = evaluateQualityGate({
+        sessionStatus: options.sessionStatus,
+        executionStatus: options.executionStatus,
+        testsPassed: options.testsPassed,
+        reviewApproved: options.reviewApproved,
+      });
+
+      if (!gateCheck.authorized) {
+        return {
+          success: false,
+          sessionId: options.sessionId,
+          repository: options.repository,
+          branch: targetBranch,
+          testsPassed: options.testsPassed === true,
+          error: gateCheck.reason,
+        };
+      }
     }
 
     // 1. Authentication check

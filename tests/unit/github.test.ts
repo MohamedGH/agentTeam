@@ -4,9 +4,84 @@ import { GitHubRepository } from '../../server/github/githubRepository';
 import { GitHubPullRequest } from '../../server/github/githubPullRequest';
 import { GitHubGitOperations } from '../../server/github/githubGitOperations';
 import { GitHubManager } from '../../server/github/githubManager';
+import { evaluateQualityGate, isQualityGateAuthorized } from '../../server/github/qualityGate';
 
 export async function runGitHubUnitTests() {
   console.log('\n--- [Unit Test] GitHub Automation & Git Workflow Services ---');
+
+  // 0. Quality Gate unit tests: strict 4-condition enforcement
+  assert.strictEqual(
+    isQualityGateAuthorized({
+      sessionStatus: 'COMPLETED',
+      executionStatus: 'COMPLETED',
+      testsPassed: true,
+      reviewApproved: true,
+    }),
+    true
+  );
+
+  // Undefined or null checks
+  assert.strictEqual(isQualityGateAuthorized(undefined), false);
+  assert.strictEqual(isQualityGateAuthorized(null), false);
+  assert.strictEqual(isQualityGateAuthorized({}), false);
+
+  // Individual violations must fail
+  assert.strictEqual(
+    isQualityGateAuthorized({
+      sessionStatus: 'RUNNING',
+      executionStatus: 'COMPLETED',
+      testsPassed: true,
+      reviewApproved: true,
+    }),
+    false
+  );
+  assert.strictEqual(
+    isQualityGateAuthorized({
+      sessionStatus: 'COMPLETED',
+      executionStatus: 'FAILED',
+      testsPassed: true,
+      reviewApproved: true,
+    }),
+    false
+  );
+  assert.strictEqual(
+    isQualityGateAuthorized({
+      sessionStatus: 'COMPLETED',
+      executionStatus: 'COMPLETED',
+      testsPassed: false,
+      reviewApproved: true,
+    }),
+    false
+  );
+  assert.strictEqual(
+    isQualityGateAuthorized({
+      sessionStatus: 'COMPLETED',
+      executionStatus: 'COMPLETED',
+      testsPassed: true,
+      reviewApproved: false,
+    }),
+    false
+  );
+  // Undefined flags must NOT default to true
+  assert.strictEqual(
+    isQualityGateAuthorized({
+      sessionStatus: 'COMPLETED',
+      executionStatus: 'COMPLETED',
+      testsPassed: undefined,
+      reviewApproved: true,
+    }),
+    false
+  );
+  assert.strictEqual(
+    isQualityGateAuthorized({
+      sessionStatus: 'COMPLETED',
+      executionStatus: 'COMPLETED',
+      testsPassed: true,
+      reviewApproved: undefined,
+    }),
+    false
+  );
+  console.log('✅ PASS: evaluateQualityGate strictly enforces 4-condition invariant (sessionStatus, executionStatus, testsPassed, reviewApproved)');
 
   // 1. GitHubClient configuration & token validation
   const clientWithoutToken = new GitHubClient({ token: '' });
@@ -133,6 +208,10 @@ export async function runGitHubUnitTests() {
     repository: 'MohamedGH/agentTeam',
     branch: 'main',
     taskPrompt: 'Add features',
+    sessionStatus: 'COMPLETED',
+    executionStatus: 'COMPLETED',
+    testsPassed: true,
+    reviewApproved: true,
     commitAndPush: true,
   });
   assert.strictEqual(unconfiguredResult.success, false);
@@ -150,21 +229,39 @@ export async function runGitHubUnitTests() {
     clientWithToken,
     mockFailingGitOps
   );
-  const blockedResult = await failingManager.processTaskResult({
+
+  // Test Quality Gate rejection when missing status
+  const missingStatusResult = await failingManager.processTaskResult({
     repository: 'MohamedGH/agentTeam',
     branch: 'main',
     taskPrompt: 'Refactor core logic',
     testCommand: 'npm test',
     commitAndPush: true,
   });
+  assert.strictEqual(missingStatusResult.success, false);
+  assert.ok(missingStatusResult.error?.includes('Quality Gate Refusal'));
+  console.log('✅ PASS: Quality Gate blocks Git mutations when parameters are undefined');
+
+  // Test Quality Gate rejection when tests fail
+  const blockedResult = await failingManager.processTaskResult({
+    repository: 'MohamedGH/agentTeam',
+    branch: 'main',
+    taskPrompt: 'Refactor core logic',
+    sessionStatus: 'COMPLETED',
+    executionStatus: 'COMPLETED',
+    testsPassed: false,
+    reviewApproved: true,
+    testCommand: 'npm test',
+    commitAndPush: true,
+  });
 
   assert.strictEqual(blockedResult.success, false);
   assert.strictEqual(blockedResult.testsPassed, false);
-  assert.ok(blockedResult.error?.includes('Critical tests failed'));
+  assert.ok(blockedResult.error?.includes('Quality Gate Refusal') || blockedResult.error?.includes('Critical tests failed'));
   assert.strictEqual(blockedResult.git?.pushed, undefined);
   console.log('✅ PASS: Critical safety rule enforced: Automated git push is BLOCKED when tests fail');
 
-  // Test successful commit, push, and PR creation workflow
+  // Test successful commit, push, and PR creation workflow when Quality Gate is fully satisfied
   const mockSuccessfulGitOps = new GitHubGitOperations();
   mockSuccessfulGitOps.runVerificationTests = async () => ({
     passed: true,
@@ -223,6 +320,10 @@ export async function runGitHubUnitTests() {
     repository: 'MohamedGH/agentTeam',
     branch: 'main',
     taskPrompt: 'Refactor core logic',
+    sessionStatus: 'COMPLETED',
+    executionStatus: 'COMPLETED',
+    testsPassed: true,
+    reviewApproved: true,
     commitPushAndCreatePR: true,
   });
 

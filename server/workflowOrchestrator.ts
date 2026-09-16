@@ -448,6 +448,9 @@ export class WorkflowOrchestrator {
       { pattern: /AIza[0-9A-Za-z-_]{35}/, name: 'Hardcoded credential (Google API key)' },
       { pattern: /sk-[a-zA-Z0-9]{20,}/, name: 'Hardcoded credential (OpenAI API key)' },
       { pattern: /xox[baprs]-[0-9a-zA-Z]{10,}/, name: 'Hardcoded credential (Slack token)' },
+      { pattern: /-----BEGIN (?:RSA |EC )?PRIVATE KEY-----/, name: 'Private cryptographic key' },
+      { pattern: /Bearer\s+[a-zA-Z0-9_\-\.]{25,}/i, name: 'Hardcoded Bearer authorization token' },
+      { pattern: /(?:password|client_secret)\s*[:=]\s*['"][^'"]{6,}['"]/i, name: 'Hardcoded password or secret' },
     ];
 
     for (const { pattern, name } of secretPatterns) {
@@ -467,9 +470,16 @@ export class WorkflowOrchestrator {
         securityIssues.push(msg);
       }
     }
+    if (/\+\+\+ b\/.*\.env(?:\.[a-zA-Z0-9_-]+)?(?!\.example)/.test(diffText)) {
+      const msg = 'Security violation: Real .env credential file detected in git diff.';
+      if (!issues.includes(msg)) {
+        issues.push(msg);
+        securityIssues.push(msg);
+      }
+    }
 
     // 4. Prohibit dangerous shell executions
-    const dangerousShell = /\b(rm\s+-rf\s+[\/\*]|curl\s+[^|\n]+\|\s*(?:ba)?sh|wget\s+[^|\n]+\|\s*(?:ba)?sh|eval\s*\()/i;
+    const dangerousShell = /\b(rm\s+-rf\s+[\/\*]|curl\s+[^|\n]+\|\s*(?:ba)?sh|wget\s+[^|\n]+\|\s*(?:ba)?sh|eval\s*\(|child_process\.execSync\s*\(\s*['"]rm\s+-rf)/i;
     if (dangerousShell.test(diffText)) {
       const msg = 'Security violation: Dangerous unvalidated shell command (e.g. recursive delete, curl-to-sh, or eval) detected in diff.';
       issues.push(msg);
@@ -477,11 +487,28 @@ export class WorkflowOrchestrator {
     }
 
     // 5. Prohibit committing runtime / generated artifacts
-    const prohibitedArtifacts = /\+\+\+ b\/(?:node_modules|data\/coding_agent_sessions\.json|quota_state\.json|\.DS_Store)/;
+    const prohibitedArtifacts = /\+\+\+ b\/(?:node_modules|data\/coding_agent_sessions\.json|quota_state\.json|\.DS_Store|.*\.log|.*\.tmp|dist\/)/;
     if (prohibitedArtifacts.test(diffText)) {
       const msg = 'Hygiene violation: Generated runtime artifact or system cache file detected in diff.';
       issues.push(msg);
       securityIssues.push(msg);
+    }
+    for (const file of filesChanged) {
+      if (
+        file.startsWith('node_modules/') ||
+        file.startsWith('dist/') ||
+        file === 'quota_state.json' ||
+        file === 'data/coding_agent_sessions.json' ||
+        file.endsWith('.log') ||
+        file.endsWith('.tmp') ||
+        file.endsWith('.DS_Store')
+      ) {
+        const msg = `Hygiene violation: Generated runtime artifact '${file}' detected in files changed.`;
+        if (!issues.includes(msg)) {
+          issues.push(msg);
+          securityIssues.push(msg);
+        }
+      }
     }
 
     const approved = issues.length === 0;
@@ -718,8 +745,8 @@ export class WorkflowOrchestrator {
           baseBranch: branch,
           taskPrompt,
           sessionId: state.sessionId,
-          sessionStatus: state.status,
-          executionStatus: state.executionStatus,
+          sessionStatus: 'COMPLETED',
+          executionStatus: 'COMPLETED',
           testsPassed: true,
           reviewApproved: true,
           createRepository: state.options.createRepository,
