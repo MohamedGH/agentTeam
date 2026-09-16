@@ -152,9 +152,6 @@ Provide your architectural breakdown and delegation plan.`;
               createRepository: options.createRepository,
               repositoryName: options.repositoryName,
               private: options.private,
-              commitAndPush: options.commitAndPush,
-              commitPushAndCreatePR: options.commitPushAndCreatePR,
-              git: options.git,
             },
             (activity) => {
               addStep({
@@ -379,46 +376,8 @@ Provide your architectural breakdown and delegation plan.`;
               },
             ],
             status: 'Jules Coding Complete',
-            output: (julesResult.pullRequestUrl || julesResult.prUrl)
-              ? `Pull Request: ${julesResult.pullRequestUrl || julesResult.prUrl} (Branch: ${julesResult.git?.branch || julesResult.gitBranch || 'patch'})`
-              : julesResult.summary,
+            output: julesResult.summary || 'Jules completed modifications.',
           });
-
-          if (julesResult.git) {
-            addStep({
-              phase: 6,
-              phaseName: 'GitHub Workflow',
-              agent: 'developer',
-              thought: `Git & GitHub Delivery for ${repo}: commit=${julesResult.git.committed}, push=${julesResult.git.pushed}, PR=${julesResult.pullRequestUrl || 'none'}`,
-              toolCalls: [
-                {
-                  id: 'tc_git_status',
-                  name: 'git_status',
-                  args: { repository: repo, branch },
-                  result: `Branch: ${julesResult.git.branch || branch}, Changed: ${(julesResult.git.filesChanged || []).join(', ') || 'none'}`,
-                  timestamp: Date.now(),
-                },
-                ...(julesResult.commitSha ? [{
-                  id: 'tc_git_commit',
-                  name: 'git_commit',
-                  args: { commitSha: julesResult.commitSha },
-                  result: julesResult.commitUrl || julesResult.commitSha,
-                  timestamp: Date.now(),
-                }] : []),
-                ...(julesResult.pullRequestUrl ? [{
-                  id: 'tc_github_pr',
-                  name: 'github_pull_request',
-                  args: { url: julesResult.pullRequestUrl },
-                  result: `Pull Request opened: ${julesResult.pullRequestUrl}`,
-                  timestamp: Date.now(),
-                }] : []),
-              ],
-              status: julesResult.testsPassed !== false ? 'STATUS: VERIFIED & DELIVERED' : 'STATUS: BLOCKED (Tests Failed)',
-              output: julesResult.pullRequestUrl
-                ? `GitHub PR: ${julesResult.pullRequestUrl} | Commit: ${julesResult.commitSha || 'latest'}`
-                : `Git Commit: ${julesResult.commitSha || 'latest'} pushed to ${julesResult.git.branch || branch}`,
-            });
-          }
         } else {
           // Standard LLM Developer implementation
           const devPrompt =
@@ -628,6 +587,95 @@ Evaluate code quality, security implications, maintainability, and clean archite
           isRealTokenUsage: revRes.isRealProviderUsage,
           tokenAccountingType: revRes.tokenAccountingType,
         });
+      }
+
+      // -------------------------------------------------------------
+      // PHASE 6: GITHUB WORKFLOW & DELIVERY (After Tester & Reviewer validation)
+      // -------------------------------------------------------------
+      const gitRequested = Boolean(
+        options.commitPushAndCreatePR ||
+        options.commitAndPush ||
+        options.git?.commit ||
+        options.git?.push ||
+        options.git?.createPullRequest ||
+        options.createRepository
+      );
+
+      let gitDeliveryResult: any = null;
+      if (gitRequested && testerPassed && reviewerApproved) {
+        const targetRepo = options.repository || 'MohamedGH/agentTeam';
+        const targetBranch = options.branch || julesResult?.gitBranch || 'main';
+        const ghManager = codingAgentManager.getGitHubManager();
+        if (ghManager.isConfigured()) {
+          gitDeliveryResult = await ghManager.processTaskResult({
+            repository: targetRepo,
+            branch: targetBranch,
+            baseBranch: 'main',
+            taskPrompt,
+            sessionId: julesResult?.sessionId,
+            sessionStatus: 'COMPLETED',
+            executionStatus: 'COMPLETED',
+            testsPassed: true,
+            reviewApproved: true,
+            createRepository: options.createRepository,
+            private: options.private,
+            git: options.git,
+            commitAndPush: options.commitAndPush,
+            commitPushAndCreatePR: options.commitPushAndCreatePR,
+          });
+
+          if (!julesResult) {
+            julesResult = {
+              sessionId: `agent-team-${taskId}`,
+              status: 'COMPLETED',
+              executionStatus: 'COMPLETED',
+              filesChanged: Array.from(changedFileList),
+            } as any;
+          }
+
+          if (julesResult) {
+            julesResult.git = gitDeliveryResult.git;
+            julesResult.commitSha = gitDeliveryResult.commitSha;
+            julesResult.commitUrl = gitDeliveryResult.commitUrl;
+            julesResult.pullRequestUrl = gitDeliveryResult.pullRequestUrl;
+            julesResult.prUrl = gitDeliveryResult.pullRequestUrl;
+            julesResult.testsPassed = gitDeliveryResult.testsPassed;
+          }
+
+          addStep({
+            phase: 6,
+            phaseName: 'GitHub Workflow',
+            agent: 'developer',
+            thought: `Git & GitHub Delivery for ${targetRepo}: commit=${gitDeliveryResult.git?.committed}, push=${gitDeliveryResult.git?.pushed}, PR=${gitDeliveryResult.pullRequestUrl || 'none'}`,
+            toolCalls: [
+              {
+                id: 'tc_git_status',
+                name: 'git_status',
+                args: { repository: targetRepo, branch: targetBranch },
+                result: `Branch: ${gitDeliveryResult.git?.branch || targetBranch}, Changed: ${(gitDeliveryResult.git?.filesChanged || []).join(', ') || 'none'}`,
+                timestamp: Date.now(),
+              },
+              ...(gitDeliveryResult.commitSha ? [{
+                id: 'tc_git_commit',
+                name: 'git_commit',
+                args: { commitSha: gitDeliveryResult.commitSha },
+                result: gitDeliveryResult.commitUrl || gitDeliveryResult.commitSha,
+                timestamp: Date.now(),
+              }] : []),
+              ...(gitDeliveryResult.pullRequestUrl ? [{
+                id: 'tc_github_pr',
+                name: 'github_pull_request',
+                args: { url: gitDeliveryResult.pullRequestUrl },
+                result: `Pull Request opened: ${gitDeliveryResult.pullRequestUrl}`,
+                timestamp: Date.now(),
+              }] : []),
+            ],
+            status: gitDeliveryResult.success ? 'STATUS: VERIFIED & DELIVERED' : 'STATUS: BLOCKED',
+            output: gitDeliveryResult.pullRequestUrl
+              ? `GitHub PR: ${gitDeliveryResult.pullRequestUrl} | Commit: ${gitDeliveryResult.commitSha || 'latest'}`
+              : `Git Commit: ${gitDeliveryResult.commitSha || 'latest'} pushed to ${gitDeliveryResult.git?.branch || targetBranch}`,
+          });
+        }
       }
 
       // -------------------------------------------------------------

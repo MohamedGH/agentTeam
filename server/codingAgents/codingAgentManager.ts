@@ -165,8 +165,8 @@ export class CodingAgentManager {
           `jules/task-${result.sessionId?.slice(-6) || Date.now().toString(36)}`;
 
         const testCmd = task.testCommand || (task.git?.runTests !== false ? 'npm test' : undefined);
-        let testsPassed: boolean = (task as any).testsPassed ?? (result.testsPassed !== undefined ? result.testsPassed : true);
-        if (testCmd && (task as any).testsPassed === undefined && result.testsPassed === undefined) {
+        let testsPassed: boolean | undefined = (task as any).testsPassed ?? result.testsPassed;
+        if (testCmd && testsPassed === undefined) {
           const testRes = await this.githubManager.getGitOps().runVerificationTests(testCmd);
           testsPassed = testRes.passed;
           if (!testsPassed) {
@@ -174,7 +174,10 @@ export class CodingAgentManager {
           }
         }
 
-        const reviewApproved: boolean = (task as any).reviewApproved ?? ((result as any).reviewApproved ?? (testsPassed === true));
+        const reviewApproved: boolean | undefined =
+          (task as any).reviewApproved !== undefined
+            ? (task as any).reviewApproved
+            : (result as any).reviewApproved;
 
         const gitRes = await this.githubManager.processTaskResult({
           repository: repoTarget,
@@ -183,7 +186,7 @@ export class CodingAgentManager {
           taskPrompt: task.task,
           sessionId: result.sessionId,
           sessionStatus: result.status,
-          executionStatus: (testsPassed && reviewApproved) ? result.executionStatus : 'FAILED',
+          executionStatus: result.executionStatus,
           testsPassed,
           reviewApproved,
           createRepository: task.createRepository,
@@ -195,6 +198,7 @@ export class CodingAgentManager {
         });
 
         result.testsPassed = gitRes.testsPassed;
+        (result as any).reviewApproved = reviewApproved;
         result.commitSha = gitRes.commitSha;
         result.commitUrl = gitRes.commitUrl;
         result.pullRequestUrl = gitRes.pullRequestUrl || result.prUrl;

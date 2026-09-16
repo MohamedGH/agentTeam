@@ -81,6 +81,101 @@ export async function runGitHubUnitTests() {
     }),
     false
   );
+  // Mandatory Scenarios A, B, C, D, E, F
+  // Scenario A: sessionStatus=COMPLETED, executionStatus=COMPLETED, testsPassed=true, reviewApproved=undefined => Git REFUSÉ
+  const resA = evaluateQualityGate({
+    sessionStatus: 'COMPLETED',
+    executionStatus: 'COMPLETED',
+    testsPassed: true,
+    reviewApproved: undefined,
+  });
+  assert.strictEqual(resA.authorized, false, 'Scenario A must be REFUSÉ');
+  console.log('✅ PASS [Scenario A]: sessionStatus=COMPLETED, executionStatus=COMPLETED, testsPassed=true, reviewApproved=undefined => Git REFUSÉ');
+
+  // Scenario B: sessionStatus=COMPLETED, executionStatus=COMPLETED, testsPassed=true, reviewApproved=false => Git REFUSÉ
+  const resB = evaluateQualityGate({
+    sessionStatus: 'COMPLETED',
+    executionStatus: 'COMPLETED',
+    testsPassed: true,
+    reviewApproved: false,
+  });
+  assert.strictEqual(resB.authorized, false, 'Scenario B must be REFUSÉ');
+  console.log('✅ PASS [Scenario B]: sessionStatus=COMPLETED, executionStatus=COMPLETED, testsPassed=true, reviewApproved=false => Git REFUSÉ');
+
+  // Scenario C: sessionStatus=COMPLETED, executionStatus=COMPLETED, testsPassed=false, reviewApproved=true => Git REFUSÉ
+  const resC = evaluateQualityGate({
+    sessionStatus: 'COMPLETED',
+    executionStatus: 'COMPLETED',
+    testsPassed: false,
+    reviewApproved: true,
+  });
+  assert.strictEqual(resC.authorized, false, 'Scenario C must be REFUSÉ');
+  console.log('✅ PASS [Scenario C]: sessionStatus=COMPLETED, executionStatus=COMPLETED, testsPassed=false, reviewApproved=true => Git REFUSÉ');
+
+  // Scenario D: sessionStatus=COMPLETED, executionStatus=COMPLETED, testsPassed=true, reviewApproved=true => Git AUTORISÉ
+  const resD = evaluateQualityGate({
+    sessionStatus: 'COMPLETED',
+    executionStatus: 'COMPLETED',
+    testsPassed: true,
+    reviewApproved: true,
+  });
+  assert.strictEqual(resD.authorized, true, 'Scenario D must be AUTORISÉ');
+  console.log('✅ PASS [Scenario D]: sessionStatus=COMPLETED, executionStatus=COMPLETED, testsPassed=true, reviewApproved=true => Git AUTORISÉ');
+
+  // Scenario E: sessionStatus=IN_PROGRESS, executionStatus=COMPLETED, testsPassed=true, reviewApproved=true => Git REFUSÉ
+  const resE = evaluateQualityGate({
+    sessionStatus: 'IN_PROGRESS',
+    executionStatus: 'COMPLETED',
+    testsPassed: true,
+    reviewApproved: true,
+  });
+  assert.strictEqual(resE.authorized, false, 'Scenario E must be REFUSÉ');
+  console.log('✅ PASS [Scenario E]: sessionStatus=IN_PROGRESS, executionStatus=COMPLETED, testsPassed=true, reviewApproved=true => Git REFUSÉ');
+
+  // Scenario F: sessionStatus=COMPLETED, executionStatus=RUNNING, testsPassed=true, reviewApproved=true => Git REFUSÉ
+  const resF = evaluateQualityGate({
+    sessionStatus: 'COMPLETED',
+    executionStatus: 'RUNNING',
+    testsPassed: true,
+    reviewApproved: true,
+  });
+  assert.strictEqual(resF.authorized, false, 'Scenario F must be REFUSÉ');
+  console.log('✅ PASS [Scenario F]: sessionStatus=COMPLETED, executionStatus=RUNNING, testsPassed=true, reviewApproved=true => Git REFUSÉ');
+
+  // Specific Test: testsPassed=true, aucune review exécutée, reviewApproved=undefined => aucun Commit => aucun Push => aucune PR
+  let commitAttempted = false;
+  let pushAttempted = false;
+  let prAttempted = false;
+
+  const spyClient = new GitHubClient({ token: 'mock-token' });
+  const spyGitOps = new GitHubGitOperations();
+  spyGitOps.commit = async () => { commitAttempted = true; throw new Error('Commit should NOT be called!'); };
+  spyGitOps.pushBranch = async () => { pushAttempted = true; throw new Error('Push should NOT be called!'); };
+  const spyPR = new GitHubPullRequest(spyClient);
+  spyPR.createPullRequest = async () => { prAttempted = true; throw new Error('PR should NOT be called!'); };
+  const spyRepoService = new GitHubRepository(spyClient);
+
+  const spyManager = new GitHubManager(spyClient, spyGitOps, spyRepoService, spyPR);
+  const unreviewedResult = await spyManager.processTaskResult({
+    repository: 'MohamedGH/agentTeam',
+    branch: 'main',
+    taskPrompt: 'Feature with passing tests but unverified review',
+    sessionStatus: 'COMPLETED',
+    executionStatus: 'COMPLETED',
+    testsPassed: true,
+    reviewApproved: undefined, // NO review executed!
+    commitPushAndCreatePR: true,
+  });
+
+  assert.strictEqual(unreviewedResult.success, false);
+  assert.strictEqual(commitAttempted, false, 'Git commit MUST NOT be executed when review is unverified');
+  assert.strictEqual(pushAttempted, false, 'Git push MUST NOT be executed when review is unverified');
+  assert.strictEqual(prAttempted, false, 'GitHub PR MUST NOT be executed when review is unverified');
+  assert.strictEqual(unreviewedResult.commitSha, undefined);
+  assert.strictEqual(unreviewedResult.pullRequestUrl, undefined);
+  assert.ok(unreviewedResult.error?.includes('reviewApproved must strictly be true'));
+  console.log('✅ PASS [Specific Test]: testsPassed=true, aucune review exécutée, reviewApproved=undefined => aucun Commit, aucun Push, aucune PR (processTaskResult refusal verified)');
+
   console.log('✅ PASS: evaluateQualityGate strictly enforces 4-condition invariant (sessionStatus, executionStatus, testsPassed, reviewApproved)');
 
   // 1. GitHubClient configuration & token validation

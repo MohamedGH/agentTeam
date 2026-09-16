@@ -88,13 +88,30 @@ export async function runGitHubWorkflowIntegrationTests() {
   // Inject test GitHubManager into CodingAgentManager
   (codingAgentManager as any).githubManager = testGitHubManager;
 
-  // 3. Test Jules -> Modification -> Commit -> Push -> PR Workflow
+  // 3a. Test Unverified Review Safety: codingAgentManager blocks Git mutation when reviewApproved is undefined
+  const unreviewedResult = await codingAgentManager.execute({
+    agent: 'mock',
+    repository: 'MohamedGH/agentTeam',
+    branch: 'main',
+    task: 'Enhance automated GitHub deployment for Jules agent without review',
+    commitPushAndCreatePR: true,
+    // reviewApproved is undefined
+  });
+
+  assert.strictEqual(unreviewedResult.success, false);
+  assert.strictEqual(unreviewedResult.commitSha, undefined);
+  assert.strictEqual(unreviewedResult.pullRequestUrl, undefined);
+  assert.ok(unreviewedResult.error?.includes('reviewApproved must strictly be true'));
+  console.log('✅ PASS: codingAgentManager blocks Git mutation when reviewApproved is undefined');
+
+  // 3b. Test Jules -> Modification -> Commit -> Push -> PR Workflow with explicit review approval
   const fullWorkflowResult = await codingAgentManager.execute({
     agent: 'mock',
     repository: 'MohamedGH/agentTeam',
     branch: 'main',
     task: 'Enhance automated GitHub deployment for Jules agent',
     commitPushAndCreatePR: true,
+    reviewApproved: true,
   });
 
   assert.strictEqual(fullWorkflowResult.success, true);
@@ -106,7 +123,7 @@ export async function runGitHubWorkflowIntegrationTests() {
   assert.ok(fullWorkflowResult.git?.committed);
   assert.ok(fullWorkflowResult.git?.pushed);
   assert.strictEqual(fullWorkflowResult.git?.branch, 'main');
-  console.log('✅ PASS: codingAgentManager successfully executes full Jules -> Git Commit -> Push -> PR flow');
+  console.log('✅ PASS: codingAgentManager successfully executes full Jules -> Git Commit -> Push -> PR flow when review is approved');
 
   // 4. Test Safety Constraint: Do NOT push if critical tests fail
   const failingGitOps = new GitHubGitOperations();
