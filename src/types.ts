@@ -118,6 +118,7 @@ export interface FinalReport {
     commitUrl?: string;
     pullRequestUrl?: string;
     testsPassed?: boolean;
+    reviewExecuted?: boolean;
     reviewApproved?: boolean;
     realExecution?: boolean;
     simulated?: boolean;

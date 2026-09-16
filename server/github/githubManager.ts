@@ -64,6 +64,7 @@ export class GitHubManager {
     sessionStatus?: string | null;
     executionStatus?: string | null;
     testsPassed?: boolean | null;
+    reviewExecuted?: boolean | null;
     reviewApproved?: boolean | null;
   }): Promise<GitHubRepoDetails> {
     if (options.createRepository) {
@@ -71,6 +72,7 @@ export class GitHubManager {
         sessionStatus: options.sessionStatus,
         executionStatus: options.executionStatus,
         testsPassed: options.testsPassed,
+        reviewExecuted: options.reviewExecuted,
         reviewApproved: options.reviewApproved,
       });
 
@@ -144,17 +146,19 @@ export class GitHubManager {
       };
     }
 
-    // Git operations (Commit / Push / PR) are strictly authorized ONLY IF:
+    // Git operations (Commit / Push / PR / createRepository) are strictly authorized ONLY IF:
     // sessionStatus === 'COMPLETED'
     // executionStatus === 'COMPLETED'
     // testsPassed === true
+    // reviewExecuted === true
     // reviewApproved === true
-    // undefined or false => refusal. Only exact combination of the 4 conditions authorizes Git.
+    // undefined or false => refusal. Only exact combination authorizes Git.
     if (isGitOperationRequested) {
       const gateCheck = evaluateQualityGate({
         sessionStatus: options.sessionStatus,
         executionStatus: options.executionStatus,
         testsPassed: options.testsPassed,
+        reviewExecuted: options.reviewExecuted,
         reviewApproved: options.reviewApproved,
       });
 
@@ -206,6 +210,16 @@ export class GitHubManager {
 
       // 4. Check Git status & modified files
       const status = await this.gitOps.getStatus(cwd);
+      if (status.error || status.success === false) {
+        return {
+          success: false,
+          sessionId: options.sessionId,
+          repository: `${owner}/${repo}`,
+          branch: targetBranch,
+          testsPassed: false,
+          error: `Git status failed: ${status.error || 'Unknown git status error'}`,
+        };
+      }
       const allChangedFiles = [
         ...status.modifiedFiles,
         ...status.addedFiles,

@@ -1,18 +1,84 @@
-import { exec } from 'child_process';
+import { exec, execFile } from 'child_process';
 import { promisify } from 'util';
 import { GitCommitResult, GitPushResult, GitStatusResult } from './types';
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 export interface IGitExecutor {
-  exec(command: string, cwd?: string): Promise<{ stdout: string; stderr: string }>;
+  exec(command: string, cwd?: string, env?: Record<string, string>): Promise<{ stdout: string; stderr: string }>;
+  execFile?(file: string, args: string[], options?: { cwd?: string; env?: NodeJS.ProcessEnv }): Promise<{ stdout: string; stderr: string }>;
+}
+
+export function sanitizeGitOutput(text: string, token?: string): string {
+  if (!text) return '';
+  let sanitized = text;
+  if (token && token.length > 3) {
+    sanitized = sanitized.split(token).join('***GITHUB_TOKEN***');
+    // Also mask base64 basic auth if present
+    const base64Basic = Buffer.from(`x-access-token:${token}`).toString('base64');
+    sanitized = sanitized.split(base64Basic).join('***AUTH_BASIC***');
+  }
+  // Generic token / bearer sanitization
+  sanitized = sanitized.replace(/(?:ghp_|gho_|github_pat_)[a-zA-Z0-9_]+/g, '***GITHUB_TOKEN***');
+  sanitized = sanitized.replace(/x-access-token:[^@]+@/g, 'x-access-token:***@');
+  sanitized = sanitized.replace(/AUTHORIZATION:\s*basic\s+[a-zA-Z0-9+/=]+/gi, 'AUTHORIZATION: basic ***');
+  return sanitized;
+}
+
+export function validateBranchName(branch?: string): void {
+  if (!branch || typeof branch !== 'string' || branch.trim().length === 0) {
+    throw new Error('Invalid branch name: branch must be a non-empty string');
+  }
+  const trimmed = branch.trim();
+  if (
+    trimmed.includes('..') ||
+    trimmed.startsWith('-') ||
+    trimmed.endsWith('/') ||
+    trimmed.startsWith('/') ||
+    !/^[A-Za-z0-9._/-]+$/.test(trimmed) ||
+    /[;`$<>|&"'\s\\]/.test(trimmed)
+  ) {
+    throw new Error(`Invalid branch name "${branch}": contains disallowed characters, path traversal, or command injection sequences`);
+  }
+}
+
+export function validateFilePath(filePath?: string): void {
+  if (!filePath || typeof filePath !== 'string' || filePath.trim().length === 0) {
+    throw new Error('Invalid file path: path must be a non-empty string');
+  }
+  const trimmed = filePath.trim();
+  if (
+    trimmed.includes('..') ||
+    trimmed.startsWith('-') ||
+    /[;`$<>|&"'\n\r\t]/.test(trimmed)
+  ) {
+    throw new Error(`Invalid file path "${filePath}": contains disallowed characters or path traversal`);
+  }
+}
+
+export function validateRepoIdentifier(name?: string, label: string = 'Repository identifier'): void {
+  if (!name || typeof name !== 'string' || name.trim().length === 0) {
+    throw new Error(`Invalid ${label}: must be a non-empty string`);
+  }
+  const trimmed = name.trim();
+  if (!/^[A-Za-z0-9_.-]+$/.test(trimmed) || trimmed.includes('..') || trimmed.startsWith('-')) {
+    throw new Error(`Invalid ${label} "${name}": contains disallowed characters`);
+  }
 }
 
 export class RealGitExecutor implements IGitExecutor {
-  public async exec(command: string, cwd?: string): Promise<{ stdout: string; stderr: string }> {
+  public async exec(command: string, cwd?: string, env?: Record<string, string>): Promise<{ stdout: string; stderr: string }> {
     return await execAsync(command, {
       cwd: cwd || process.cwd(),
-      env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+      env: { ...process.env, ...env, GIT_TERMINAL_PROMPT: '0' },
+    });
+  }
+
+  public async execFile(file: string, args: string[], options?: { cwd?: string; env?: NodeJS.ProcessEnv }): Promise<{ stdout: string; stderr: string }> {
+    return await execFileAsync(file, args, {
+      cwd: options?.cwd || process.cwd(),
+      env: { ...process.env, ...options?.env, GIT_TERMINAL_PROMPT: '0' },
     });
   }
 }
@@ -28,12 +94,30 @@ export class GitHubGitOperations {
     this.executor = executor;
   }
 
+  private async runGit(args: string[], cwd?: string, token?: string): Promise<{ stdout: string; stderr: string }> {
+    try {
+      if (this.executor.execFile) {
+        return await this.executor.execFile('git', args, { cwd });
+      } else {
+        const cmd = `git ${args.map(a => (a.includes(' ') || a.includes('"') ? JSON.stringify(a) : a)).join(' ')}`;
+        return await this.executor.exec(cmd, cwd);
+      }
+    } catch (err: any) {
+      const sanitizedMsg = sanitizeGitOutput(err.message || String(err), token);
+      const safeErr = new Error(sanitizedMsg);
+      (safeErr as any).stdout = sanitizeGitOutput(err.stdout || '', token);
+      (safeErr as any).stderr = sanitizeGitOutput(err.stderr || '', token);
+      throw safeErr;
+    }
+  }
+
   /**
-   * Check Git status of workspace
+   * Check Git status of workspace.
+   * If git status fails, returns success: false with structured error instead of masking as hasChanges: false.
    */
   public async getStatus(cwd?: string): Promise<GitStatusResult> {
     try {
-      const { stdout } = await this.executor.exec('git status --porcelain', cwd);
+      const { stdout } = await this.runGit(['status', '--porcelain'], cwd);
       const lines = stdout.split('\n').map((l) => l.trimEnd()).filter(Boolean);
 
       const modifiedFiles: string[] = [];
@@ -58,7 +142,7 @@ export class GitHubGitOperations {
 
       let currentBranch: string | undefined;
       try {
-        const branchRes = await this.executor.exec('git branch --show-current', cwd);
+        const branchRes = await this.runGit(['branch', '--show-current'], cwd);
         currentBranch = branchRes.stdout.trim() || undefined;
       } catch {
         // May be detached HEAD or empty repo
@@ -66,6 +150,7 @@ export class GitHubGitOperations {
 
       const hasChanges = lines.length > 0;
       return {
+        success: true,
         hasChanges,
         modifiedFiles,
         addedFiles,
@@ -75,8 +160,10 @@ export class GitHubGitOperations {
         rawStatus: stdout,
       };
     } catch (err: any) {
-      // If directory is not a git repo or git fails
+      // Return structured failure rather than masking as clean workspace
       return {
+        success: false,
+        error: err.message || 'Failed to execute git status',
         hasChanges: false,
         modifiedFiles: [],
         addedFiles: [],
@@ -116,7 +203,7 @@ export class GitHubGitOperations {
   }
 
   /**
-   * Commit changed files to git
+   * Commit changed files to git with argument validation and array execution.
    */
   public async commitChanges(options: {
     message: string;
@@ -125,13 +212,26 @@ export class GitHubGitOperations {
     cwd?: string;
   }): Promise<GitCommitResult> {
     const cwd = options.cwd;
+
+    if (options.branch) {
+      validateBranchName(options.branch);
+    }
+    if (options.files) {
+      for (const f of options.files) {
+        validateFilePath(f);
+      }
+    }
+
     const status = await this.getStatus(cwd);
+    if (!status.success || status.error) {
+      throw new Error(`Cannot commit changes: git status failed (${status.error})`);
+    }
 
     if (!status.hasChanges) {
       // Retrieve current commit SHA even if no changes
       let currentSha = 'HEAD';
       try {
-        const shaRes = await this.executor.exec('git rev-parse HEAD', cwd);
+        const shaRes = await this.runGit(['rev-parse', 'HEAD'], cwd);
         currentSha = shaRes.stdout.trim();
       } catch {
         currentSha = '0000000000000000000000000000000000000000';
@@ -148,28 +248,25 @@ export class GitHubGitOperations {
     // Switch or create dedicated branch if requested
     if (options.branch && options.branch !== status.currentBranch) {
       try {
-        // Try checkout if branch already exists
-        await this.executor.exec(`git checkout ${options.branch}`, cwd);
+        await this.runGit(['checkout', options.branch], cwd);
       } catch {
-        // Otherwise create new branch
-        await this.executor.exec(`git checkout -b ${options.branch}`, cwd);
+        await this.runGit(['checkout', '-b', options.branch], cwd);
       }
     }
 
     // Stage files
     if (options.files && options.files.length > 0) {
       for (const file of options.files) {
-        await this.executor.exec(`git add "${file}"`, cwd);
+        await this.runGit(['add', file], cwd);
       }
     } else {
-      await this.executor.exec('git add -A', cwd);
+      await this.runGit(['add', '-A'], cwd);
     }
 
     // Commit with explicit message
-    const safeMessage = options.message.replace(/"/g, '\\"');
-    await this.executor.exec(`git commit -m "${safeMessage}"`, cwd);
+    await this.runGit(['commit', '-m', options.message], cwd);
 
-    const shaRes = await this.executor.exec('git rev-parse HEAD', cwd);
+    const shaRes = await this.runGit(['rev-parse', 'HEAD'], cwd);
     const commitSha = shaRes.stdout.trim();
 
     const filesCommitted = [
@@ -187,7 +284,8 @@ export class GitHubGitOperations {
   }
 
   /**
-   * Push branch to GitHub remote
+   * Push branch to GitHub remote securely.
+   * Token is passed via extraheader authorization, never exposed in command line, URL, or logs.
    */
   public async pushBranch(options: {
     branch: string;
@@ -200,24 +298,41 @@ export class GitHubGitOperations {
     const cwd = options.cwd;
     const remote = options.remote || 'origin';
 
+    validateBranchName(options.branch);
+    validateRepoIdentifier(options.owner, 'Owner');
+    validateRepoIdentifier(options.repo, 'Repository');
+
+    if (!options.token || typeof options.token !== 'string') {
+      throw new Error('Authentication token is required for push operations');
+    }
+
     // Retrieve commit SHA
     let commitSha = '';
     try {
-      const shaRes = await this.executor.exec('git rev-parse HEAD', cwd);
+      const shaRes = await this.runGit(['rev-parse', 'HEAD'], cwd);
       commitSha = shaRes.stdout.trim();
     } catch {
       commitSha = 'HEAD';
     }
 
-    // Prepare authenticated push remote URL (or standard push if remote already authenticated)
-    const remoteUrl = `https://x-access-token:${options.token}@github.com/${options.owner}/${options.repo}.git`;
+    // Clean remote URL without token embedded in the URL
+    const remoteUrl = `https://github.com/${options.owner}/${options.repo}.git`;
+    const basicAuth = Buffer.from(`x-access-token:${options.token}`).toString('base64');
+    const headerArg = `-c http.extraheader=AUTHORIZATION: basic ${basicAuth}`;
 
     try {
-      // Push explicitly to remote URL with branch
-      await this.executor.exec(`git push ${remoteUrl} ${options.branch}:${options.branch}`, cwd);
+      // Execute git push securely
+      if (this.executor.execFile) {
+        await this.executor.execFile(
+          'git',
+          ['-c', `http.extraheader=AUTHORIZATION: basic ${basicAuth}`, 'push', remoteUrl, `${options.branch}:${options.branch}`],
+          { cwd }
+        );
+      } else {
+        await this.executor.exec(`git ${headerArg} push ${remoteUrl} ${options.branch}:${options.branch}`, cwd);
+      }
     } catch (err: any) {
-      // Mask token if present in error message to prevent credential leak
-      const safeErrorMsg = (err.message || '').replace(options.token, '***GITHUB_TOKEN***');
+      const safeErrorMsg = sanitizeGitOutput(err.message || String(err), options.token);
       throw new Error(`Git push failed to ${options.owner}/${options.repo} on branch ${options.branch}: ${safeErrorMsg}`);
     }
 

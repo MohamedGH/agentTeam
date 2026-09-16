@@ -2,6 +2,7 @@ export interface QualityGateInput {
   sessionStatus?: string | null;
   executionStatus?: string | null;
   testsPassed?: boolean | null;
+  reviewExecuted?: boolean | null;
   reviewApproved?: boolean | null;
 }
 
@@ -13,11 +14,12 @@ export interface QualityGateEvaluation {
 
 /**
  * Strict Quality Gate Invariant:
- * Git operations (commit, push, pull request creation) are authorized ONLY and STRICTLY if:
+ * Git operations (commit, push, pull request creation, repository creation) are authorized ONLY and STRICTLY if:
  * 1. sessionStatus === 'COMPLETED'
  * 2. executionStatus === 'COMPLETED'
  * 3. testsPassed === true
- * 4. reviewApproved === true
+ * 4. reviewExecuted === true (if provided or implicit)
+ * 5. reviewApproved === true
  *
  * Any undefined, null, false, or non-matching value immediately fails the gate and forbids Git operations.
  */
@@ -47,6 +49,12 @@ export function evaluateQualityGate(input?: QualityGateInput | null): QualityGat
   if (input.testsPassed !== true) {
     violations.push(
       `testsPassed must strictly be true (tests failed or not verified, received: ${input.testsPassed === undefined ? 'undefined' : JSON.stringify(input.testsPassed)})`
+    );
+  }
+
+  if (input.reviewExecuted !== undefined && input.reviewExecuted !== true) {
+    violations.push(
+      `reviewExecuted must strictly be true (review not executed, received: ${input.reviewExecuted === undefined ? 'undefined' : JSON.stringify(input.reviewExecuted)})`
     );
   }
 

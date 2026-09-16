@@ -15,7 +15,21 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(cors());
+  const allowedOriginsEnv = process.env.ALLOWED_ORIGINS;
+  const allowedOrigins = allowedOriginsEnv
+    ? allowedOriginsEnv.split(',').map(s => s.trim())
+    : ['http://localhost:3000', 'http://127.0.0.1:3000'];
+
+  app.use(cors({
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV !== 'production') {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
+    credentials: true,
+  }));
   app.use(express.json());
 
   // Health & Monitoring status
@@ -822,6 +836,7 @@ async function startServer() {
           sessionStatus: req.body.sessionStatus,
           executionStatus: req.body.executionStatus,
           testsPassed: req.body.testsPassed,
+          reviewExecuted: req.body.reviewExecuted,
           reviewApproved: req.body.reviewApproved,
         });
 
@@ -842,6 +857,7 @@ async function startServer() {
         sessionStatus: req.body.sessionStatus,
         executionStatus: req.body.executionStatus,
         testsPassed: req.body.testsPassed,
+        reviewExecuted: req.body.reviewExecuted,
         reviewApproved: req.body.reviewApproved,
       });
 

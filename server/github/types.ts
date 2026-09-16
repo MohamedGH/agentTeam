@@ -70,6 +70,8 @@ export interface PullRequestDetails {
 }
 
 export interface GitStatusResult {
+  success?: boolean;
+  error?: string;
   hasChanges: boolean;
   modifiedFiles: string[];
   addedFiles: string[];
@@ -103,6 +105,7 @@ export interface GitWorkflowOptions {
   sessionStatus?: string;
   executionStatus?: string;
   testsPassed?: boolean;
+  reviewExecuted?: boolean;
   reviewApproved?: boolean;
   createRepository?: boolean;
   repositoryName?: string;

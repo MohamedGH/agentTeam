@@ -158,6 +158,9 @@ export interface CodingAgentTask {
   commitAndPush?: boolean;
   commitPushAndCreatePR?: boolean;
   testCommand?: string;
+  testsPassed?: boolean;
+  reviewExecuted?: boolean;
+  reviewApproved?: boolean;
   git?: {
     commit?: boolean;
     push?: boolean;
@@ -187,6 +190,8 @@ export interface CodingAgentResult {
   commitUrl?: string;
   pullRequestUrl?: string;
   testsPassed?: boolean;
+  reviewExecuted?: boolean;
+  reviewApproved?: boolean;
   git?: {
     committed: boolean;
     pushed: boolean;
@@ -281,6 +286,8 @@ export interface WorkflowState {
   commitUrl?: string;
   pullRequestUrl?: string;
   testsPassed?: boolean;
+  reviewExecuted?: boolean;
+  reviewApproved?: boolean;
   git?: any;
   steps: any[];
   finalReport?: any;

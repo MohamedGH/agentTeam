@@ -625,6 +625,8 @@ export class WorkflowOrchestrator {
         gitDiff,
         filesChanged,
       });
+      state.reviewExecuted = reviewResult.reviewExecuted;
+      state.reviewApproved = reviewResult.approved;
 
       state.steps.push({
         id: `step_rev_${Date.now()}`,
@@ -749,8 +751,9 @@ export class WorkflowOrchestrator {
           sessionId: state.sessionId,
           sessionStatus: 'COMPLETED',
           executionStatus: 'COMPLETED',
-          testsPassed: true,
-          reviewApproved: true,
+          testsPassed: testPassed,
+          reviewExecuted: reviewResult.reviewExecuted,
+          reviewApproved: reviewResult.approved,
           createRepository: state.options.createRepository,
           private: state.options.private,
           git: state.options.git,
