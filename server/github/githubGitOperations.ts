@@ -6,8 +6,8 @@ const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
 
 export interface IGitExecutor {
-  exec(command: string, cwd?: string, env?: Record<string, string>): Promise<{ stdout: string; stderr: string }>;
-  execFile?(file: string, args: string[], options?: { cwd?: string; env?: NodeJS.ProcessEnv }): Promise<{ stdout: string; stderr: string }>;
+  exec(command: string, cwd?: string, env?: Record<string, string>): Promise<{ stdout: string; stderr: string; exitCode: number }>;
+  execFile?(file: string, args: string[], options?: { cwd?: string; env?: NodeJS.ProcessEnv }): Promise<{ stdout: string; stderr: string; exitCode: number }>;
 }
 
 export function sanitizeGitOutput(text: string, token?: string): string {
@@ -107,18 +107,50 @@ export function validateTestCommand(cmd?: string): { file: string; args: string[
 }
 
 export class RealGitExecutor implements IGitExecutor {
-  public async exec(command: string, cwd?: string, env?: Record<string, string>): Promise<{ stdout: string; stderr: string }> {
-    return await execAsync(command, {
-      cwd: cwd || process.cwd(),
-      env: { ...process.env, ...env, GIT_TERMINAL_PROMPT: '0' },
-    });
+  public async exec(command: string, cwd?: string, env?: Record<string, string>): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+    try {
+      const res = await execAsync(command, {
+        cwd: cwd || process.cwd(),
+        env: { ...process.env, ...env, GIT_TERMINAL_PROMPT: '0' },
+      });
+      return {
+        stdout: typeof res.stdout === 'string' ? res.stdout : String(res.stdout || ''),
+        stderr: typeof res.stderr === 'string' ? res.stderr : String(res.stderr || ''),
+        exitCode: 0,
+      };
+    } catch (err: any) {
+      const exitCode = typeof err.code === 'number' ? err.code : (typeof err.status === 'number' ? err.status : 1);
+      const stdout = typeof err.stdout === 'string' ? err.stdout : String(err.stdout || '');
+      const stderr = typeof err.stderr === 'string' ? err.stderr : (err.message || String(err || ''));
+      return {
+        stdout,
+        stderr,
+        exitCode,
+      };
+    }
   }
 
-  public async execFile(file: string, args: string[], options?: { cwd?: string; env?: NodeJS.ProcessEnv }): Promise<{ stdout: string; stderr: string }> {
-    return await execFileAsync(file, args, {
-      cwd: options?.cwd || process.cwd(),
-      env: { ...process.env, ...options?.env, GIT_TERMINAL_PROMPT: '0' },
-    });
+  public async execFile(file: string, args: string[], options?: { cwd?: string; env?: NodeJS.ProcessEnv }): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+    try {
+      const res = await execFileAsync(file, args, {
+        cwd: options?.cwd || process.cwd(),
+        env: { ...process.env, ...options?.env, GIT_TERMINAL_PROMPT: '0' },
+      });
+      return {
+        stdout: typeof res.stdout === 'string' ? res.stdout : String(res.stdout || ''),
+        stderr: typeof res.stderr === 'string' ? res.stderr : String(res.stderr || ''),
+        exitCode: 0,
+      };
+    } catch (err: any) {
+      const exitCode = typeof err.code === 'number' ? err.code : (typeof err.status === 'number' ? err.status : 1);
+      const stdout = typeof err.stdout === 'string' ? err.stdout : String(err.stdout || '');
+      const stderr = typeof err.stderr === 'string' ? err.stderr : (err.message || String(err || ''));
+      return {
+        stdout,
+        stderr,
+        exitCode,
+      };
+    }
   }
 }
 
@@ -133,20 +165,92 @@ export class GitHubGitOperations {
     this.executor = executor;
   }
 
-  private async runGit(args: string[], cwd?: string, token?: string): Promise<{ stdout: string; stderr: string }> {
+  public async runGit(args: string[], cwd?: string, token?: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
     try {
+      let res: { stdout: string; stderr: string; exitCode: number };
       if (this.executor.execFile) {
-        return await this.executor.execFile('git', args, { cwd });
+        res = await this.executor.execFile('git', args, { cwd });
       } else {
         const cmd = `git ${args.map(a => (a.includes(' ') || a.includes('"') ? JSON.stringify(a) : a)).join(' ')}`;
-        return await this.executor.exec(cmd, cwd);
+        res = await this.executor.exec(cmd, cwd);
       }
+      if (typeof res.exitCode === 'number' && res.exitCode !== 0) {
+        const err = new Error(res.stderr || `Git command failed with exit code ${res.exitCode}`);
+        (err as any).stdout = res.stdout;
+        (err as any).stderr = res.stderr;
+        (err as any).code = res.exitCode;
+        throw err;
+      }
+      return res;
     } catch (err: any) {
       const sanitizedMsg = sanitizeGitOutput(err.message || String(err), token);
       const safeErr = new Error(sanitizedMsg);
       (safeErr as any).stdout = sanitizeGitOutput(err.stdout || '', token);
       (safeErr as any).stderr = sanitizeGitOutput(err.stderr || '', token);
+      (safeErr as any).code = typeof err.code === 'number' ? err.code : (typeof err.exitCode === 'number' ? err.exitCode : 1);
       throw safeErr;
+    }
+  }
+
+  /**
+   * Get git diff of working tree against HEAD or index
+   */
+  public async getDiff(cwd?: string): Promise<string> {
+    try {
+      const res = await this.runGit(['diff', 'HEAD'], cwd);
+      return res.stdout;
+    } catch {
+      try {
+        const res = await this.runGit(['diff'], cwd);
+        return res.stdout;
+      } catch {
+        return '';
+      }
+    }
+  }
+
+  /**
+   * Verify whether a working directory exists and is a valid Git checkout matching expected repository
+   */
+  public async verifyGitRepository(
+    cwd: string,
+    expectedRepo?: string
+  ): Promise<{ isValid: boolean; error?: string; repoUrl?: string; isInsideWorkTree?: boolean }> {
+    try {
+      const res = await this.runGit(['rev-parse', '--is-inside-work-tree'], cwd);
+      if (res.stdout.trim() !== 'true') {
+        return {
+          isValid: false,
+          error: `Directory "${cwd}" is not inside a git work tree.`,
+        };
+      }
+
+      let repoUrl = '';
+      try {
+        const originRes = await this.runGit(['config', '--get', 'remote.origin.url'], cwd);
+        repoUrl = originRes.stdout.trim();
+      } catch {
+        // remote.origin.url might not be set for local testing repos
+      }
+
+      if (expectedRepo && repoUrl) {
+        const cleanExpected = expectedRepo.replace(/^https?:\/\/github\.com\//, '').replace(/\.git$/, '').toLowerCase();
+        const cleanOrigin = repoUrl.replace(/^https?:\/\/github\.com\//, '').replace(/\.git$/, '').toLowerCase();
+        if (!cleanOrigin.includes(cleanExpected) && !cleanExpected.includes(cleanOrigin)) {
+          console.warn(`[GitHubGitOperations] Workspace remote origin (${repoUrl}) does not match expected repo (${expectedRepo})`);
+        }
+      }
+
+      return {
+        isValid: true,
+        isInsideWorkTree: true,
+        repoUrl,
+      };
+    } catch (err: any) {
+      return {
+        isValid: false,
+        error: `Failed to verify git repository at "${cwd}": ${err.message}`,
+      };
     }
   }
 
@@ -216,41 +320,50 @@ export class GitHubGitOperations {
   /**
    * Run verification tests before pushing.
    * Validates test command against safe executable allowlist and executes without arbitrary shell injection.
+   * 
+   * Strict Exit Code Authority:
+   *   0            => PASS
+   *   non-zero     => FAIL
+   *   exception    => FAIL
+   *   unknown code => FAIL
    */
   public async runVerificationTests(
     testCommand: string = 'npm test',
     cwd?: string
-  ): Promise<{ passed: boolean; output: string }> {
+  ): Promise<{ passed: boolean; output: string; exitCode: number }> {
     try {
       const { file, args } = validateTestCommand(testCommand);
       let stdout = '';
       let stderr = '';
+      let exitCode: number | undefined;
 
       if (this.executor.execFile) {
         const res = await this.executor.execFile(file, args, { cwd });
         stdout = res.stdout;
         stderr = res.stderr;
+        exitCode = typeof res.exitCode === 'number' ? res.exitCode : undefined;
       } else {
         const safeCmd = [file, ...args].join(' ');
         const res = await this.executor.exec(safeCmd, cwd);
         stdout = res.stdout;
         stderr = res.stderr;
+        exitCode = typeof res.exitCode === 'number' ? res.exitCode : undefined;
       }
 
       const fullOutput = `${stdout}\n${stderr}`.trim();
-      const isFailed =
-        fullOutput.includes('FAIL') ||
-        fullOutput.includes('ERR!') ||
-        fullOutput.includes('error TS');
+      const passed = exitCode === 0;
 
       return {
-        passed: !isFailed,
-        output: fullOutput,
+        passed,
+        output: fullOutput || (passed ? 'Tests completed successfully (exit code 0)' : `Tests failed (exit code: ${exitCode ?? 'unknown'})`),
+        exitCode: exitCode ?? (passed ? 0 : 1),
       };
     } catch (err: any) {
+      const exitCode = typeof err.code === 'number' ? err.code : (typeof err.exitCode === 'number' ? err.exitCode : 1);
       return {
         passed: false,
         output: err.stdout ? `${err.stdout}\n${err.stderr}` : (err.message || 'Test execution failed'),
+        exitCode,
       };
     }
   }

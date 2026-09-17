@@ -614,6 +614,127 @@ export async function runWorkflowOrchestratorUnitTests() {
     console.log('✅ PASS: Double-poll concurrency window prevented duplicate downstream delivery');
   }
 
+  // -------------------------------------------------------------
+  // TEST 13: Real agent without real workspace fails closed & blocks Git
+  // -------------------------------------------------------------
+  {
+    console.log('\nTest 13: Real agent without real workspace fails closed & blocks Git');
+    const { orchestrator, githubManager } = setupTestHarness();
+
+    let gitDeliveryCalled = false;
+    githubManager.processTaskResult = async () => {
+      gitDeliveryCalled = true;
+      return { success: true, commitSha: 'never_reached' };
+    };
+
+    const dummyState: any = {
+      workflowId: 'wf_real_jules_test_13',
+      sessionId: 'sess_real_jules_test_13',
+      agentId: 'jules', // Real Google Jules agent!
+      repository: 'MohamedGH/agentTeam',
+      branch: 'main',
+      task: 'Real Jules task without local workspace',
+      stage: 'JULES_RUNNING',
+      status: 'COMPLETED',
+      executionStatus: 'COMPLETED',
+      options: {
+        taskPrompt: 'Real Jules task without local workspace',
+        repository: 'MohamedGH/agentTeam',
+        commitAndPush: true,
+        // Notice: NO workingDirectory provided!
+      },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      steps: [],
+    };
+
+    const finalResult = await orchestrator.handleJulesCompleted(dummyState, null);
+
+    assert.strictEqual(finalResult.status, 'FAILED');
+    assert.strictEqual(finalResult.stage, 'FAILED');
+    assert.strictEqual(finalResult.executionStatus, 'FAILED');
+    assert.strictEqual(finalResult.testsPassed, false);
+    assert.strictEqual(finalResult.reviewExecuted, false);
+    assert.strictEqual(finalResult.reviewApproved, false);
+    assert.strictEqual(finalResult.finalReport.realExecution, false);
+    assert.strictEqual(gitDeliveryCalled, false, 'Git mutations MUST be blocked when no real workspace is provided');
+    console.log('✅ PASS: Real agent without real workspace fails closed (realExecution=false, testsPassed=false, reviewApproved=false)');
+  }
+
+  // -------------------------------------------------------------
+  // TEST 14: Real agent with valid real workspace executes real verification tests
+  // -------------------------------------------------------------
+  {
+    console.log('\nTest 14: Real agent with valid real workspace executes real verification tests');
+    const { orchestrator, githubManager } = setupTestHarness();
+
+    // Create a temporary git workspace for testing
+    const tempGitDir = path.join(testDataDir, 'mock_git_repo');
+    if (!fs.existsSync(tempGitDir)) {
+      fs.mkdirSync(tempGitDir, { recursive: true });
+    }
+
+    // Mock GitOps to report valid repository and test results
+    const gitOps = githubManager.getGitOps();
+    gitOps.verifyGitRepository = async () => ({ isValid: true, isInsideWorkTree: true, repoUrl: 'https://github.com/MohamedGH/agentTeam.git' });
+    gitOps.runVerificationTests = async () => ({ passed: true, output: 'Real test suite succeeded', exitCode: 0 });
+    gitOps.getStatus = async () => ({
+      success: true,
+      hasChanges: true,
+      modifiedFiles: ['src/feature.ts'],
+      addedFiles: [],
+      deletedFiles: [],
+      untrackedFiles: [],
+      rawStatus: 'M src/feature.ts',
+    });
+    gitOps.getDiff = async () => 'diff --git a/src/feature.ts b/src/feature.ts\n+ console.log("real work");';
+
+    let gitProcessed = false;
+    githubManager.processTaskResult = async (opts: any) => {
+      gitProcessed = true;
+      assert.strictEqual(opts.workingDirectory, tempGitDir);
+      assert.strictEqual(opts.testsPassed, true);
+      assert.strictEqual(opts.reviewApproved, true);
+      return {
+        success: true,
+        commitSha: 'real_commit_123',
+        pullRequestUrl: 'https://github.com/MohamedGH/agentTeam/pull/500',
+        testsPassed: true,
+      };
+    };
+
+    const dummyState: any = {
+      workflowId: 'wf_real_jules_test_14',
+      sessionId: 'sess_real_jules_test_14',
+      agentId: 'jules',
+      repository: 'MohamedGH/agentTeam',
+      branch: 'main',
+      task: 'Real Jules task with valid local workspace',
+      stage: 'JULES_RUNNING',
+      status: 'COMPLETED',
+      executionStatus: 'COMPLETED',
+      options: {
+        taskPrompt: 'Real Jules task with valid local workspace',
+        repository: 'MohamedGH/agentTeam',
+        workingDirectory: tempGitDir,
+        commitAndPush: true,
+      },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      steps: [],
+    };
+
+    const finalResult = await orchestrator.handleJulesCompleted(dummyState, null);
+
+    assert.strictEqual(finalResult.stage, 'COMPLETED');
+    assert.strictEqual(finalResult.testsPassed, true);
+    assert.strictEqual(finalResult.reviewApproved, true);
+    assert.strictEqual(finalResult.finalReport.realExecution, true);
+    assert.strictEqual(finalResult.finalReport.simulated, false);
+    assert.strictEqual(gitProcessed, true);
+    console.log('✅ PASS: Real agent with valid real workspace successfully executed real QA and Git delivery');
+  }
+
   // Cleanup test directory
   if (fs.existsSync(testDataDir)) {
     fs.rmSync(testDataDir, { recursive: true, force: true });

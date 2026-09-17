@@ -405,11 +405,48 @@ export async function runGitHubUnitTests() {
   const gitOps = new GitHubGitOperations();
   const testPassResult = await gitOps.runVerificationTests('echo "test passed"');
   assert.strictEqual(testPassResult.passed, true);
-  console.log('✅ PASS: GitHubGitOperations.runVerificationTests correctly evaluates successful commands');
+  assert.strictEqual(testPassResult.exitCode, 0);
+  console.log('✅ PASS: GitHubGitOperations.runVerificationTests correctly evaluates exit code 0 as success');
 
   const testFailResult = await gitOps.runVerificationTests('exit 1');
   assert.strictEqual(testFailResult.passed, false);
-  console.log('✅ PASS: GitHubGitOperations.runVerificationTests correctly catches failing test suites');
+  assert.strictEqual(testFailResult.exitCode, 1);
+  console.log('✅ PASS: GitHubGitOperations.runVerificationTests correctly catches non-zero exit code as failure');
+
+  // Strict exit code authority unit tests
+  let customExitCode = 0;
+  let customStdout = '';
+  let customStderr = '';
+  const customExecutor = {
+    exec: async () => ({ stdout: customStdout, stderr: customStderr, exitCode: customExitCode }),
+    execFile: async () => ({ stdout: customStdout, stderr: customStderr, exitCode: customExitCode }),
+  };
+  const strictExitCodeGitOps = new GitHubGitOperations(customExecutor);
+
+  // 0 => PASS
+  customExitCode = 0;
+  customStdout = 'Tests passed with warnings';
+  const pass0 = await strictExitCodeGitOps.runVerificationTests('npm test');
+  assert.strictEqual(pass0.passed, true);
+  assert.strictEqual(pass0.exitCode, 0);
+
+  // non-zero => FAIL (even if text says 'passed')
+  customExitCode = 2;
+  customStdout = 'ALL TESTS PASSED 100%';
+  const failNonZero = await strictExitCodeGitOps.runVerificationTests('npm test');
+  assert.strictEqual(failNonZero.passed, false, 'Non-zero exit code must fail regardless of stdout content');
+  assert.strictEqual(failNonZero.exitCode, 2);
+
+  // exception => FAIL
+  const throwingExecutor = {
+    exec: async () => { throw new Error('Binary not found'); },
+    execFile: async () => { throw new Error('Binary not found'); },
+  };
+  const throwingGitOps = new GitHubGitOperations(throwingExecutor);
+  const failException = await throwingGitOps.runVerificationTests('npm test');
+  assert.strictEqual(failException.passed, false);
+  assert.strictEqual(failException.exitCode, 1);
+  console.log('✅ PASS: GitHubGitOperations.runVerificationTests strictly enforces exit code 0 authority');
 
   // 6. GitHubManager - End-to-End Orchestrator with mock Git & Client
   const unconfiguredManager = new GitHubManager(new GitHubClient({ token: '' }));
@@ -435,6 +472,7 @@ export async function runGitHubUnitTests() {
   mockFailingGitOps.runVerificationTests = async () => ({
     passed: false,
     output: 'CRITICAL FAILURE: 2 test suites failed',
+    exitCode: 1,
   });
 
   const failingManager = new GitHubManager(
@@ -479,6 +517,7 @@ export async function runGitHubUnitTests() {
   mockSuccessfulGitOps.runVerificationTests = async () => ({
     passed: true,
     output: 'All tests passed (100%)',
+    exitCode: 0,
   });
   mockSuccessfulGitOps.getStatus = async () => ({
     hasChanges: true,

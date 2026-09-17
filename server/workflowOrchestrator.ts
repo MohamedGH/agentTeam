@@ -1,3 +1,5 @@
+import * as fs from 'fs';
+import * as path from 'path';
 import {
   CodingAgentTask,
   CodingAgentResult,
@@ -580,14 +582,116 @@ export class WorkflowOrchestrator {
 
     try {
       // -------------------------------------------------------------
-      // 1. QUALITY ASSURANCE & TESTING (Tester Agent)
+      // 1. WORKSPACE RESOLUTION & VALIDATION
+      // -------------------------------------------------------------
+      const isMockAgent = state.agentId === 'mock';
+      const workingDir = state.options.workingDirectory || state.workingDirectory;
+      const gitOps = this.githubManager.getGitOps();
+
+      let isRealWorkspaceValid = false;
+      let workspaceValidationError = '';
+
+      if (workingDir) {
+        if (!fs.existsSync(workingDir)) {
+          workspaceValidationError = `Working directory does not exist: "${workingDir}"`;
+        } else if (!fs.statSync(workingDir).isDirectory()) {
+          workspaceValidationError = `Working directory is not a directory: "${workingDir}"`;
+        } else {
+          const gitVerification = await gitOps.verifyGitRepository(workingDir, repoTarget);
+          if (!gitVerification.isValid) {
+            workspaceValidationError = gitVerification.error || `Directory "${workingDir}" is not a valid Git repository for "${repoTarget}".`;
+          } else {
+            isRealWorkspaceValid = true;
+          }
+        }
+      } else if (!isMockAgent) {
+        workspaceValidationError = `No workingDirectory specified for real Jules session on repository "${repoTarget}".`;
+      }
+
+      // Safety guard: For real sessions (non-mock), a valid real Git workspace is strictly required
+      if (!isMockAgent && !isRealWorkspaceValid) {
+        console.warn(`[WorkflowOrchestrator] Real workspace validation failed for session ${state.sessionId}: ${workspaceValidationError}. Blocking Git mutations.`);
+        
+        state.testsPassed = false;
+        state.reviewExecuted = false;
+        state.reviewApproved = false;
+        state.status = 'FAILED';
+        state.stage = 'FAILED';
+        state.executionStatus = 'FAILED';
+        state.error = `Real execution validation failed: ${workspaceValidationError}`;
+        state.summary = `Workflow blocked: no valid real Git workspace found for repository "${repoTarget}". Tests: FAIL, Review: NOT_EXECUTED.`;
+        state.downstreamExecuting = false;
+        state.downstreamExecuted = true;
+
+        const finalReport: FinalReport = {
+          implementation: 'FAIL',
+          tests: 'FAIL',
+          review: 'CHANGES_REQUIRED',
+          filesChanged: [],
+          testSummary: `QA test execution skipped: ${workspaceValidationError}`,
+          reviewSummary: `Architectural review aborted: ${workspaceValidationError}`,
+          remainingIssues: [workspaceValidationError],
+          realExecution: false,
+          simulated: false,
+          totalCycles: {
+            testerCorrections: 0,
+            reviewerCorrections: 0,
+          },
+          metrics: {
+            durationMs: Date.now() - new Date(state.createdAt).getTime(),
+            modelUsed: state.options.model || 'gemini-3.7-flash',
+            codingAgentUsed: state.agentId,
+            testsPassed: false,
+            reviewApproved: false,
+            realExecution: false,
+            simulated: false,
+          },
+        };
+
+        state.finalReport = finalReport;
+        state.steps.push({
+          id: `step_err_${Date.now()}`,
+          phase: 7,
+          phaseName: 'Real Workspace Verification',
+          agent: 'manager',
+          thought: `Real execution aborted: ${workspaceValidationError}. All Git mutations blocked.`,
+          status: 'FAILED',
+          output: workspaceValidationError,
+          timestamp: Date.now(),
+        });
+
+        await this.persistWorkflow(state);
+        this.activeWorkflows.delete(state.sessionId);
+        this.activeWorkflows.delete(state.workflowId);
+        return state;
+      }
+
+      // -------------------------------------------------------------
+      // 2. QUALITY ASSURANCE & TESTING (Tester Agent)
       // -------------------------------------------------------------
       state.stage = 'TESTING';
       const testCommand = state.options.testCommand || 'npm test';
-      console.log(`[WorkflowOrchestrator] Running QA test validation for session ${state.sessionId} (${testCommand})...`);
-      
-      const testExec = this.workspace.executeCommand(testCommand);
-      const testPassed = testExec.exitCode === 0 && testExec.success;
+      let testPassed = false;
+      let testExitCode = 1;
+      let testOutput = '';
+      let isRealExecution = isRealWorkspaceValid && !isMockAgent;
+      let isSimulated = !isRealExecution;
+
+      if (isRealWorkspaceValid) {
+        console.log(`[WorkflowOrchestrator] Running real QA test validation for session ${state.sessionId} in "${workingDir}" (${testCommand})...`);
+        const testResult = await gitOps.runVerificationTests(testCommand, workingDir);
+        testPassed = testResult.passed && testResult.exitCode === 0;
+        testExitCode = testResult.exitCode;
+        testOutput = testResult.output;
+      } else {
+        // Hermetic mock simulation (exclusive to mock testing)
+        console.log(`[WorkflowOrchestrator] Running simulated QA test validation for mock session ${state.sessionId} (${testCommand})...`);
+        const testExec = this.workspace.executeCommand(testCommand);
+        testPassed = testExec.exitCode === 0 && testExec.success;
+        testExitCode = testExec.exitCode;
+        testOutput = testExec.output;
+      }
+
       state.testsPassed = testPassed;
 
       state.steps.push({
@@ -595,30 +699,44 @@ export class WorkflowOrchestrator {
         phase: 3,
         phaseName: 'Quality Assurance & Testing',
         agent: 'tester',
-        thought: `Ran test suite via '${testCommand}'. Exit code: ${testExec.exitCode} (${testExec.simulated ? 'workspace simulation' : 'real execution'}). Analyzing regressions.`,
+        thought: `Ran test suite via '${testCommand}'. Exit code: ${testExitCode} (${isRealExecution ? 'real execution' : 'workspace simulation'}). Analyzing regressions.`,
         toolCalls: [
           {
             id: `tc_test_${Date.now()}`,
-            name: 'run_command',
-            args: { command: testCommand },
-            result: testExec.output,
+            name: isRealExecution ? 'run_verification_tests' : 'run_command',
+            args: isRealExecution ? { command: testCommand, cwd: workingDir } : { command: testCommand },
+            result: testOutput,
             timestamp: Date.now(),
           },
         ],
         status: testPassed ? 'STATUS: PASS' : 'STATUS: FAIL (Regressions Found)',
         output: testPassed
-          ? `QA test suite succeeded via '${testCommand}' (exit code: 0, ${testExec.simulated ? 'simulated' : 'real execution'}).`
-          : `QA test suite failed via '${testCommand}' (exit code: ${testExec.exitCode}): ${testExec.output.slice(0, 150)}`,
+          ? `QA test suite succeeded via '${testCommand}' (exit code: 0, ${isRealExecution ? 'real execution' : 'simulated'}).`
+          : `QA test suite failed via '${testCommand}' (exit code: ${testExitCode}): ${testOutput.slice(0, 150)}`,
         timestamp: Date.now(),
       });
 
       // -------------------------------------------------------------
-      // 2. ARCHITECTURAL REVIEW (Reviewer Agent)
+      // 3. ARCHITECTURAL REVIEW (Reviewer Agent)
       // -------------------------------------------------------------
       state.stage = 'REVIEW';
       console.log(`[WorkflowOrchestrator] Running architectural code review for session ${state.sessionId}...`);
-      const gitDiff = this.workspace.gitDiff();
-      const filesChanged = Object.keys(this.workspace.getFiles());
+      
+      let gitDiff = '';
+      let filesChanged: string[] = [];
+
+      if (isRealWorkspaceValid) {
+        const gitStatus = await gitOps.getStatus(workingDir);
+        gitDiff = await gitOps.getDiff(workingDir);
+        filesChanged = [
+          ...gitStatus.modifiedFiles,
+          ...gitStatus.addedFiles,
+          ...gitStatus.untrackedFiles,
+        ];
+      } else {
+        gitDiff = this.workspace.gitDiff();
+        filesChanged = Object.keys(this.workspace.getFiles());
+      }
 
       const reviewResult = this.performDeterministicReview({
         testPassed,
@@ -638,7 +756,7 @@ export class WorkflowOrchestrator {
           {
             id: `tc_diff_${Date.now()}`,
             name: 'git_diff',
-            args: {},
+            args: isRealExecution ? { cwd: workingDir } : {},
             result: gitDiff ? `${reviewResult.diffLines} lines modified` : 'Empty diff',
             timestamp: Date.now(),
           },
@@ -649,14 +767,14 @@ export class WorkflowOrchestrator {
       });
 
       // -------------------------------------------------------------
-      // 3. QUALITY & SECURITY GATES ENFORCEMENT
+      // 4. QUALITY & SECURITY GATES ENFORCEMENT
       // -------------------------------------------------------------
       const gatePassed = testPassed && reviewResult.approved;
 
       if (!gatePassed) {
         console.warn(`[WorkflowOrchestrator] Quality/Review gate failed for session ${state.sessionId}. Blocking Git commit/push/PR.`);
         const failureReason = !testPassed
-          ? `QA test validation failed (exit code ${testExec.exitCode})`
+          ? `QA test validation failed (exit code ${testExitCode})`
           : `Architectural review rejected: ${reviewResult.issues.join('; ')}`;
 
         const finalReport: FinalReport = {
@@ -665,15 +783,15 @@ export class WorkflowOrchestrator {
           review: reviewResult.approved ? 'APPROVED' : 'CHANGES_REQUIRED',
           filesChanged,
           testSummary: testPassed
-            ? `QA test suite '${testCommand}' succeeded (exit code: 0, ${testExec.simulated ? 'simulated' : 'real'}).`
-            : `QA test suite '${testCommand}' failed with exit code ${testExec.exitCode}.`,
+            ? `QA test suite '${testCommand}' succeeded (exit code: 0, ${isRealExecution ? 'real' : 'simulated'}).`
+            : `QA test suite '${testCommand}' failed with exit code ${testExitCode}.`,
           reviewSummary: reviewResult.summary,
           remainingIssues: [
-            ...(testPassed ? [] : [`QA test suite '${testCommand}' exited with non-zero exit code (${testExec.exitCode}).`]),
+            ...(testPassed ? [] : [`QA test suite '${testCommand}' exited with non-zero exit code (${testExitCode}).`]),
             ...reviewResult.issues,
           ],
-          realExecution: testExec.realExecution,
-          simulated: testExec.simulated,
+          realExecution: isRealExecution,
+          simulated: isSimulated,
           totalCycles: {
             testerCorrections: 0,
             reviewerCorrections: 0,
@@ -684,8 +802,8 @@ export class WorkflowOrchestrator {
             codingAgentUsed: state.agentId,
             testsPassed: false,
             reviewApproved: reviewResult.approved,
-            realExecution: testExec.realExecution,
-            simulated: testExec.simulated,
+            realExecution: isRealExecution,
+            simulated: isSimulated,
           },
         };
 
@@ -716,7 +834,7 @@ export class WorkflowOrchestrator {
       }
 
       // -------------------------------------------------------------
-      // 4. GITHUB INTEGRATION & DELIVERY (Only executed if QA + Review pass)
+      // 5. GITHUB INTEGRATION & DELIVERY (Only executed if QA + Review pass)
       // -------------------------------------------------------------
       const gitRequested = Boolean(
         state.options.git?.commit ||
@@ -760,6 +878,7 @@ export class WorkflowOrchestrator {
           commitAndPush: state.options.commitAndPush,
           commitPushAndCreatePR: state.options.commitPushAndCreatePR,
           testCommand: state.options.testCommand || (state.options.git?.runTests !== false ? 'npm test' : undefined),
+          workingDirectory: workingDir,
         });
 
         state.git = gitRes.git;
@@ -796,18 +915,18 @@ export class WorkflowOrchestrator {
       }
 
       // -------------------------------------------------------------
-      // 5. FINAL DELIVERY & HONEST SYNTHESIS REPORT (Manager Agent)
+      // 6. FINAL DELIVERY & HONEST SYNTHESIS REPORT (Manager Agent)
       // -------------------------------------------------------------
       const finalReport: FinalReport = {
         implementation: 'PASS',
         tests: 'PASS',
         review: 'APPROVED',
         filesChanged,
-        testSummary: `QA test suite '${testCommand}' succeeded (exit code: 0, ${testExec.simulated ? 'simulated' : 'real execution'}).`,
+        testSummary: `QA test suite '${testCommand}' succeeded (exit code: 0, ${isRealExecution ? 'real execution' : 'simulated'}).`,
         reviewSummary: reviewResult.summary,
         remainingIssues: reviewResult.issues,
-        realExecution: testExec.realExecution,
-        simulated: testExec.simulated,
+        realExecution: isRealExecution,
+        simulated: isSimulated,
         totalCycles: {
           testerCorrections: 0,
           reviewerCorrections: 0,
@@ -823,8 +942,8 @@ export class WorkflowOrchestrator {
           pullRequestUrl: state.pullRequestUrl || state.prUrl,
           testsPassed: true,
           reviewApproved: true,
-          realExecution: testExec.realExecution,
-          simulated: testExec.simulated,
+          realExecution: isRealExecution,
+          simulated: isSimulated,
           git: state.git,
         },
       };
