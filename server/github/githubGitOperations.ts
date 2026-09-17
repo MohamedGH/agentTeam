@@ -67,6 +67,45 @@ export function validateRepoIdentifier(name?: string, label: string = 'Repositor
   }
 }
 
+export function validateTestCommand(cmd?: string): { file: string; args: string[] } {
+  if (!cmd || typeof cmd !== 'string' || cmd.trim().length === 0) {
+    throw new Error('Invalid test command: command must be a non-empty string');
+  }
+  const trimmed = cmd.trim();
+  // Disallow shell operators / piping / chaining / redirection / command substitution
+  if (/[;&|`$<>()\\]/.test(trimmed) || /[\r\n]/.test(trimmed)) {
+    throw new Error(`Disallowed test command "${cmd}": shell operators, piping, and chaining are strictly forbidden.`);
+  }
+
+  // Parse space-delimited tokens safely
+  const tokens = trimmed.split(/\s+/).filter(Boolean);
+  const binary = tokens[0];
+  const ALLOWED_TEST_BINARIES = [
+    'npm',
+    'npx',
+    'pytest',
+    'yarn',
+    'pnpm',
+    'vitest',
+    'jest',
+    'cargo',
+    'go',
+    'node',
+    'tsx',
+    'echo',
+    'exit',
+  ];
+
+  if (!ALLOWED_TEST_BINARIES.includes(binary)) {
+    throw new Error(`Disallowed test executable "${binary}". Allowed test executables: ${ALLOWED_TEST_BINARIES.join(', ')}`);
+  }
+
+  return {
+    file: binary,
+    args: tokens.slice(1),
+  };
+}
+
 export class RealGitExecutor implements IGitExecutor {
   public async exec(command: string, cwd?: string, env?: Record<string, string>): Promise<{ stdout: string; stderr: string }> {
     return await execAsync(command, {
@@ -176,14 +215,28 @@ export class GitHubGitOperations {
 
   /**
    * Run verification tests before pushing.
-   * Ensures critical tests pass.
+   * Validates test command against safe executable allowlist and executes without arbitrary shell injection.
    */
   public async runVerificationTests(
-    testCommand: string = 'npm run lint',
+    testCommand: string = 'npm test',
     cwd?: string
   ): Promise<{ passed: boolean; output: string }> {
     try {
-      const { stdout, stderr } = await this.executor.exec(testCommand, cwd);
+      const { file, args } = validateTestCommand(testCommand);
+      let stdout = '';
+      let stderr = '';
+
+      if (this.executor.execFile) {
+        const res = await this.executor.execFile(file, args, { cwd });
+        stdout = res.stdout;
+        stderr = res.stderr;
+      } else {
+        const safeCmd = [file, ...args].join(' ');
+        const res = await this.executor.exec(safeCmd, cwd);
+        stdout = res.stdout;
+        stderr = res.stderr;
+      }
+
       const fullOutput = `${stdout}\n${stderr}`.trim();
       const isFailed =
         fullOutput.includes('FAIL') ||
@@ -197,7 +250,7 @@ export class GitHubGitOperations {
     } catch (err: any) {
       return {
         passed: false,
-        output: err.stdout ? `${err.stdout}\n${err.stderr}` : err.message,
+        output: err.stdout ? `${err.stdout}\n${err.stderr}` : (err.message || 'Test execution failed'),
       };
     }
   }

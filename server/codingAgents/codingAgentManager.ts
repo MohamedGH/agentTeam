@@ -179,6 +179,11 @@ export class CodingAgentManager {
             ? (task as any).reviewApproved
             : (result as any).reviewApproved;
 
+        const reviewExecuted: boolean | undefined =
+          (task as any).reviewExecuted !== undefined
+            ? (task as any).reviewExecuted
+            : (result as any).reviewExecuted;
+
         const gitRes = await this.githubManager.processTaskResult({
           repository: repoTarget,
           branch: targetBranch,
@@ -188,6 +193,7 @@ export class CodingAgentManager {
           sessionStatus: result.status,
           executionStatus: result.executionStatus,
           testsPassed,
+          reviewExecuted,
           reviewApproved,
           createRepository: task.createRepository,
           private: task.private,
@@ -198,7 +204,8 @@ export class CodingAgentManager {
         });
 
         result.testsPassed = gitRes.testsPassed;
-        (result as any).reviewApproved = reviewApproved;
+        result.reviewExecuted = reviewExecuted;
+        result.reviewApproved = reviewApproved;
         result.commitSha = gitRes.commitSha;
         result.commitUrl = gitRes.commitUrl;
         result.pullRequestUrl = gitRes.pullRequestUrl || result.prUrl;

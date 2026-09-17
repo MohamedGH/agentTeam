@@ -52,7 +52,7 @@ export function evaluateQualityGate(input?: QualityGateInput | null): QualityGat
     );
   }
 
-  if (input.reviewExecuted !== undefined && input.reviewExecuted !== true) {
+  if (input.reviewExecuted !== true) {
     violations.push(
       `reviewExecuted must strictly be true (review not executed, received: ${input.reviewExecuted === undefined ? 'undefined' : JSON.stringify(input.reviewExecuted)})`
     );

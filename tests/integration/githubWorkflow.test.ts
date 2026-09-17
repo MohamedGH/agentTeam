@@ -111,6 +111,7 @@ export async function runGitHubWorkflowIntegrationTests() {
     branch: 'main',
     task: 'Enhance automated GitHub deployment for Jules agent',
     commitPushAndCreatePR: true,
+    reviewExecuted: true,
     reviewApproved: true,
   });
 
