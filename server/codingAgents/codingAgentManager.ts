@@ -184,6 +184,11 @@ export class CodingAgentManager {
             ? (task as any).reviewExecuted
             : (result as any).reviewExecuted;
 
+        const realExecution: boolean =
+          (task as any).realExecution !== undefined
+            ? Boolean((task as any).realExecution)
+            : true;
+
         const gitRes = await this.githubManager.processTaskResult({
           repository: repoTarget,
           branch: targetBranch,
@@ -192,6 +197,7 @@ export class CodingAgentManager {
           sessionId: result.sessionId,
           sessionStatus: result.status,
           executionStatus: result.executionStatus,
+          realExecution,
           testsPassed,
           reviewExecuted,
           reviewApproved,

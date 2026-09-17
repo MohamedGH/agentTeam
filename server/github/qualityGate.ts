@@ -1,6 +1,7 @@
 export interface QualityGateInput {
   sessionStatus?: string | null;
   executionStatus?: string | null;
+  realExecution?: boolean | null;
   testsPassed?: boolean | null;
   reviewExecuted?: boolean | null;
   reviewApproved?: boolean | null;
@@ -17,9 +18,10 @@ export interface QualityGateEvaluation {
  * Git operations (commit, push, pull request creation, repository creation) are authorized ONLY and STRICTLY if:
  * 1. sessionStatus === 'COMPLETED'
  * 2. executionStatus === 'COMPLETED'
- * 3. testsPassed === true
- * 4. reviewExecuted === true (if provided or implicit)
- * 5. reviewApproved === true
+ * 3. realExecution === true (simulated / mock / virtual workspace execution is strictly forbidden from mutating Git)
+ * 4. testsPassed === true
+ * 5. reviewExecuted === true
+ * 6. reviewApproved === true
  *
  * Any undefined, null, false, or non-matching value immediately fails the gate and forbids Git operations.
  */
@@ -43,6 +45,12 @@ export function evaluateQualityGate(input?: QualityGateInput | null): QualityGat
   if (input.executionStatus !== 'COMPLETED') {
     violations.push(
       `executionStatus must strictly be 'COMPLETED' (received: ${input.executionStatus === undefined ? 'undefined' : JSON.stringify(input.executionStatus)})`
+    );
+  }
+
+  if (input.realExecution !== true) {
+    violations.push(
+      `realExecution must strictly be true (simulated / mock / VirtualWorkspace execution cannot perform Git mutations, received: ${input.realExecution === undefined ? 'undefined' : JSON.stringify(input.realExecution)})`
     );
   }
 

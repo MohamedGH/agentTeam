@@ -9,11 +9,12 @@ import { evaluateQualityGate, isQualityGateAuthorized } from '../../server/githu
 export async function runGitHubUnitTests() {
   console.log('\n--- [Unit Test] GitHub Automation & Git Workflow Services ---');
 
-  // 0. Quality Gate unit tests: strict 5-condition enforcement
+  // 0. Quality Gate unit tests: strict 6-condition enforcement (including realExecution: true)
   assert.strictEqual(
     isQualityGateAuthorized({
       sessionStatus: 'COMPLETED',
       executionStatus: 'COMPLETED',
+      realExecution: true,
       testsPassed: true,
       reviewExecuted: true,
       reviewApproved: true,
@@ -26,11 +27,35 @@ export async function runGitHubUnitTests() {
   assert.strictEqual(isQualityGateAuthorized(null), false);
   assert.strictEqual(isQualityGateAuthorized({}), false);
 
+  // Missing or false realExecution must fail
+  assert.strictEqual(
+    isQualityGateAuthorized({
+      sessionStatus: 'COMPLETED',
+      executionStatus: 'COMPLETED',
+      testsPassed: true,
+      reviewExecuted: true,
+      reviewApproved: true,
+    }),
+    false
+  );
+  assert.strictEqual(
+    isQualityGateAuthorized({
+      sessionStatus: 'COMPLETED',
+      executionStatus: 'COMPLETED',
+      realExecution: false,
+      testsPassed: true,
+      reviewExecuted: true,
+      reviewApproved: true,
+    }),
+    false
+  );
+
   // Missing reviewExecuted must fail
   assert.strictEqual(
     isQualityGateAuthorized({
       sessionStatus: 'COMPLETED',
       executionStatus: 'COMPLETED',
+      realExecution: true,
       testsPassed: true,
       reviewApproved: true,
     }),
@@ -40,6 +65,7 @@ export async function runGitHubUnitTests() {
     isQualityGateAuthorized({
       sessionStatus: 'COMPLETED',
       executionStatus: 'COMPLETED',
+      realExecution: true,
       testsPassed: true,
       reviewExecuted: false,
       reviewApproved: true,
@@ -52,6 +78,7 @@ export async function runGitHubUnitTests() {
     isQualityGateAuthorized({
       sessionStatus: 'RUNNING',
       executionStatus: 'COMPLETED',
+      realExecution: true,
       testsPassed: true,
       reviewExecuted: true,
       reviewApproved: true,
@@ -62,6 +89,7 @@ export async function runGitHubUnitTests() {
     isQualityGateAuthorized({
       sessionStatus: 'COMPLETED',
       executionStatus: 'FAILED',
+      realExecution: true,
       testsPassed: true,
       reviewExecuted: true,
       reviewApproved: true,
@@ -72,6 +100,7 @@ export async function runGitHubUnitTests() {
     isQualityGateAuthorized({
       sessionStatus: 'COMPLETED',
       executionStatus: 'COMPLETED',
+      realExecution: true,
       testsPassed: false,
       reviewExecuted: true,
       reviewApproved: true,
@@ -82,6 +111,7 @@ export async function runGitHubUnitTests() {
     isQualityGateAuthorized({
       sessionStatus: 'COMPLETED',
       executionStatus: 'COMPLETED',
+      realExecution: true,
       testsPassed: true,
       reviewExecuted: true,
       reviewApproved: false,
@@ -93,6 +123,7 @@ export async function runGitHubUnitTests() {
     isQualityGateAuthorized({
       sessionStatus: 'COMPLETED',
       executionStatus: 'COMPLETED',
+      realExecution: true,
       testsPassed: undefined,
       reviewExecuted: true,
       reviewApproved: true,
@@ -103,6 +134,7 @@ export async function runGitHubUnitTests() {
     isQualityGateAuthorized({
       sessionStatus: 'COMPLETED',
       executionStatus: 'COMPLETED',
+      realExecution: true,
       testsPassed: true,
       reviewExecuted: true,
       reviewApproved: undefined,
@@ -111,10 +143,11 @@ export async function runGitHubUnitTests() {
   );
 
   // Mandatory Scenarios A, B, C, D, E, F, G, H, I
-  // Scenario A: sessionStatus=COMPLETED, executionStatus=COMPLETED, testsPassed=true, reviewApproved=undefined => Git REFUSÉ
+  // Scenario A: sessionStatus=COMPLETED, executionStatus=COMPLETED, realExecution=true, testsPassed=true, reviewApproved=undefined => Git REFUSÉ
   const resA = evaluateQualityGate({
     sessionStatus: 'COMPLETED',
     executionStatus: 'COMPLETED',
+    realExecution: true,
     testsPassed: true,
     reviewExecuted: false,
     reviewApproved: undefined,
@@ -122,10 +155,11 @@ export async function runGitHubUnitTests() {
   assert.strictEqual(resA.authorized, false, 'Scenario A must be REFUSÉ');
   console.log('✅ PASS [Scenario A]: sessionStatus=COMPLETED, executionStatus=COMPLETED, testsPassed=true, reviewApproved=undefined => Git REFUSÉ');
 
-  // Scenario B: sessionStatus=COMPLETED, executionStatus=COMPLETED, testsPassed=true, reviewApproved=false => Git REFUSÉ
+  // Scenario B: sessionStatus=COMPLETED, executionStatus=COMPLETED, realExecution=true, testsPassed=true, reviewApproved=false => Git REFUSÉ
   const resB = evaluateQualityGate({
     sessionStatus: 'COMPLETED',
     executionStatus: 'COMPLETED',
+    realExecution: true,
     testsPassed: true,
     reviewExecuted: true,
     reviewApproved: false,
@@ -133,10 +167,11 @@ export async function runGitHubUnitTests() {
   assert.strictEqual(resB.authorized, false, 'Scenario B must be REFUSÉ');
   console.log('✅ PASS [Scenario B]: sessionStatus=COMPLETED, executionStatus=COMPLETED, testsPassed=true, reviewApproved=false => Git REFUSÉ');
 
-  // Scenario C: sessionStatus=COMPLETED, executionStatus=COMPLETED, testsPassed=false, reviewApproved=true => Git REFUSÉ
+  // Scenario C: sessionStatus=COMPLETED, executionStatus=COMPLETED, realExecution=true, testsPassed=false, reviewApproved=true => Git REFUSÉ
   const resC = evaluateQualityGate({
     sessionStatus: 'COMPLETED',
     executionStatus: 'COMPLETED',
+    realExecution: true,
     testsPassed: false,
     reviewExecuted: true,
     reviewApproved: true,
@@ -144,21 +179,23 @@ export async function runGitHubUnitTests() {
   assert.strictEqual(resC.authorized, false, 'Scenario C must be REFUSÉ');
   console.log('✅ PASS [Scenario C]: sessionStatus=COMPLETED, executionStatus=COMPLETED, testsPassed=false, reviewApproved=true => Git REFUSÉ');
 
-  // Scenario D: sessionStatus=COMPLETED, executionStatus=COMPLETED, testsPassed=true, reviewExecuted=true, reviewApproved=true => Git AUTORISÉ
+  // Scenario D: sessionStatus=COMPLETED, executionStatus=COMPLETED, realExecution=true, testsPassed=true, reviewExecuted=true, reviewApproved=true => Git AUTORISÉ
   const resD = evaluateQualityGate({
     sessionStatus: 'COMPLETED',
     executionStatus: 'COMPLETED',
+    realExecution: true,
     testsPassed: true,
     reviewExecuted: true,
     reviewApproved: true,
   });
   assert.strictEqual(resD.authorized, true, 'Scenario D must be AUTORISÉ');
-  console.log('✅ PASS [Scenario D]: sessionStatus=COMPLETED, executionStatus=COMPLETED, testsPassed=true, reviewExecuted=true, reviewApproved=true => Git AUTORISÉ');
+  console.log('✅ PASS [Scenario D]: sessionStatus=COMPLETED, executionStatus=COMPLETED, realExecution=true, testsPassed=true, reviewExecuted=true, reviewApproved=true => Git AUTORISÉ');
 
-  // Scenario E: sessionStatus=IN_PROGRESS, executionStatus=COMPLETED, testsPassed=true, reviewExecuted=true, reviewApproved=true => Git REFUSÉ
+  // Scenario E: sessionStatus=IN_PROGRESS, executionStatus=COMPLETED, realExecution=true, testsPassed=true, reviewExecuted=true, reviewApproved=true => Git REFUSÉ
   const resE = evaluateQualityGate({
     sessionStatus: 'IN_PROGRESS',
     executionStatus: 'COMPLETED',
+    realExecution: true,
     testsPassed: true,
     reviewExecuted: true,
     reviewApproved: true,
@@ -166,10 +203,11 @@ export async function runGitHubUnitTests() {
   assert.strictEqual(resE.authorized, false, 'Scenario E must be REFUSÉ');
   console.log('✅ PASS [Scenario E]: sessionStatus=IN_PROGRESS, executionStatus=COMPLETED, testsPassed=true, reviewExecuted=true, reviewApproved=true => Git REFUSÉ');
 
-  // Scenario F: sessionStatus=COMPLETED, executionStatus=RUNNING, testsPassed=true, reviewExecuted=true, reviewApproved=true => Git REFUSÉ
+  // Scenario F: sessionStatus=COMPLETED, executionStatus=RUNNING, realExecution=true, testsPassed=true, reviewExecuted=true, reviewApproved=true => Git REFUSÉ
   const resF = evaluateQualityGate({
     sessionStatus: 'COMPLETED',
     executionStatus: 'RUNNING',
+    realExecution: true,
     testsPassed: true,
     reviewExecuted: true,
     reviewApproved: true,
@@ -181,6 +219,7 @@ export async function runGitHubUnitTests() {
   const resG = evaluateQualityGate({
     sessionStatus: undefined,
     executionStatus: undefined,
+    realExecution: undefined,
     testsPassed: undefined,
     reviewExecuted: undefined,
     reviewApproved: undefined,
@@ -188,10 +227,11 @@ export async function runGitHubUnitTests() {
   assert.strictEqual(resG.authorized, false, 'Scenario G must be REFUSÉ');
   console.log('✅ PASS [Scenario G]: createRepository=true, sessionStatus=undefined, executionStatus=undefined, testsPassed=undefined, reviewApproved=undefined => REFUS');
 
-  // Scenario H: createRepository=true, sessionStatus=COMPLETED, executionStatus=COMPLETED, testsPassed=true, reviewApproved=undefined => REFUS
+  // Scenario H: createRepository=true, sessionStatus=COMPLETED, executionStatus=COMPLETED, realExecution=true, testsPassed=true, reviewApproved=undefined => REFUS
   const resH = evaluateQualityGate({
     sessionStatus: 'COMPLETED',
     executionStatus: 'COMPLETED',
+    realExecution: true,
     testsPassed: true,
     reviewExecuted: false,
     reviewApproved: undefined,
@@ -199,16 +239,17 @@ export async function runGitHubUnitTests() {
   assert.strictEqual(resH.authorized, false, 'Scenario H must be REFUSÉ');
   console.log('✅ PASS [Scenario H]: createRepository=true, COMPLETED + COMPLETED + true + undefined => REFUS');
 
-  // Scenario I: createRepository=true, sessionStatus=COMPLETED, executionStatus=COMPLETED, testsPassed=true, reviewExecuted=true, reviewApproved=true => AUTORISÉ
+  // Scenario I: createRepository=true, sessionStatus=COMPLETED, executionStatus=COMPLETED, realExecution=true, testsPassed=true, reviewExecuted=true, reviewApproved=true => AUTORISÉ
   const resI = evaluateQualityGate({
     sessionStatus: 'COMPLETED',
     executionStatus: 'COMPLETED',
+    realExecution: true,
     testsPassed: true,
     reviewExecuted: true,
     reviewApproved: true,
   });
   assert.strictEqual(resI.authorized, true, 'Scenario I must be AUTORISÉ');
-  console.log('✅ PASS [Scenario I]: createRepository=true, COMPLETED + COMPLETED + true + true => AUTORISÉ');
+  console.log('✅ PASS [Scenario I]: createRepository=true, COMPLETED + COMPLETED + realExecution=true + true + true => AUTORISÉ');
 
   // Specific Test: testsPassed=true, aucune review exécutée, reviewApproved=undefined => aucun Commit => aucun Push => aucune PR
   let commitAttempted = false;
@@ -230,6 +271,7 @@ export async function runGitHubUnitTests() {
     taskPrompt: 'Feature with passing tests but unverified review',
     sessionStatus: 'COMPLETED',
     executionStatus: 'COMPLETED',
+    realExecution: true,
     testsPassed: true,
     reviewExecuted: false,
     reviewApproved: undefined, // NO review executed!
@@ -263,6 +305,7 @@ export async function runGitHubUnitTests() {
     taskPrompt: 'Create new repository without review approval',
     sessionStatus: 'COMPLETED',
     executionStatus: 'COMPLETED',
+    realExecution: true,
     testsPassed: true,
     reviewExecuted: false,
     reviewApproved: undefined, // NO review executed!
@@ -458,6 +501,7 @@ export async function runGitHubUnitTests() {
     taskPrompt: 'Add features',
     sessionStatus: 'COMPLETED',
     executionStatus: 'COMPLETED',
+    realExecution: true,
     testsPassed: true,
     reviewExecuted: true,
     reviewApproved: true,
@@ -499,6 +543,7 @@ export async function runGitHubUnitTests() {
     taskPrompt: 'Refactor core logic',
     sessionStatus: 'COMPLETED',
     executionStatus: 'COMPLETED',
+    realExecution: true,
     testsPassed: false,
     reviewExecuted: true,
     reviewApproved: true,
@@ -574,6 +619,7 @@ export async function runGitHubUnitTests() {
     taskPrompt: 'Refactor core logic',
     sessionStatus: 'COMPLETED',
     executionStatus: 'COMPLETED',
+    realExecution: true,
     testsPassed: true,
     reviewExecuted: true,
     reviewApproved: true,

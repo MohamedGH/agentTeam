@@ -1,5 +1,6 @@
 import { exec, execFile } from 'child_process';
 import { promisify } from 'util';
+import path from 'path';
 import { GitCommitResult, GitPushResult, GitStatusResult } from './types';
 
 const execAsync = promisify(exec);
@@ -57,6 +58,54 @@ export function validateFilePath(filePath?: string): void {
   }
 }
 
+/**
+ * Validates and resolves a relative workspace file path safely.
+ * Strictly prevents directory traversal (../../x, ..\..\x, /etc/x, C:\x, \\server\share\x).
+ * Enforces that resolved path resides strictly within the specified working directory.
+ */
+export function resolveSafeWorkspacePath(cwd: string, relPath: string): string {
+  if (!cwd || typeof cwd !== 'string' || cwd.trim().length === 0) {
+    throw new Error('Invalid workspace directory: cwd must be a non-empty string');
+  }
+  if (!relPath || typeof relPath !== 'string' || relPath.trim().length === 0) {
+    throw new Error('Invalid file path: path must be a non-empty string');
+  }
+
+  // Reject null bytes
+  if (relPath.includes('\0')) {
+    throw new Error(`Invalid file path "${relPath}": contains null bytes`);
+  }
+
+  // Windows-style drive letters (C:\, C:/, etc.) or UNC network shares (\\server\share, //server/share)
+  if (/^[a-zA-Z]:[\\/]/.test(relPath) || /^(\\\\|\/\/)/.test(relPath)) {
+    throw new Error(`Invalid file path "${relPath}": absolute drive or UNC network paths are strictly forbidden`);
+  }
+
+  // Disallow paths starting with absolute root '/' or '\'
+  if (relPath.startsWith('/') || relPath.startsWith('\\')) {
+    throw new Error(`Invalid file path "${relPath}": absolute root paths are strictly forbidden`);
+  }
+
+  const resolvedCwd = path.resolve(cwd);
+  const normalizedRel = relPath.replace(/\\/g, '/');
+  const resolvedTarget = path.resolve(resolvedCwd, normalizedRel);
+
+  // Check containment via path.relative
+  const relative = path.relative(resolvedCwd, resolvedTarget);
+
+  if (
+    relative.startsWith('..') ||
+    path.isAbsolute(relative) ||
+    relative === '..' ||
+    relative.includes(`..${path.sep}`) ||
+    relative.includes('../')
+  ) {
+    throw new Error(`Path traversal attempt blocked: "${relPath}" resolves outside workspace "${cwd}"`);
+  }
+
+  return resolvedTarget;
+}
+
 export function validateRepoIdentifier(name?: string, label: string = 'Repository identifier'): void {
   if (!name || typeof name !== 'string' || name.trim().length === 0) {
     throw new Error(`Invalid ${label}: must be a non-empty string`);
@@ -65,6 +114,26 @@ export function validateRepoIdentifier(name?: string, label: string = 'Repositor
   if (!/^[A-Za-z0-9_.-]+$/.test(trimmed) || trimmed.includes('..') || trimmed.startsWith('-')) {
     throw new Error(`Invalid ${label} "${name}": contains disallowed characters`);
   }
+}
+
+/**
+ * Normalize repository identifier from various URL and string formats:
+ * - https://github.com/MohamedGH/agentTeam.git
+ * - https://github.com/MohamedGH/agentTeam
+ * - git@github.com:MohamedGH/agentTeam.git
+ * - ssh://git@github.com/MohamedGH/agentTeam.git
+ * - MohamedGH/agentTeam
+ * Returns standard "owner/repo" format.
+ */
+export function normalizeRepoIdentifier(repoUrlOrPath?: string): string {
+  if (!repoUrlOrPath || typeof repoUrlOrPath !== 'string') return '';
+  let cleaned = repoUrlOrPath.trim();
+  cleaned = cleaned.replace(/^ssh:\/\/git@github\.com\//i, '');
+  cleaned = cleaned.replace(/^git@github\.com:/i, '');
+  cleaned = cleaned.replace(/^https?:\/\/github\.com\//i, '');
+  cleaned = cleaned.replace(/\.git$/i, '');
+  cleaned = cleaned.replace(/^\/+|\/+$/g, '');
+  return cleaned;
 }
 
 export function validateTestCommand(cmd?: string): { file: string; args: string[] } {
@@ -210,7 +279,11 @@ export class GitHubGitOperations {
   }
 
   /**
-   * Verify whether a working directory exists and is a valid Git checkout matching expected repository
+   * Verify whether a working directory exists and is a valid Git checkout matching expected repository.
+   * Strictly blocking:
+   * - Must be inside git work tree.
+   * - If expectedRepo is provided, remote.origin.url must be set and match exactly after normalization.
+   * - Mismatch or missing origin when expectedRepo is requested strictly yields isValid=false.
    */
   public async verifyGitRepository(
     cwd: string,
@@ -233,11 +306,23 @@ export class GitHubGitOperations {
         // remote.origin.url might not be set for local testing repos
       }
 
-      if (expectedRepo && repoUrl) {
-        const cleanExpected = expectedRepo.replace(/^https?:\/\/github\.com\//, '').replace(/\.git$/, '').toLowerCase();
-        const cleanOrigin = repoUrl.replace(/^https?:\/\/github\.com\//, '').replace(/\.git$/, '').toLowerCase();
-        if (!cleanOrigin.includes(cleanExpected) && !cleanExpected.includes(cleanOrigin)) {
-          console.warn(`[GitHubGitOperations] Workspace remote origin (${repoUrl}) does not match expected repo (${expectedRepo})`);
+      if (expectedRepo) {
+        if (!repoUrl) {
+          return {
+            isValid: false,
+            error: `remote.origin.url is not configured in git repository at "${cwd}" (expected repository "${expectedRepo}").`,
+          };
+        }
+
+        const normExpected = normalizeRepoIdentifier(expectedRepo);
+        const normOrigin = normalizeRepoIdentifier(repoUrl);
+
+        if (normExpected.toLowerCase() !== normOrigin.toLowerCase()) {
+          return {
+            isValid: false,
+            error: `Repository mismatch: expected "${expectedRepo}" (${normExpected}) but remote origin is "${repoUrl}" (${normOrigin}).`,
+            repoUrl,
+          };
         }
       }
 

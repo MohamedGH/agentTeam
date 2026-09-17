@@ -636,6 +636,7 @@ Evaluate code quality, security implications, maintainability, and clean archite
             sessionId: julesResult?.sessionId,
             sessionStatus: 'COMPLETED',
             executionStatus: (testerPassed && reviewerApproved) ? 'COMPLETED' : 'FAILED',
+            realExecution: true,
             testsPassed: testerPassed,
             reviewExecuted: true,
             reviewApproved: reviewerApproved,

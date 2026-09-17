@@ -120,6 +120,14 @@ export class WorkflowOrchestrator {
         title: options.title || `agentTeam: ${taskPrompt.slice(0, 50)}`,
         automationMode: options.automationMode || 'AUTO_CREATE_PR',
         requirePlanApproval: false,
+        workingDirectory: options.workingDirectory,
+        testCommand: options.testCommand,
+        commitAndPush: options.commitAndPush,
+        commitPushAndCreatePR: options.commitPushAndCreatePR,
+        createRepository: options.createRepository,
+        repositoryName: options.repositoryName,
+        private: options.private,
+        git: options.git,
       });
     }
 
@@ -162,6 +170,7 @@ export class WorkflowOrchestrator {
       status: session.state || 'QUEUED',
       executionStatus: deriveExecutionStatus(session.state, false),
       options,
+      workingDirectory: options.workingDirectory,
       createdAt: session.createTime || now,
       updatedAt: now,
       lastPolledAt: now,
@@ -869,6 +878,7 @@ export class WorkflowOrchestrator {
           sessionId: state.sessionId,
           sessionStatus: 'COMPLETED',
           executionStatus: 'COMPLETED',
+          realExecution: isRealWorkspaceValid && !isMockAgent,
           testsPassed: testPassed,
           reviewExecuted: reviewResult.reviewExecuted,
           reviewApproved: reviewResult.approved,

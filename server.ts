@@ -101,7 +101,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/quota/select-model', async (req, res) => {
+  app.post('/api/quota/select-model', requireApiKey, async (req, res) => {
     try {
       const { preferredModels, tier = 'tier_3', estimatedTokens = 1000 } = req.body;
       const models = preferredModels || ['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.1-pro-preview'];
@@ -116,7 +116,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/quota/record-usage', (req, res) => {
+  app.post('/api/quota/record-usage', requireApiKey, (req, res) => {
     try {
       const { model, usageMetadata } = req.body;
       if (!model) {
@@ -129,7 +129,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/quota/reset-state', (req, res) => {
+  app.post('/api/quota/reset-state', requireApiKey, (req, res) => {
     try {
       const { model } = req.body;
       quotaManager.resetState(model);
@@ -140,7 +140,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/quota/simulate-cooldown', (req, res) => {
+  app.post('/api/quota/simulate-cooldown', requireApiKey, (req, res) => {
     try {
       const { model = 'gemini-3.7-flash', durationSeconds = 30 } = req.body;
       quotaManager.handle429Error(model, durationSeconds);
@@ -172,7 +172,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/workspace/file', (req, res) => {
+  app.post('/api/workspace/file', requireApiKey, (req, res) => {
     try {
       const { path: filePath, content } = req.body;
       if (!filePath || content === undefined) {
@@ -185,7 +185,7 @@ async function startServer() {
     }
   });
 
-  app.delete('/api/workspace/file', (req, res) => {
+  app.delete('/api/workspace/file', requireApiKey, (req, res) => {
     try {
       const { path: filePath } = req.body;
       if (!filePath) {
@@ -198,7 +198,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/workspace/run-command', (req, res) => {
+  app.post('/api/workspace/run-command', requireApiKey, (req, res) => {
     try {
       const { command = 'pytest' } = req.body;
       const output = workspace.runCommand(command);
@@ -213,7 +213,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/workspace/reset', (req, res) => {
+  app.post('/api/workspace/reset', requireApiKey, (req, res) => {
     try {
       workspace.seedDefaultFiles();
       res.json({
@@ -240,7 +240,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/providers/select', (req, res) => {
+  app.post('/api/providers/select', requireApiKey, (req, res) => {
     try {
       const { provider, model } = req.body;
       if (!provider) {
@@ -287,7 +287,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/coding-agents/execute', async (req, res) => {
+  app.post('/api/coding-agents/execute', requireApiKey, async (req, res) => {
     try {
       const {
         workflowId,
@@ -306,6 +306,7 @@ async function startServer() {
         commitAndPush,
         commitPushAndCreatePR,
         testCommand,
+        workingDirectory,
       } = req.body;
 
       const taskPrompt = task || prompt;
@@ -346,6 +347,7 @@ async function startServer() {
         commitAndPush,
         commitPushAndCreatePR,
         testCommand,
+        workingDirectory,
       });
 
       res.status(200).json({
@@ -371,7 +373,7 @@ async function startServer() {
   // Asynchronous Observable Jules & Coding Agent Endpoints
 
   // 1. Start new Jules session (routed through WorkflowOrchestrator)
-  app.post('/api/coding-agents/jules/sessions', async (req, res) => {
+  app.post('/api/coding-agents/jules/sessions', requireApiKey, async (req, res) => {
     try {
       const {
         workflowId,
@@ -390,6 +392,7 @@ async function startServer() {
         commitAndPush,
         commitPushAndCreatePR,
         testCommand,
+        workingDirectory,
       } = req.body;
 
       const taskPrompt = task || prompt;
@@ -433,6 +436,7 @@ async function startServer() {
         commitAndPush,
         commitPushAndCreatePR,
         testCommand,
+        workingDirectory,
       });
 
       res.status(201).json({
@@ -461,7 +465,7 @@ async function startServer() {
   });
 
   // Generic start session endpoint alias (routed through WorkflowOrchestrator)
-  app.post('/api/coding-agents/sessions', async (req, res) => {
+  app.post('/api/coding-agents/sessions', requireApiKey, async (req, res) => {
     try {
       const {
         workflowId,
@@ -480,6 +484,7 @@ async function startServer() {
         commitAndPush,
         commitPushAndCreatePR,
         testCommand,
+        workingDirectory,
       } = req.body;
 
       const taskPrompt = task || prompt;
@@ -522,6 +527,7 @@ async function startServer() {
         commitAndPush,
         commitPushAndCreatePR,
         testCommand,
+        workingDirectory,
       });
 
       res.status(201).json({
@@ -585,9 +591,9 @@ async function startServer() {
   });
 
   // 4. Send interactive message/prompt to Jules session
-  app.post('/api/coding-agents/jules/sessions/:sessionId/message', async (req, res) => {
+  app.post('/api/coding-agents/jules/sessions/:sessionId/message', requireApiKey, async (req, res) => {
     try {
-      const { sessionId } = req.params;
+      const sessionId = String(req.params.sessionId);
       const message = req.body?.message || req.body?.prompt;
       if (!message || typeof message !== 'string') {
         return res.status(400).json({ error: 'Message content is required' });
@@ -605,9 +611,9 @@ async function startServer() {
   });
 
   // 5. Approve plan for Jules session
-  app.post('/api/coding-agents/jules/sessions/:sessionId/approve-plan', async (req, res) => {
+  app.post('/api/coding-agents/jules/sessions/:sessionId/approve-plan', requireApiKey, async (req, res) => {
     try {
-      const { sessionId } = req.params;
+      const sessionId = String(req.params.sessionId);
       await codingAgentManager.approvePlan(sessionId, 'jules');
       res.json({
         success: true,
@@ -657,7 +663,7 @@ async function startServer() {
   // -------------------------------------------------------------
   // WORKFLOW ORCHESTRATOR APIS
   // -------------------------------------------------------------
-  app.post('/api/workflows', async (req, res) => {
+  app.post('/api/workflows', requireApiKey, async (req, res) => {
     try {
       const {
         workflowId,
@@ -673,6 +679,7 @@ async function startServer() {
         commitPushAndCreatePR,
         createRepository,
         testCommand,
+        workingDirectory,
       } = req.body;
 
       const taskPrompt = task || prompt;
@@ -693,6 +700,7 @@ async function startServer() {
         commitPushAndCreatePR,
         createRepository,
         testCommand,
+        workingDirectory,
       });
 
       res.status(201).json({
@@ -741,9 +749,9 @@ async function startServer() {
     }
   });
 
-  app.post('/api/workflows/:id/poll', async (req, res) => {
+  app.post('/api/workflows/:id/poll', requireApiKey, async (req, res) => {
     try {
-      const { id } = req.params;
+      const id = String(req.params.id);
       const workflow = await workflowOrchestrator.pollWorkflow(id);
       res.json({ success: true, workflow });
     } catch (err: any) {
@@ -751,9 +759,9 @@ async function startServer() {
     }
   });
 
-  app.post('/api/workflows/:id/resume', async (req, res) => {
+  app.post('/api/workflows/:id/resume', requireApiKey, async (req, res) => {
     try {
-      const { id } = req.params;
+      const id = String(req.params.id);
       const workflow = await workflowOrchestrator.resumeWorkflow(id);
       if (!workflow) {
         return res.status(404).json({ error: `Workflow "${id}" not found` });
@@ -817,6 +825,7 @@ async function startServer() {
         const gateCheck = evaluateQualityGate({
           sessionStatus: req.body.sessionStatus,
           executionStatus: req.body.executionStatus,
+          realExecution: req.body.realExecution,
           testsPassed: req.body.testsPassed,
           reviewExecuted: req.body.reviewExecuted,
           reviewApproved: req.body.reviewApproved,
@@ -853,6 +862,7 @@ async function startServer() {
         const gateCheck = evaluateQualityGate({
           sessionStatus: req.body.sessionStatus,
           executionStatus: req.body.executionStatus,
+          realExecution: req.body.realExecution,
           testsPassed: req.body.testsPassed,
           reviewExecuted: req.body.reviewExecuted,
           reviewApproved: req.body.reviewApproved,
@@ -874,6 +884,7 @@ async function startServer() {
         private: isPrivate,
         sessionStatus: req.body.sessionStatus,
         executionStatus: req.body.executionStatus,
+        realExecution: req.body.realExecution,
         testsPassed: req.body.testsPassed,
         reviewExecuted: req.body.reviewExecuted,
         reviewApproved: req.body.reviewApproved,
@@ -903,6 +914,8 @@ async function startServer() {
         private: isPrivate,
         commitAndPush,
         commitPushAndCreatePR,
+        testCommand,
+        workingDirectory,
         git,
       } = req.body;
 
@@ -925,6 +938,8 @@ async function startServer() {
           git,
           commitAndPush,
           commitPushAndCreatePR,
+          testCommand,
+          workingDirectory,
           tier,
           model,
           provider,
@@ -986,6 +1001,8 @@ async function startServer() {
     const isPrivate = req.body?.private ?? (req.query?.private === 'true');
     const commitAndPush = req.body?.commitAndPush ?? (req.query?.commitAndPush === 'true');
     const commitPushAndCreatePR = req.body?.commitPushAndCreatePR ?? (req.query?.commitPushAndCreatePR === 'true');
+    const testCommand = (req.body?.testCommand || req.query?.testCommand) as string | undefined;
+    const workingDirectory = (req.body?.workingDirectory || req.query?.workingDirectory) as string | undefined;
     const git = req.body?.git;
 
     res.setHeader('Content-Type', 'text/event-stream');
@@ -994,6 +1011,58 @@ async function startServer() {
     res.flushHeaders();
 
     try {
+      if (codingAgent === 'jules' || codingAgent === 'mock') {
+        const repoTarget = repositoryName || repository || 'MohamedGH/agentTeam';
+        const workflow = await workflowOrchestrator.startWorkflow({
+          agent: codingAgent,
+          repository: repoTarget,
+          branch: branch || 'main',
+          taskPrompt: prompt,
+          title,
+          automationMode,
+          createRepository,
+          repositoryName,
+          private: isPrivate,
+          git,
+          commitAndPush,
+          commitPushAndCreatePR,
+          testCommand,
+          workingDirectory,
+          tier,
+          model,
+          provider,
+        });
+
+        // Emit initial steps to SSE stream
+        if (Array.isArray(workflow.steps)) {
+          for (const step of workflow.steps) {
+            res.write(`data: ${JSON.stringify({ type: 'step', step })}\n\n`);
+          }
+        }
+
+        const streamResult = {
+          success: workflow.status === 'COMPLETED',
+          executionStatus: workflow.executionStatus,
+          taskId: workflow.workflowId,
+          sessionId: workflow.sessionId,
+          workflowId: workflow.workflowId,
+          stage: workflow.stage,
+          status: workflow.status,
+          prUrl: workflow.prUrl,
+          gitBranch: workflow.gitBranch,
+          commitSha: workflow.commitSha,
+          commitUrl: workflow.commitUrl,
+          pullRequestUrl: workflow.pullRequestUrl,
+          testsPassed: workflow.testsPassed,
+          steps: workflow.steps,
+          finalReport: workflow.finalReport,
+          workflow,
+        };
+
+        res.write(`data: ${JSON.stringify({ type: 'complete', result: streamResult })}\n\n`);
+        return res.end();
+      }
+
       const result = await agentTeamEngine.runWorkflow(
         prompt,
         tier,
@@ -1026,7 +1095,7 @@ async function startServer() {
   };
 
   app.get('/api/team/run-stream', handleStreamRequest);
-  app.post('/api/team/run-stream', handleStreamRequest);
+  app.post('/api/team/run-stream', requireApiKey, handleStreamRequest);
 
   // Vite middleware for development vs static files for production
   if (process.env.NODE_ENV !== 'production') {

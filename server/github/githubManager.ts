@@ -1,6 +1,6 @@
 import { GitHubClient } from './githubClient';
 import { GitHubRepository } from './githubRepository';
-import { GitHubGitOperations, IGitExecutor } from './githubGitOperations';
+import { GitHubGitOperations, IGitExecutor, resolveSafeWorkspacePath } from './githubGitOperations';
 import { GitHubPullRequest } from './githubPullRequest';
 import { GitHubWorkflowResult, GitWorkflowOptions, GitHubRepoDetails } from './types';
 import { evaluateQualityGate } from './qualityGate';
@@ -63,6 +63,7 @@ export class GitHubManager {
     description?: string;
     sessionStatus?: string | null;
     executionStatus?: string | null;
+    realExecution?: boolean | null;
     testsPassed?: boolean | null;
     reviewExecuted?: boolean | null;
     reviewApproved?: boolean | null;
@@ -71,6 +72,7 @@ export class GitHubManager {
       const gateCheck = evaluateQualityGate({
         sessionStatus: options.sessionStatus,
         executionStatus: options.executionStatus,
+        realExecution: options.realExecution,
         testsPassed: options.testsPassed,
         reviewExecuted: options.reviewExecuted,
         reviewApproved: options.reviewApproved,
@@ -149,6 +151,7 @@ export class GitHubManager {
     // Git operations (Commit / Push / PR / createRepository) are strictly authorized ONLY IF:
     // sessionStatus === 'COMPLETED'
     // executionStatus === 'COMPLETED'
+    // realExecution === true
     // testsPassed === true
     // reviewExecuted === true
     // reviewApproved === true
@@ -157,6 +160,7 @@ export class GitHubManager {
       const gateCheck = evaluateQualityGate({
         sessionStatus: options.sessionStatus,
         executionStatus: options.executionStatus,
+        realExecution: options.realExecution,
         testsPassed: options.testsPassed,
         reviewExecuted: options.reviewExecuted,
         reviewApproved: options.reviewApproved,
@@ -199,10 +203,18 @@ export class GitHubManager {
         repo = parts[0] || 'repo';
       }
 
-      // 3. Write virtual files to workspace if provided
+      // 3. Write virtual files to workspace if provided (strictly guarded by path traversal checks)
       if (options.filesToCommit && Object.keys(options.filesToCommit).length > 0) {
+        // Validate ALL paths prior to writing any single file to disk (atomic failure)
+        const plannedWrites: { fullPath: string; content: string }[] = [];
         for (const [relPath, content] of Object.entries(options.filesToCommit)) {
-          const fullPath = path.resolve(cwd, relPath);
+          const fullPath = resolveSafeWorkspacePath(cwd, relPath);
+          plannedWrites.push({
+            fullPath,
+            content: typeof content === 'string' ? content : String(content ?? ''),
+          });
+        }
+        for (const { fullPath, content } of plannedWrites) {
           fs.mkdirSync(path.dirname(fullPath), { recursive: true });
           fs.writeFileSync(fullPath, content, 'utf-8');
         }
