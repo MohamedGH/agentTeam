@@ -177,9 +177,12 @@ export function validateTestCommand(cmd?: string): { file: string; args: string[
 
 export class RealGitExecutor implements IGitExecutor {
   public async exec(command: string, cwd?: string, env?: Record<string, string>): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+    if (command.trim().startsWith('git') && (!cwd || typeof cwd !== 'string' || cwd.trim().length === 0)) {
+      throw new Error('Working directory (cwd) must be explicitly provided for Git execution (no process.cwd fallback allowed)');
+    }
     try {
       const res = await execAsync(command, {
-        cwd: cwd || process.cwd(),
+        cwd: cwd ? cwd.trim() : undefined,
         env: { ...process.env, ...env, GIT_TERMINAL_PROMPT: '0' },
       });
       return {
@@ -200,9 +203,13 @@ export class RealGitExecutor implements IGitExecutor {
   }
 
   public async execFile(file: string, args: string[], options?: { cwd?: string; env?: NodeJS.ProcessEnv }): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+    const cwd = options?.cwd;
+    if (file === 'git' && (!cwd || typeof cwd !== 'string' || cwd.trim().length === 0)) {
+      throw new Error('Working directory (cwd) must be explicitly provided for Git execution (no process.cwd fallback allowed)');
+    }
     try {
       const res = await execFileAsync(file, args, {
-        cwd: options?.cwd || process.cwd(),
+        cwd: cwd ? cwd.trim() : undefined,
         env: { ...process.env, ...options?.env, GIT_TERMINAL_PROMPT: '0' },
       });
       return {
@@ -463,6 +470,9 @@ export class GitHubGitOperations {
     cwd?: string;
   }): Promise<GitCommitResult> {
     const cwd = options.cwd;
+    if (!cwd || typeof cwd !== 'string' || cwd.trim().length === 0) {
+      throw new Error('Working directory (cwd) must be explicitly provided for Git commit (no process.cwd fallback allowed)');
+    }
 
     if (options.branch) {
       validateBranchName(options.branch);
@@ -547,6 +557,9 @@ export class GitHubGitOperations {
     cwd?: string;
   }): Promise<GitPushResult> {
     const cwd = options.cwd;
+    if (!cwd || typeof cwd !== 'string' || cwd.trim().length === 0) {
+      throw new Error('Working directory (cwd) must be explicitly provided for Git push (no process.cwd fallback allowed)');
+    }
     const remote = options.remote || 'origin';
 
     validateBranchName(options.branch);

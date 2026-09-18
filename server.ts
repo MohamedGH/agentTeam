@@ -45,7 +45,8 @@ async function startServer() {
     }
     const authHeader = req.headers['authorization'];
     const apiKeyHeader = req.headers['x-api-key'] as string | undefined;
-    const token = apiKeyHeader || (authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : authHeader);
+    const queryKey = (req.query?.apiKey || req.query?.api_key || req.query?.token) as string | undefined;
+    const token = apiKeyHeader || (authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : authHeader) || queryKey;
     if (token !== requiredApiKey) {
       return res.status(401).json({
         error: 'Unauthorized: Valid AGENTTEAM_API_KEY is required for mutation endpoints',
@@ -846,7 +847,7 @@ async function startServer() {
         }
       }
 
-      const result = await githubManager.processTaskResult(req.body);
+      const result = await workflowOrchestrator.executeDelivery(req.body);
       return res.status(result.success ? 200 : (result.testsPassed === false ? 422 : 500)).json(result);
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });

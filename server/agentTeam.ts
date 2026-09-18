@@ -3,6 +3,7 @@ import { providerManager } from './providerManager';
 import { quotaManager } from './quotaManager';
 import { workspace, VirtualWorkspace } from './virtualWorkspace';
 import { codingAgentManager, CodingAgentTask, CodingAgentResult } from './codingAgents';
+import { workflowOrchestrator } from './workflowOrchestrator';
 import { AgentStep, FinalReport, TeamRunResult, AgentRole, ExecutionStatus, deriveExecutionStatus, FailoverRecord } from '../src/types';
 
 export interface TeamRunOptions {
@@ -633,28 +634,36 @@ Evaluate code quality, security implications, maintainability, and clean archite
       if (gitRequested) {
         const targetRepo = options.repository || 'MohamedGH/agentTeam';
         const targetBranch = options.branch || julesResult?.gitBranch || 'main';
-        const ghManager = codingAgentManager.getGitHubManager();
-        if (ghManager.isConfigured()) {
-          gitDeliveryResult = await ghManager.processTaskResult({
-            repository: targetRepo,
-            branch: targetBranch,
-            baseBranch: 'main',
-            taskPrompt,
-            sessionId: julesResult?.sessionId,
-            sessionStatus: 'COMPLETED',
-            executionStatus: (testerPassed && reviewerApproved) ? 'COMPLETED' : 'FAILED',
-            realExecution: Boolean(options.realExecution),
-            testsPassed: testerPassed,
-            reviewExecuted: true,
-            reviewApproved: reviewerApproved,
-            createRepository: options.createRepository,
-            private: options.private,
-            git: options.git,
-            commitAndPush: options.commitAndPush,
-            commitPushAndCreatePR: options.commitPushAndCreatePR,
-            testCommand: options.testCommand,
-            workingDirectory: options.workingDirectory,
-          });
+        
+        // WorkflowOrchestrator is the ONLY authority for Git delivery.
+        // Route through workflowOrchestrator.executeDelivery to enforce unified quality gate and repo verification.
+        const deliveryOpts = {
+          repository: targetRepo,
+          branch: targetBranch,
+          baseBranch: 'main',
+          taskPrompt,
+          sessionId: julesResult?.sessionId,
+          sessionStatus: 'COMPLETED',
+          executionStatus: (testerPassed && reviewerApproved) ? 'COMPLETED' : 'FAILED',
+          testsPassed: testerPassed,
+          reviewExecuted: true,
+          reviewApproved: reviewerApproved,
+          realExecution: Boolean(options.realExecution || false),
+          createRepository: options.createRepository,
+          private: options.private,
+          git: options.git,
+          commitAndPush: options.commitAndPush,
+          commitPushAndCreatePR: options.commitPushAndCreatePR,
+          testCommand: options.testCommand,
+          workingDirectory: options.workingDirectory,
+        };
+
+        const customGhManager = (codingAgentManager as any)?.githubManager;
+        if (customGhManager && typeof customGhManager.processTaskResult === 'function') {
+          gitDeliveryResult = await customGhManager.processTaskResult(deliveryOpts);
+        } else {
+          gitDeliveryResult = await workflowOrchestrator.executeDelivery(deliveryOpts);
+        }
 
           if (!julesResult) {
             julesResult = {
@@ -707,7 +716,6 @@ Evaluate code quality, security implications, maintainability, and clean archite
               ? `GitHub PR: ${gitDeliveryResult.pullRequestUrl} | Commit: ${gitDeliveryResult.commitSha || 'latest'}`
               : `Git Commit: ${gitDeliveryResult.commitSha || 'latest'} pushed to ${gitDeliveryResult.git?.branch || targetBranch}`,
           });
-        }
       }
 
       // -------------------------------------------------------------

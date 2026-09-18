@@ -629,6 +629,7 @@ export async function runGitHubUnitTests() {
     reviewExecuted: true,
     reviewApproved: true,
     commitPushAndCreatePR: true,
+    workingDirectory: process.cwd(),
   });
 
   assert.strictEqual(completeResult.success, true);

@@ -119,6 +119,7 @@ export async function runGitHubWorkflowIntegrationTests() {
     reviewExecuted: true,
     reviewApproved: true,
     realExecution: true,
+    workingDirectory: process.cwd(),
   });
 
   assert.strictEqual(fullWorkflowResult.success, true);
@@ -172,6 +173,7 @@ export async function runGitHubWorkflowIntegrationTests() {
       branch: 'main',
       commitPushAndCreatePR: true,
       realExecution: true,
+      workingDirectory: process.cwd(),
     }
   );
 

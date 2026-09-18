@@ -20,9 +20,52 @@ import {
 } from './codingAgents/sessionStore';
 import { CodingAgentManager, codingAgentManager as defaultCodingAgentManager } from './codingAgents/codingAgentManager';
 import { GitHubManager, githubManager as defaultGitHubManager } from './github';
+import { evaluateQualityGate } from './github/qualityGate';
+import { GitWorkflowOptions, GitHubWorkflowResult } from './github/types';
 import { ProviderManager, providerManager as defaultProviderManager } from './providerManager';
 import { VirtualWorkspace, workspace as defaultWorkspace } from './virtualWorkspace';
 import { AgentStep, FinalReport } from '../src/types';
+
+export interface PROwnershipDecision {
+  effectiveAutomationMode: 'AUTOMATION_MODE_UNSPECIFIED' | 'AUTO_CREATE_PR';
+  agentTeamOwnsPR: boolean;
+  julesOwnsPR: boolean;
+}
+
+/**
+ * Deterministic PR ownership resolution.
+ * CASE A: agentTeam is responsible for Git delivery & PR -> Jules runs in non-PR mode.
+ * CASE B: Jules is explicitly the sole PR owner -> Jules uses AUTO_CREATE_PR, agentTeam does not create PR.
+ * Prevents duplicate PR ownership between Jules and agentTeam.
+ */
+export function resolvePROwnership(options: {
+  automationMode?: string;
+  commitPushAndCreatePR?: boolean;
+  git?: { createPullRequest?: boolean; [key: string]: any };
+}): PROwnershipDecision {
+  const agentTeamRequestedPR = Boolean(options.commitPushAndCreatePR || options.git?.createPullRequest);
+  const julesRequestedPR = options.automationMode === 'AUTO_CREATE_PR';
+
+  if (agentTeamRequestedPR) {
+    return {
+      effectiveAutomationMode: 'AUTOMATION_MODE_UNSPECIFIED',
+      agentTeamOwnsPR: true,
+      julesOwnsPR: false,
+    };
+  } else if (julesRequestedPR) {
+    return {
+      effectiveAutomationMode: 'AUTO_CREATE_PR',
+      agentTeamOwnsPR: false,
+      julesOwnsPR: true,
+    };
+  } else {
+    return {
+      effectiveAutomationMode: 'AUTOMATION_MODE_UNSPECIFIED',
+      agentTeamOwnsPR: false,
+      julesOwnsPR: false,
+    };
+  }
+}
 
 export interface DeterministicReviewResult {
   reviewExecuted: boolean;
@@ -104,6 +147,7 @@ export class WorkflowOrchestrator {
     const repository = options.repositoryName || options.repository;
     const branch = options.branch || 'main';
     const taskPrompt = options.taskPrompt;
+    const prDecision = resolvePROwnership(options);
 
     let session: JulesSession;
 
@@ -111,23 +155,26 @@ export class WorkflowOrchestrator {
     if (options.sessionId) {
       session = await this.codingAgentManager.getSession(options.sessionId, agentId);
     } else {
-      console.log(`[WorkflowOrchestrator] Starting new async Jules session on agent "${agentId}" (${repository}:${branch})`);
+      console.log(`[WorkflowOrchestrator] Starting new async Jules session on agent "${agentId}" (${repository}:${branch}) [automationMode: ${prDecision.effectiveAutomationMode}]`);
       session = await this.codingAgentManager.startSession({
         agent: agentId,
         repository,
         branch,
         task: taskPrompt,
         title: options.title || `agentTeam: ${taskPrompt.slice(0, 50)}`,
-        automationMode: options.automationMode || 'AUTOMATION_MODE_UNSPECIFIED',
+        automationMode: prDecision.effectiveAutomationMode,
         requirePlanApproval: false,
         workingDirectory: options.workingDirectory,
         testCommand: options.testCommand,
         commitAndPush: options.commitAndPush,
-        commitPushAndCreatePR: options.commitPushAndCreatePR,
+        commitPushAndCreatePR: prDecision.agentTeamOwnsPR,
         createRepository: options.createRepository,
         repositoryName: options.repositoryName,
         private: options.private,
-        git: options.git,
+        git: {
+          ...options.git,
+          createPullRequest: prDecision.agentTeamOwnsPR,
+        },
       });
     }
 
@@ -778,13 +825,36 @@ export class WorkflowOrchestrator {
       // -------------------------------------------------------------
       // 4. QUALITY & SECURITY GATES ENFORCEMENT
       // -------------------------------------------------------------
-      const gatePassed = testPassed && reviewResult.approved;
+      const gitRequested = Boolean(
+        state.options.git?.commit ||
+        state.options.git?.push ||
+        state.options.git?.createPullRequest ||
+        state.options.commitAndPush ||
+        state.options.commitPushAndCreatePR ||
+        state.options.createRepository
+      );
+
+      const qualityGate = evaluateQualityGate({
+        sessionStatus: 'COMPLETED',
+        executionStatus: 'COMPLETED',
+        realExecution: isMockAgent ? true : isRealExecution,
+        testsPassed: testPassed === true,
+        reviewExecuted: reviewResult.reviewExecuted === true,
+        reviewApproved: reviewResult.approved === true,
+      });
+
+      // gatePassed MUST strictly require real execution, tests, reviewExecuted, reviewApproved if git is requested
+      const gatePassed = gitRequested
+        ? qualityGate.authorized
+        : (testPassed && reviewResult.reviewExecuted && reviewResult.approved);
 
       if (!gatePassed) {
         console.warn(`[WorkflowOrchestrator] Quality/Review gate failed for session ${state.sessionId}. Blocking Git commit/push/PR.`);
-        const failureReason = !testPassed
-          ? `QA test validation failed (exit code ${testExitCode})`
-          : `Architectural review rejected: ${reviewResult.issues.join('; ')}`;
+        const failureReason = gitRequested && !qualityGate.authorized
+          ? (qualityGate.reason || 'Quality Gate authorization failed for Git delivery.')
+          : (!testPassed
+              ? `QA test validation failed (exit code ${testExitCode})`
+              : `Architectural review rejected: ${reviewResult.issues.join('; ')}`);
 
         const finalReport: FinalReport = {
           implementation: 'PASS',
@@ -845,15 +915,6 @@ export class WorkflowOrchestrator {
       // -------------------------------------------------------------
       // 5. GITHUB INTEGRATION & DELIVERY (Only executed if QA + Review pass)
       // -------------------------------------------------------------
-      const gitRequested = Boolean(
-        state.options.git?.commit ||
-        state.options.git?.push ||
-        state.options.git?.createPullRequest ||
-        state.options.commitAndPush ||
-        state.options.commitPushAndCreatePR ||
-        state.options.createRepository
-      );
-
       if (gitRequested) {
         state.stage = 'GITHUB_DELIVERY';
         if (!this.githubManager.isConfigured()) {
@@ -870,6 +931,7 @@ export class WorkflowOrchestrator {
         }
 
         console.log(`[WorkflowOrchestrator] Executing GitHub delivery for session ${state.sessionId} on ${repoTarget}...`);
+        const prDecision = resolvePROwnership(state.options);
         const gitRes = await this.githubManager.processTaskResult({
           repository: repoTarget,
           branch: targetBranch,
@@ -884,9 +946,12 @@ export class WorkflowOrchestrator {
           reviewApproved: reviewResult.approved,
           createRepository: state.options.createRepository,
           private: state.options.private,
-          git: state.options.git,
+          git: {
+            ...state.options.git,
+            createPullRequest: prDecision.agentTeamOwnsPR,
+          },
           commitAndPush: state.options.commitAndPush,
-          commitPushAndCreatePR: state.options.commitPushAndCreatePR,
+          commitPushAndCreatePR: prDecision.agentTeamOwnsPR,
           testCommand: state.options.testCommand || (state.options.git?.runTests !== false ? 'npm test' : undefined),
           workingDirectory: workingDir,
         });
@@ -1169,6 +1234,97 @@ export class WorkflowOrchestrator {
 
     const stored = await this.sessionStore.getSession(cleanId) || await this.sessionStore.getSession(id);
     return stored?.workflowState || null;
+  }
+
+  /**
+   * WorkflowOrchestrator is the SINGLE authority for real Git delivery.
+   * Enforces workingDirectory presence, directory existence, git repo origin verification,
+   * internally derived realExecution, Quality Gate authorization, and delegates to githubManager.
+   */
+  public async executeDelivery(options: GitWorkflowOptions): Promise<GitHubWorkflowResult> {
+    const gitOps = this.githubManager.getGitOps();
+    const workingDir = options.workingDirectory;
+    const repoTarget = options.repository;
+
+    if (!workingDir || typeof workingDir !== 'string' || workingDir.trim().length === 0) {
+      return {
+        success: false,
+        sessionId: options.sessionId,
+        repository: repoTarget,
+        branch: options.branch || 'main',
+        testsPassed: options.testsPassed === true,
+        error: 'Git delivery refused: workingDirectory must be explicitly supplied for Git operations (no process.cwd fallback allowed).',
+      };
+    }
+
+    const resolvedDir = path.resolve(workingDir.trim());
+    if (!fs.existsSync(resolvedDir)) {
+      return {
+        success: false,
+        sessionId: options.sessionId,
+        repository: repoTarget,
+        branch: options.branch || 'main',
+        testsPassed: options.testsPassed === true,
+        error: `Git delivery refused: working directory does not exist: "${resolvedDir}".`,
+      };
+    }
+    if (!fs.statSync(resolvedDir).isDirectory()) {
+      return {
+        success: false,
+        sessionId: options.sessionId,
+        repository: repoTarget,
+        branch: options.branch || 'main',
+        testsPassed: options.testsPassed === true,
+        error: `Git delivery refused: working directory is not a directory: "${resolvedDir}".`,
+      };
+    }
+
+    const repoVerification = await gitOps.verifyGitRepository(resolvedDir, repoTarget);
+    if (!repoVerification.isValid) {
+      return {
+        success: false,
+        sessionId: options.sessionId,
+        repository: repoTarget,
+        branch: options.branch || 'main',
+        testsPassed: options.testsPassed === true,
+        error: `Git delivery refused: working directory "${resolvedDir}" is not a valid checkout for "${repoTarget}". ${repoVerification.error || ''}`.trim(),
+      };
+    }
+
+    // Internally derive realExecution (never trust caller flag)
+    const isMockWorkspace = Boolean(
+      (options as any).isSimulation === true ||
+      (options as any).isMockWorkspace === true ||
+      (options as any).workspaceType === 'virtual'
+    );
+    const internallyDerivedRealExecution = Boolean(repoVerification.isValid && !isMockWorkspace && options.realExecution !== false);
+
+    // Enforce Quality Gate check
+    const gateCheck = evaluateQualityGate({
+      sessionStatus: options.sessionStatus,
+      executionStatus: options.executionStatus,
+      realExecution: internallyDerivedRealExecution,
+      testsPassed: options.testsPassed,
+      reviewExecuted: options.reviewExecuted,
+      reviewApproved: options.reviewApproved,
+    });
+
+    if (!gateCheck.authorized) {
+      return {
+        success: false,
+        sessionId: options.sessionId,
+        repository: repoTarget,
+        branch: options.branch || 'main',
+        testsPassed: options.testsPassed === true,
+        error: gateCheck.reason,
+      };
+    }
+
+    return await this.githubManager.processTaskResult({
+      ...options,
+      workingDirectory: resolvedDir,
+      realExecution: internallyDerivedRealExecution,
+    });
   }
 
   /**

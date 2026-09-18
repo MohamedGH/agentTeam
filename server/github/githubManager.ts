@@ -117,20 +117,30 @@ export class GitHubManager {
       options.branch ||
       `jules/task-${Date.now().toString(36)}`;
     const baseBranch = options.baseBranch || 'main';
-    const cwd = options.workingDirectory || process.cwd();
     const isGitOperationRequested =
       shouldCommit ||
       shouldPush ||
       shouldCreatePR ||
       Boolean(options.createRepository);
 
-    // 0. Strict session status & quality gates check:
-    // Any call to processTaskResult with non-COMPLETED session or execution status is refused immediately.
+    // 1. Parse repository path
+    let owner = '';
+    let repo = '';
+    const parts = options.repository.replace(/^https?:\/\/github\.com\//, '').replace(/\.git$/, '').split('/');
+    if (parts.length >= 2) {
+      owner = parts[0];
+      repo = parts.slice(1).join('/');
+    } else {
+      owner = 'user';
+      repo = parts[0] || 'repo';
+    }
+
+    // 2. Strict session status & execution status checks
     if (options.sessionStatus && options.sessionStatus !== 'COMPLETED') {
       return {
         success: false,
         sessionId: options.sessionId,
-        repository: options.repository,
+        repository: `${owner}/${repo}`,
         branch: targetBranch,
         testsPassed: options.testsPassed === true,
         error: `Refusing Git operations: session status is ${options.sessionStatus}. Operations require COMPLETED.`,
@@ -141,26 +151,111 @@ export class GitHubManager {
       return {
         success: false,
         sessionId: options.sessionId,
-        repository: options.repository,
+        repository: `${owner}/${repo}`,
         branch: targetBranch,
         testsPassed: options.testsPassed === true,
         error: `Refusing Git operations: execution status is ${options.executionStatus}. Operations require COMPLETED.`,
       };
     }
 
-    // Git operations (Commit / Push / PR / createRepository) are strictly authorized ONLY IF:
-    // sessionStatus === 'COMPLETED'
-    // executionStatus === 'COMPLETED'
-    // realExecution === true
-    // testsPassed === true
-    // reviewExecuted === true
-    // reviewApproved === true
-    // undefined or false => refusal. Only exact combination authorizes Git.
+    // 3. Authentication check
+    if ((shouldPush || shouldCreatePR || options.createRepository) && !this.isConfigured()) {
+      return {
+        success: false,
+        sessionId: options.sessionId,
+        repository: `${owner}/${repo}`,
+        branch: targetBranch,
+        testsPassed: options.testsPassed === true,
+        error: 'GITHUB_TOKEN is not configured',
+      };
+    }
+
+    // 3. Early Quality Gate validation:
+    // If downstream review or tests or session status failed, immediately refuse with Quality Gate Refusal.
+    if (isGitOperationRequested) {
+      const preliminaryGate = evaluateQualityGate({
+        sessionStatus: options.sessionStatus,
+        executionStatus: options.executionStatus,
+        realExecution: true, // preliminary check for review/test/status gates
+        testsPassed: options.testsPassed,
+        reviewExecuted: options.reviewExecuted,
+        reviewApproved: options.reviewApproved,
+      });
+
+      if (!preliminaryGate.authorized) {
+        return {
+          success: false,
+          sessionId: options.sessionId,
+          repository: `${owner}/${repo}`,
+          branch: targetBranch,
+          testsPassed: options.testsPassed === true,
+          error: preliminaryGate.reason,
+        };
+      }
+    }
+
+    // 4. Strict workingDirectory requirement - NO process.cwd() fallback allowed
+    if (!options.workingDirectory || typeof options.workingDirectory !== 'string' || options.workingDirectory.trim().length === 0) {
+      return {
+        success: false,
+        sessionId: options.sessionId,
+        repository: `${owner}/${repo}`,
+        branch: targetBranch,
+        testsPassed: options.testsPassed === true,
+        error: 'Git delivery refused: workingDirectory must be explicitly supplied for Git operations (no process.cwd fallback allowed).',
+      };
+    }
+    const cwd = path.resolve(options.workingDirectory.trim());
+
+    // 4. Working directory existence and directory check
+    if (!fs.existsSync(cwd)) {
+      return {
+        success: false,
+        sessionId: options.sessionId,
+        repository: `${owner}/${repo}`,
+        branch: targetBranch,
+        testsPassed: options.testsPassed === true,
+        error: `Git delivery refused: working directory "${cwd}" is not a valid checkout for "${owner}/${repo}". Directory does not exist.`,
+      };
+    }
+    if (!fs.statSync(cwd).isDirectory()) {
+      return {
+        success: false,
+        sessionId: options.sessionId,
+        repository: `${owner}/${repo}`,
+        branch: targetBranch,
+        testsPassed: options.testsPassed === true,
+        error: `Git delivery refused: working directory "${cwd}" is not a valid checkout for "${owner}/${repo}". Path is not a directory.`,
+      };
+    }
+
+    // 5. Verify repository checkout and origin match BEFORE any file writes or mutations
+    const verify = await this.gitOps.verifyGitRepository(cwd, options.repository);
+    if (!verify.isValid) {
+      return {
+        success: false,
+        sessionId: options.sessionId,
+        repository: `${owner}/${repo}`,
+        branch: targetBranch,
+        testsPassed: options.testsPassed === true,
+        error: `Git delivery refused: working directory "${cwd}" is not a valid checkout for "${options.repository}". ${verify.error || ''}`.trim(),
+      };
+    }
+
+    // 6. Internally derive realExecution (NEVER trust caller-provided boolean)
+    const isMockWorkspace = Boolean(
+      (options as any).isSimulation === true ||
+      (options as any).isMockWorkspace === true ||
+      (options as any).workspaceType === 'virtual'
+    );
+    const internallyDerivedRealExecution = Boolean(verify.isValid && !isMockWorkspace && options.realExecution !== false);
+
+    // 7. Full Quality Gate check with internally derived realExecution
     if (isGitOperationRequested) {
       const gateCheck = evaluateQualityGate({
         sessionStatus: options.sessionStatus,
         executionStatus: options.executionStatus,
-        realExecution: options.realExecution,
+        realExecution: internallyDerivedRealExecution,
         testsPassed: options.testsPassed,
         reviewExecuted: options.reviewExecuted,
         reviewApproved: options.reviewApproved,
@@ -170,7 +265,7 @@ export class GitHubManager {
         return {
           success: false,
           sessionId: options.sessionId,
-          repository: options.repository,
+          repository: `${owner}/${repo}`,
           branch: targetBranch,
           testsPassed: options.testsPassed === true,
           error: gateCheck.reason,
@@ -178,34 +273,10 @@ export class GitHubManager {
       }
     }
 
-    // 1. Authentication check
-    if ((shouldPush || shouldCreatePR || options.createRepository) && !this.isConfigured()) {
-      return {
-        success: false,
-        sessionId: options.sessionId,
-        repository: options.repository,
-        branch: targetBranch,
-        testsPassed: true,
-        error: 'GITHUB_TOKEN is not configured',
-      };
-    }
-
     try {
-      // 2. Parse repository path
-      let owner = '';
-      let repo = '';
-      const parts = options.repository.replace(/^https?:\/\/github\.com\//, '').replace(/\.git$/, '').split('/');
-      if (parts.length >= 2) {
-        owner = parts[0];
-        repo = parts.slice(1).join('/');
-      } else {
-        owner = 'user';
-        repo = parts[0] || 'repo';
-      }
-
-      // 3. Write virtual files to workspace if provided (strictly guarded by path traversal checks)
+      // 9. Write virtual files to workspace ONLY AFTER verification and Quality Gate passed
       if (options.filesToCommit && Object.keys(options.filesToCommit).length > 0) {
-        // Validate ALL paths prior to writing any single file to disk (atomic failure)
+        // Validate ALL paths prior to writing any single file to disk (atomic failure, blocks path traversal)
         const plannedWrites: { fullPath: string; content: string }[] = [];
         for (const [relPath, content] of Object.entries(options.filesToCommit)) {
           const fullPath = resolveSafeWorkspacePath(cwd, relPath);
@@ -220,22 +291,7 @@ export class GitHubManager {
         }
       }
 
-      // Verify repository integrity for git mutations
-      if (shouldCommit || shouldPush) {
-        const verify = await this.gitOps.verifyGitRepository(cwd, options.repository);
-        if (!verify.isValid) {
-          return {
-            success: false,
-            sessionId: options.sessionId,
-            repository: `${owner}/${repo}`,
-            branch: targetBranch,
-            testsPassed: options.testsPassed === true,
-            error: `Git delivery refused: working directory "${cwd}" is not a valid checkout for "${options.repository}". ${verify.error || ''}`.trim(),
-          };
-        }
-      }
-
-      // 4. Check Git status & modified files
+      // 10. Check Git status & modified files
       const status = await this.gitOps.getStatus(cwd);
       if (status.error || status.success === false) {
         return {
@@ -384,7 +440,7 @@ export class GitHubManager {
         sessionId: options.sessionId,
         repository: options.repository,
         branch: targetBranch,
-        testsPassed: true,
+        testsPassed: options.testsPassed === true,
         error: err.message,
       };
     }
