@@ -187,7 +187,7 @@ export class CodingAgentManager {
         const realExecution: boolean =
           (task as any).realExecution !== undefined
             ? Boolean((task as any).realExecution)
-            : true;
+            : false;
 
         const gitRes = await this.githubManager.processTaskResult({
           repository: repoTarget,
@@ -207,6 +207,7 @@ export class CodingAgentManager {
           commitAndPush: task.commitAndPush,
           commitPushAndCreatePR: task.commitPushAndCreatePR,
           testCommand: testCmd,
+          workingDirectory: task.workingDirectory,
         });
 
         result.testsPassed = gitRes.testsPassed;

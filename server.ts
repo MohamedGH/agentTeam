@@ -13,7 +13,7 @@ import { githubManager, evaluateQualityGate } from './server/github';
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
   const allowedOriginsEnv = process.env.ALLOWED_ORIGINS;
   const allowedOrigins = allowedOriginsEnv
@@ -36,6 +36,11 @@ async function startServer() {
   const requireApiKey = (req: express.Request, res: express.Response, next: express.NextFunction) => {
     const requiredApiKey = process.env.AGENTTEAM_API_KEY;
     if (!requiredApiKey) {
+      if (process.env.NODE_ENV === 'production') {
+        return res.status(403).json({
+          error: 'Forbidden: AGENTTEAM_API_KEY must be configured in production environment',
+        });
+      }
       return next();
     }
     const authHeader = req.headers['authorization'];
@@ -297,7 +302,7 @@ async function startServer() {
         task,
         prompt,
         title,
-        automationMode = 'AUTO_CREATE_PR',
+        automationMode = 'AUTOMATION_MODE_UNSPECIFIED',
         requirePlanApproval = false,
         createRepository,
         repositoryName,
@@ -383,7 +388,7 @@ async function startServer() {
         task,
         prompt,
         title,
-        automationMode = 'AUTO_CREATE_PR',
+        automationMode = 'AUTOMATION_MODE_UNSPECIFIED',
         requirePlanApproval = false,
         createRepository,
         repositoryName,
@@ -673,7 +678,7 @@ async function startServer() {
         task,
         prompt,
         title,
-        automationMode = 'AUTO_CREATE_PR',
+        automationMode = 'AUTOMATION_MODE_UNSPECIFIED',
         git,
         commitAndPush,
         commitPushAndCreatePR,
@@ -977,6 +982,9 @@ async function startServer() {
         private: isPrivate,
         commitAndPush,
         commitPushAndCreatePR,
+        testCommand,
+        workingDirectory,
+        realExecution: req.body.realExecution,
         git,
       });
       res.json(result);
@@ -1082,6 +1090,9 @@ async function startServer() {
           private: isPrivate,
           commitAndPush,
           commitPushAndCreatePR,
+          testCommand,
+          workingDirectory,
+          realExecution: req.body?.realExecution ?? (req.query?.realExecution === 'true'),
           git,
         }
       );
@@ -1094,7 +1105,7 @@ async function startServer() {
     }
   };
 
-  app.get('/api/team/run-stream', handleStreamRequest);
+  app.get('/api/team/run-stream', requireApiKey, handleStreamRequest);
   app.post('/api/team/run-stream', requireApiKey, handleStreamRequest);
 
   // Vite middleware for development vs static files for production

@@ -18,10 +18,14 @@ export interface TeamRunOptions {
   private?: boolean;
   commitAndPush?: boolean;
   commitPushAndCreatePR?: boolean;
+  testCommand?: string;
+  workingDirectory?: string;
+  realExecution?: boolean;
   git?: {
     commit?: boolean;
     push?: boolean;
     createPullRequest?: boolean;
+    runTests?: boolean;
   };
 }
 
@@ -138,7 +142,7 @@ Provide your architectural breakdown and delegation plan.`;
             agent: 'developer',
             thought: `Initiating autonomous coding session on ${repo} (branch: ${branch}) via Google Jules API...`,
             status: 'Dispatching to Jules API',
-            output: `Target: ${repo}:${branch} | Mode: ${options.automationMode || 'AUTO_CREATE_PR'}`,
+            output: `Target: ${repo}:${branch} | Mode: ${options.automationMode || 'AUTOMATION_MODE_UNSPECIFIED'}`,
           });
 
           julesResult = await codingAgentManager.execute(
@@ -148,10 +152,13 @@ Provide your architectural breakdown and delegation plan.`;
               branch,
               task: taskPrompt,
               title: options.title || `agentTeam: ${taskPrompt.slice(0, 50)}`,
-              automationMode: options.automationMode || 'AUTO_CREATE_PR',
+              automationMode: options.automationMode || 'AUTOMATION_MODE_UNSPECIFIED',
               createRepository: options.createRepository,
               repositoryName: options.repositoryName,
               private: options.private,
+              workingDirectory: options.workingDirectory,
+              testCommand: options.testCommand,
+              realExecution: options.realExecution,
             },
             (activity) => {
               addStep({
@@ -636,7 +643,7 @@ Evaluate code quality, security implications, maintainability, and clean archite
             sessionId: julesResult?.sessionId,
             sessionStatus: 'COMPLETED',
             executionStatus: (testerPassed && reviewerApproved) ? 'COMPLETED' : 'FAILED',
-            realExecution: true,
+            realExecution: Boolean(options.realExecution),
             testsPassed: testerPassed,
             reviewExecuted: true,
             reviewApproved: reviewerApproved,
@@ -645,6 +652,8 @@ Evaluate code quality, security implications, maintainability, and clean archite
             git: options.git,
             commitAndPush: options.commitAndPush,
             commitPushAndCreatePR: options.commitPushAndCreatePR,
+            testCommand: options.testCommand,
+            workingDirectory: options.workingDirectory,
           });
 
           if (!julesResult) {

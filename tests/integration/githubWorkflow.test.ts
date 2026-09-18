@@ -56,6 +56,11 @@ export async function runGitHubWorkflowIntegrationTests() {
     commitSha: '9f8e7d6c5b4a3210',
     commitUrl: `https://github.com/${opts.owner}/${opts.repo}/commit/9f8e7d6c5b4a3210`,
   });
+  mockGitOps.verifyGitRepository = async () => ({
+    isValid: true,
+    isClean: true,
+    currentBranch: 'main',
+  });
 
   const mockClient = new GitHubClient({ token: mockToken });
   const mockPR = new GitHubPullRequest(mockClient);
@@ -113,6 +118,7 @@ export async function runGitHubWorkflowIntegrationTests() {
     commitPushAndCreatePR: true,
     reviewExecuted: true,
     reviewApproved: true,
+    realExecution: true,
   });
 
   assert.strictEqual(fullWorkflowResult.success, true);
@@ -165,6 +171,7 @@ export async function runGitHubWorkflowIntegrationTests() {
       repository: 'MohamedGH/agentTeam',
       branch: 'main',
       commitPushAndCreatePR: true,
+      realExecution: true,
     }
   );
 

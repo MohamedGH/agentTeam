@@ -162,6 +162,7 @@ export interface CodingAgentTask {
   reviewExecuted?: boolean;
   reviewApproved?: boolean;
   workingDirectory?: string;
+  realExecution?: boolean;
   git?: {
     commit?: boolean;
     push?: boolean;

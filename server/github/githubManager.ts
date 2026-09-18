@@ -220,6 +220,21 @@ export class GitHubManager {
         }
       }
 
+      // Verify repository integrity for git mutations
+      if (shouldCommit || shouldPush) {
+        const verify = await this.gitOps.verifyGitRepository(cwd, options.repository);
+        if (!verify.isValid) {
+          return {
+            success: false,
+            sessionId: options.sessionId,
+            repository: `${owner}/${repo}`,
+            branch: targetBranch,
+            testsPassed: options.testsPassed === true,
+            error: `Git delivery refused: working directory "${cwd}" is not a valid checkout for "${options.repository}". ${verify.error || ''}`.trim(),
+          };
+        }
+      }
+
       // 4. Check Git status & modified files
       const status = await this.gitOps.getStatus(cwd);
       if (status.error || status.success === false) {

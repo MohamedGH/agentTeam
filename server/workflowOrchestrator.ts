@@ -118,7 +118,7 @@ export class WorkflowOrchestrator {
         branch,
         task: taskPrompt,
         title: options.title || `agentTeam: ${taskPrompt.slice(0, 50)}`,
-        automationMode: options.automationMode || 'AUTO_CREATE_PR',
+        automationMode: options.automationMode || 'AUTOMATION_MODE_UNSPECIFIED',
         requirePlanApproval: false,
         workingDirectory: options.workingDirectory,
         testCommand: options.testCommand,
@@ -143,7 +143,7 @@ export class WorkflowOrchestrator {
         agent: 'manager',
         thought: `Initialized asynchronous workflow ${workflowId} for task: "${taskPrompt.slice(0, 80)}" on repository ${repository} (${branch}).`,
         status: 'Workflow Dispatched',
-        output: `Target: ${repository}:${branch} | Agent: ${agentId} | Mode: ${options.automationMode || 'AUTO_CREATE_PR'}`,
+        output: `Target: ${repository}:${branch} | Agent: ${agentId} | Mode: ${options.automationMode || 'AUTOMATION_MODE_UNSPECIFIED'}`,
         timestamp: Date.now(),
       },
       {

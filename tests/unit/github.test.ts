@@ -584,6 +584,11 @@ export async function runGitHubUnitTests() {
     commitSha: 'c0ffee1234567890abcdef',
     commitUrl: `https://github.com/${opts.owner}/${opts.repo}/commit/c0ffee1234567890abcdef`,
   });
+  mockSuccessfulGitOps.verifyGitRepository = async () => ({
+    isValid: true,
+    isClean: true,
+    currentBranch: 'main',
+  });
 
   const mockClient = new GitHubClient({ token: 'mock-token' });
   const mockPRService = new GitHubPullRequest(mockClient);
