@@ -640,7 +640,13 @@ export class WorkflowOrchestrator {
       // -------------------------------------------------------------
       // 1. WORKSPACE RESOLUTION & VALIDATION
       // -------------------------------------------------------------
-      const isMockAgent = state.agentId === 'mock';
+      const isMockAgent = Boolean(
+        state.agentId === 'mock' ||
+        state.sessionId?.startsWith('mock_') ||
+        (state.options as any)?.isSimulation === true ||
+        (state.options as any)?.isMockWorkspace === true ||
+        (state.options as any)?.workspaceType === 'virtual'
+      );
       const workingDir = state.options.workingDirectory || state.workingDirectory;
       const gitOps = this.githubManager.getGitOps();
 
@@ -837,7 +843,7 @@ export class WorkflowOrchestrator {
       const qualityGate = evaluateQualityGate({
         sessionStatus: 'COMPLETED',
         executionStatus: 'COMPLETED',
-        realExecution: isMockAgent ? true : isRealExecution,
+        realExecution: isRealExecution,
         testsPassed: testPassed === true,
         reviewExecuted: reviewResult.reviewExecuted === true,
         reviewApproved: reviewResult.approved === true,
@@ -1291,13 +1297,15 @@ export class WorkflowOrchestrator {
       };
     }
 
-    // Internally derive realExecution (never trust caller flag)
-    const isMockWorkspace = Boolean(
+    // Internally derive realExecution (NEVER trust caller flag; options.realExecution has zero influence; mock/simulation is strictly forbidden)
+    const isMockOrSimulated = Boolean(
+      options.sessionId?.startsWith('mock_') ||
+      (options as any).agentId === 'mock' ||
       (options as any).isSimulation === true ||
       (options as any).isMockWorkspace === true ||
       (options as any).workspaceType === 'virtual'
     );
-    const internallyDerivedRealExecution = Boolean(repoVerification.isValid && !isMockWorkspace && options.realExecution !== false);
+    const internallyDerivedRealExecution = Boolean(repoVerification.isValid && !isMockOrSimulated);
 
     // Enforce Quality Gate check
     const gateCheck = evaluateQualityGate({

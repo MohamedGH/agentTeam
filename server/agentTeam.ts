@@ -159,7 +159,6 @@ Provide your architectural breakdown and delegation plan.`;
               private: options.private,
               workingDirectory: options.workingDirectory,
               testCommand: options.testCommand,
-              realExecution: options.realExecution,
             },
             (activity) => {
               addStep({
@@ -637,6 +636,7 @@ Evaluate code quality, security implications, maintainability, and clean archite
         
         // WorkflowOrchestrator is the ONLY authority for Git delivery.
         // Route through workflowOrchestrator.executeDelivery to enforce unified quality gate and repo verification.
+        // options.realExecution is NEVER trusted and has zero influence.
         const deliveryOpts = {
           repository: targetRepo,
           branch: targetBranch,
@@ -648,7 +648,6 @@ Evaluate code quality, security implications, maintainability, and clean archite
           testsPassed: testerPassed,
           reviewExecuted: true,
           reviewApproved: reviewerApproved,
-          realExecution: Boolean(options.realExecution || false),
           createRepository: options.createRepository,
           private: options.private,
           git: options.git,
@@ -658,12 +657,8 @@ Evaluate code quality, security implications, maintainability, and clean archite
           workingDirectory: options.workingDirectory,
         };
 
-        const customGhManager = (codingAgentManager as any)?.githubManager;
-        if (customGhManager && typeof customGhManager.processTaskResult === 'function') {
-          gitDeliveryResult = await customGhManager.processTaskResult(deliveryOpts);
-        } else {
-          gitDeliveryResult = await workflowOrchestrator.executeDelivery(deliveryOpts);
-        }
+        // Strictly route through workflowOrchestrator.executeDelivery - NO customGhManager bypass!
+        gitDeliveryResult = await workflowOrchestrator.executeDelivery(deliveryOpts);
 
           if (!julesResult) {
             julesResult = {

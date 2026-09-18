@@ -1,7 +1,7 @@
 import assert from 'assert';
 import { codingAgentManager } from '../../server/codingAgents';
 import { AgentTeamEngine } from '../../server/agentTeam';
-import { WorkflowOrchestrator } from '../../server/workflowOrchestrator';
+import { WorkflowOrchestrator, workflowOrchestrator } from '../../server/workflowOrchestrator';
 import { GitHubManager } from '../../server/github/githubManager';
 import { GitHubClient } from '../../server/github/githubClient';
 import { GitHubGitOperations } from '../../server/github/githubGitOperations';
@@ -20,8 +20,8 @@ export async function runTenRemediationsUnitTests() {
   providerManager.registerProvider(mockProvider);
   providerManager.setActiveProvider('mock');
 
-  // Point 1: realExecution=false by default in CodingAgentManager
-  console.log('--- Point 1: realExecution defaults to false in CodingAgentManager ---');
+  // Point 1: options.realExecution has zero influence in CodingAgentManager
+  console.log('--- Point 1: options.realExecution has zero influence in CodingAgentManager ---');
   let capturedOpts: any = null;
   const mockGhManager = {
     isConfigured: () => true,
@@ -42,33 +42,50 @@ export async function runTenRemediationsUnitTests() {
     task: 'Test default realExecution',
     automationMode: 'AUTOMATION_MODE_UNSPECIFIED',
     commitAndPush: true,
-  });
-  assert.strictEqual(capturedOpts.realExecution, false, 'realExecution MUST default to false in CodingAgentManager');
-  console.log('✅ Point 1 PASS: realExecution is strictly false by default in CodingAgentManager');
+    realExecution: true, // Passing realExecution: true must NOT contaminate processTaskResult
+  } as any);
+  assert.strictEqual(capturedOpts.realExecution, undefined, 'CodingAgentManager must not pass realExecution to processTaskResult');
+  console.log('✅ Point 1 PASS: options.realExecution has zero influence in CodingAgentManager');
 
-  // Point 2: realExecution is NOT forced to true in AgentTeamEngine
-  console.log('\n--- Point 2: realExecution is not forced in AgentTeamEngine ---');
-  let engineCapturedOpts: any = null;
+  // Point 2: customGhManager.processTaskResult() completely removed from AgentTeamEngine
+  console.log('\n--- Point 2: customGhManager.processTaskResult() removed from AgentTeamEngine ---');
+  let engineBypassCalled = false;
   const mockEngineGhManager = {
     isConfigured: () => true,
-    processTaskResult: async (opts: any) => {
-      engineCapturedOpts = opts;
-      return { success: false, testsPassed: false, error: 'test' };
+    processTaskResult: async () => {
+      engineBypassCalled = true;
+      return { success: false, testsPassed: false, error: 'legacy bypass' };
     },
   };
   (codingAgentManager as any).githubManager = mockEngineGhManager;
+
+  let orchestratorDeliveryCalled = false;
+  let orchestratorDeliveryOpts: any = null;
+  const originalExecuteDelivery = workflowOrchestrator.executeDelivery;
+  workflowOrchestrator.executeDelivery = async (opts: any) => {
+    orchestratorDeliveryCalled = true;
+    orchestratorDeliveryOpts = opts;
+    return { success: false, testsPassed: false, error: 'orchestrator called' };
+  };
+
   const engine = new AgentTeamEngine();
-  await engine.runWorkflow('Test workflow without realExecution', 'tier_3', undefined, {
-    provider: 'mock',
-    model: 'mock-model',
-    codingAgent: 'none',
-    repository: 'MohamedGH/agentTeam',
-    branch: 'main',
-    commitAndPush: true,
-    realExecution: false,
-  });
-  assert.strictEqual(engineCapturedOpts.realExecution, false, 'realExecution in AgentTeamEngine must respect options.realExecution=false');
-  console.log('✅ Point 2 PASS: realExecution in AgentTeamEngine respects options and is not forced to true');
+  try {
+    await engine.runWorkflow('Test workflow without realExecution', 'tier_3', undefined, {
+      provider: 'mock',
+      model: 'mock-model',
+      codingAgent: 'none',
+      repository: 'MohamedGH/agentTeam',
+      branch: 'main',
+      commitAndPush: true,
+      realExecution: false,
+    });
+    assert.strictEqual(engineBypassCalled, false, 'customGhManager.processTaskResult MUST NEVER be called by AgentTeamEngine');
+    assert.strictEqual(orchestratorDeliveryCalled, true, 'Delivery MUST route exclusively through workflowOrchestrator.executeDelivery');
+    assert.strictEqual(orchestratorDeliveryOpts.realExecution, undefined, 'deliveryOpts must not contain caller-provided realExecution');
+    console.log('✅ Point 2 PASS: customGhManager bypass eliminated; delivery strictly routes through WorkflowOrchestrator');
+  } finally {
+    workflowOrchestrator.executeDelivery = originalExecuteDelivery;
+  }
 
   // Point 3: Working directory integrity check for Git delivery
   console.log('\n--- Point 3: Working directory verified during delivery ---');
@@ -141,32 +158,33 @@ export async function runTenRemediationsUnitTests() {
   assert.strictEqual(prodWithKey(undefined, 'secret-key-123').status, 200, 'Authorized request with x-api-key returns 200');
   console.log('✅ Point 5 & 6 PASS: Production requires AGENTTEAM_API_KEY and protects streaming/mutation endpoints');
 
-  // Point 7 & 8: workingDirectory, testCommand, realExecution propagated in non-Jules branch
-  console.log('\n--- Point 7 & 8: Propagation in non-Jules branch ---');
+  // Point 7 & 8: workingDirectory and testCommand propagated strictly via WorkflowOrchestrator
+  console.log('\n--- Point 7 & 8: Propagation in non-Jules branch via WorkflowOrchestrator ---');
   let nonJulesCaptured: any = null;
-  const mockNonJulesGh = {
-    isConfigured: () => true,
-    processTaskResult: async (opts: any) => {
-      nonJulesCaptured = opts;
-      return { success: true, testsPassed: true, commitSha: 'sha_test' };
-    },
+  const origExec = workflowOrchestrator.executeDelivery;
+  workflowOrchestrator.executeDelivery = async (opts: any) => {
+    nonJulesCaptured = opts;
+    return { success: true, testsPassed: true, commitSha: 'sha_test' };
   };
-  (codingAgentManager as any).githubManager = mockNonJulesGh;
-  await engine.runWorkflow('Unified non-Jules execution', 'tier_3', undefined, {
-    provider: 'mock',
-    model: 'mock-model',
-    codingAgent: 'none',
-    repository: 'MohamedGH/agentTeam',
-    branch: 'main',
-    commitAndPush: true,
-    workingDirectory: '/custom/workspace/dir',
-    testCommand: 'npm test -- --custom',
-    realExecution: true,
-  });
-  assert.strictEqual(nonJulesCaptured.workingDirectory, '/custom/workspace/dir');
-  assert.strictEqual(nonJulesCaptured.testCommand, 'npm test -- --custom');
-  assert.strictEqual(nonJulesCaptured.realExecution, true);
-  console.log('✅ Point 7 & 8 PASS: workingDirectory, testCommand, and realExecution propagated across non-Jules flow');
+  try {
+    await engine.runWorkflow('Unified non-Jules execution', 'tier_3', undefined, {
+      provider: 'mock',
+      model: 'mock-model',
+      codingAgent: 'none',
+      repository: 'MohamedGH/agentTeam',
+      branch: 'main',
+      commitAndPush: true,
+      workingDirectory: '/custom/workspace/dir',
+      testCommand: 'npm test -- --custom',
+      realExecution: true,
+    });
+    assert.strictEqual(nonJulesCaptured.workingDirectory, '/custom/workspace/dir');
+    assert.strictEqual(nonJulesCaptured.testCommand, 'npm test -- --custom');
+    assert.strictEqual(nonJulesCaptured.realExecution, undefined, 'deliveryOpts must not contain caller realExecution');
+    console.log('✅ Point 7 & 8 PASS: workingDirectory and testCommand propagated strictly via WorkflowOrchestrator without caller realExecution poisoning');
+  } finally {
+    workflowOrchestrator.executeDelivery = origExec;
+  }
 
   // Point 9: PORT configurable dynamically via process.env.PORT
   console.log('\n--- Point 9: PORT configurable dynamically ---');

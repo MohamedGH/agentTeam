@@ -1,10 +1,12 @@
 import assert from 'assert';
 import fs from 'fs';
 import path from 'path';
+import { execSync } from 'child_process';
 import { WorkflowOrchestrator } from '../../server/workflowOrchestrator';
 import { CodingAgentManager } from '../../server/codingAgents/codingAgentManager';
 import { MockCodingAgent } from '../../server/codingAgents/mockCodingAgent';
 import { FileBackedCodingAgentSessionStore } from '../../server/codingAgents/sessionStore';
+import type { ICodingAgent, ICodingAgentSessionStore, CodingAgentSession } from '../../server/codingAgents/types';
 import { GitHubManager } from '../../server/github/githubManager';
 import { GitHubClient } from '../../server/github/githubClient';
 import { ProviderManager } from '../../server/providerManager';
@@ -31,9 +33,74 @@ export async function runWorkflowPipelineE2ETests() {
     const sessionStore = new FileBackedCodingAgentSessionStore(testSessionFile);
     const mockAgent = new MockCodingAgent(sessionStore);
 
+    class StubJulesAgent implements ICodingAgent {
+      readonly id = 'jules';
+      readonly name = 'Google Jules';
+      private sessionStore: ICodingAgentSessionStore;
+      private mockSessionState: any = null;
+
+      constructor(sessionStore: ICodingAgentSessionStore) {
+        this.sessionStore = sessionStore;
+      }
+      setMockSession(state: any) {
+        this.mockSessionState = state;
+      }
+      async startSession(request: any): Promise<CodingAgentSession> {
+        const id = 'jules_sess_' + Math.random().toString(36).substring(2, 9);
+        const session: CodingAgentSession = {
+          id,
+          agentId: 'jules',
+          repository: request.repository,
+          branch: request.branch,
+          task: request.task,
+          state: 'QUEUED',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        await this.sessionStore.saveSession(session);
+        return session;
+      }
+      async getSession(id: string): Promise<CodingAgentSession> {
+        const stored = await this.sessionStore.getSession(id);
+        if (this.mockSessionState) {
+          return {
+            ...stored!,
+            ...this.mockSessionState,
+          };
+        }
+        return stored!;
+      }
+      async cancelSession(id: string): Promise<CodingAgentSession> {
+        const stored = await this.sessionStore.getSession(id);
+        const updated = { ...stored!, state: 'CANCELLED' as const };
+        await this.sessionStore.saveSession(updated);
+        return updated;
+      }
+      async sendPrompt(): Promise<CodingAgentSession> {
+        throw new Error('Not implemented');
+      }
+      async listActivities(_id: string): Promise<any[]> {
+        return [];
+      }
+      isConfigured(): boolean {
+        return true;
+      }
+    }
+
+    const julesAgent = new StubJulesAgent(sessionStore);
+
+    const tempGitDir = path.join(testDataDir, `repo_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`);
+    fs.mkdirSync(tempGitDir, { recursive: true });
+    execSync('git init -b main', { cwd: tempGitDir, stdio: 'ignore' });
+    execSync('git config user.name "E2E Runner"', { cwd: tempGitDir, stdio: 'ignore' });
+    execSync('git config user.email "e2e@example.com"', { cwd: tempGitDir, stdio: 'ignore' });
+    execSync('git remote add origin https://github.com/MohamedGH/agentTeam.git', { cwd: tempGitDir, stdio: 'ignore' });
+    fs.writeFileSync(path.join(tempGitDir, 'package.json'), JSON.stringify({ name: 'test', scripts: { test: 'echo "OK"' } }));
+    execSync('git add . && git commit -m "initial"', { cwd: tempGitDir, stdio: 'ignore' });
+
     const codingAgentManager = new CodingAgentManager({
       sessionStore,
-      julesAgent: mockAgent as any,
+      julesAgent: julesAgent as any,
       mockAgent,
     });
 
@@ -56,6 +123,9 @@ export async function runWorkflowPipelineE2ETests() {
     });
 
     const githubManager = new GitHubManager(mockGithubClient);
+    const gitOps = githubManager.getGitOps();
+    gitOps.verifyGitRepository = async () => ({ isValid: true, isInsideWorkTree: true, currentBranch: 'main' });
+    gitOps.runVerificationTests = async () => ({ passed: true, output: 'All unit verification tests passed', exitCode: 0 });
     githubManager.processTaskResult = async (opts: any) => {
       gitCalls++;
       gitOptionsPassed.push(opts);
@@ -127,6 +197,8 @@ export async function runWorkflowPipelineE2ETests() {
       orchestrator,
       sessionStore,
       mockAgent,
+      julesAgent,
+      tempGitDir,
       githubManager,
       workspace,
       getGitCalls: () => gitCalls,
@@ -290,20 +362,21 @@ export async function runWorkflowPipelineE2ETests() {
   // =============================================================
   {
     console.log('\nScenario F: Jules COMPLETED + QA PASS + REVIEW APPROVED + Git requested -> Git authorized once');
-    const { orchestrator, mockAgent, getGitCalls, getGitOptions } = setupHarness({
+    const { orchestrator, julesAgent, tempGitDir, getGitCalls, getGitOptions } = setupHarness({
       customExitCode: 0,
       customTestOutput: 'PASS all hermetic tests',
     });
 
     const wf = await orchestrator.startWorkflow({
-      agent: 'mock',
+      agent: 'jules',
+      workingDirectory: tempGitDir,
       repository: 'MohamedGH/agentTeam',
       branch: 'main',
       taskPrompt: 'Scenario F task',
       commitPushAndCreatePR: true,
     });
 
-    mockAgent.setMockSession({
+    julesAgent.setMockSession({
       state: 'COMPLETED',
       resultSummary: 'Complete clean implementation',
       prUrl: 'https://github.com/MohamedGH/agentTeam/pull/99',
@@ -325,10 +398,10 @@ export async function runWorkflowPipelineE2ETests() {
   }
 
   // =============================================================
-  // Scenario G: Deux polls simultanés sur COMPLETED -> un seul pipeline downstream
+  // Scenario F2: Non-Contournement - Mock/Simulation strictly forbidden from Git delivery
   // =============================================================
   {
-    console.log('\nScenario G: Two simultaneous polls on COMPLETED -> Single downstream execution');
+    console.log('\nScenario F2: Mock/Simulation strictly forbidden from Git delivery (Non-Circumvention)');
     const { orchestrator, mockAgent, getGitCalls } = setupHarness({
       customExitCode: 0,
     });
@@ -337,11 +410,45 @@ export async function runWorkflowPipelineE2ETests() {
       agent: 'mock',
       repository: 'MohamedGH/agentTeam',
       branch: 'main',
+      taskPrompt: 'Scenario F2 malicious attempt with mock',
+      commitPushAndCreatePR: true,
+      realExecution: true, // Attempt caller flag poisoning!
+    } as any);
+
+    mockAgent.setMockSession({
+      state: 'COMPLETED',
+      resultSummary: 'Mock task completed',
+    });
+
+    const polled = await orchestrator.pollWorkflow(wf.sessionId);
+    assert.strictEqual(polled.stage, 'FAILED');
+    assert.strictEqual(getGitCalls(), 0, 'Git operations MUST NOT be called for mock agent even with realExecution: true');
+    assert.strictEqual(polled.finalReport?.realExecution, false);
+    assert.strictEqual(polled.finalReport?.simulated, true);
+
+    orchestrator.stopBackgroundPoller();
+    console.log('✅ PASS [Scenario F2]: Mock/Simulation non-circumvention test verified: Git strictly blocked');
+  }
+
+  // =============================================================
+  // Scenario G: Deux polls simultanés sur COMPLETED -> un seul pipeline downstream
+  // =============================================================
+  {
+    console.log('\nScenario G: Two simultaneous polls on COMPLETED -> Single downstream execution');
+    const { orchestrator, julesAgent, tempGitDir, getGitCalls } = setupHarness({
+      customExitCode: 0,
+    });
+
+    const wf = await orchestrator.startWorkflow({
+      agent: 'jules',
+      workingDirectory: tempGitDir,
+      repository: 'MohamedGH/agentTeam',
+      branch: 'main',
       taskPrompt: 'Scenario G simultaneous polling',
       commitPushAndCreatePR: true,
     });
 
-    mockAgent.setMockSession({ state: 'COMPLETED', resultSummary: 'Finished task' });
+    julesAgent.setMockSession({ state: 'COMPLETED', resultSummary: 'Finished task' });
 
     const [poll1, poll2] = await Promise.all([
       orchestrator.pollWorkflow(wf.sessionId),
@@ -361,19 +468,20 @@ export async function runWorkflowPipelineE2ETests() {
   // =============================================================
   {
     console.log('\nScenario H: Two successive polls after completion -> Idempotent no repetition');
-    const { orchestrator, mockAgent, getGitCalls } = setupHarness({
+    const { orchestrator, julesAgent, tempGitDir, getGitCalls } = setupHarness({
       customExitCode: 0,
     });
 
     const wf = await orchestrator.startWorkflow({
-      agent: 'mock',
+      agent: 'jules',
+      workingDirectory: tempGitDir,
       repository: 'MohamedGH/agentTeam',
       branch: 'main',
       taskPrompt: 'Scenario H successive polling',
       commitPushAndCreatePR: true,
     });
 
-    mockAgent.setMockSession({ state: 'COMPLETED', resultSummary: 'Finished task' });
+    julesAgent.setMockSession({ state: 'COMPLETED', resultSummary: 'Finished task' });
 
     const poll1 = await orchestrator.pollWorkflow(wf.sessionId);
     assert.strictEqual(poll1.stage, 'COMPLETED');

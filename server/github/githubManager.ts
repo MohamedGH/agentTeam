@@ -242,13 +242,15 @@ export class GitHubManager {
       };
     }
 
-    // 6. Internally derive realExecution (NEVER trust caller-provided boolean)
-    const isMockWorkspace = Boolean(
+    // 6. Internally derive realExecution (NEVER trust caller-provided boolean; options.realExecution has zero influence)
+    const isMockOrSimulated = Boolean(
+      options.sessionId?.startsWith('mock_') ||
+      (options as any).agentId === 'mock' ||
       (options as any).isSimulation === true ||
       (options as any).isMockWorkspace === true ||
       (options as any).workspaceType === 'virtual'
     );
-    const internallyDerivedRealExecution = Boolean(verify.isValid && !isMockWorkspace && options.realExecution !== false);
+    const internallyDerivedRealExecution = Boolean(verify.isValid && !isMockOrSimulated);
 
     // 7. Full Quality Gate check with internally derived realExecution
     if (isGitOperationRequested) {

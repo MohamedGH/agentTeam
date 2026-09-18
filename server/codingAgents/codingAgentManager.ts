@@ -195,7 +195,6 @@ export class CodingAgentManager {
           testsPassed,
           reviewExecuted,
           reviewApproved,
-          realExecution: Boolean(task.realExecution || false),
           createRepository: task.createRepository,
           private: task.private,
           git: task.git,

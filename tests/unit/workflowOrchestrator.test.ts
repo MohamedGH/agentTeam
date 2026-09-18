@@ -25,15 +25,40 @@ export async function runWorkflowOrchestratorUnitTests() {
     const testSessionFile = path.join(testDataDir, `test_sessions_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.json`);
     const sessionStore = new FileBackedCodingAgentSessionStore(testSessionFile);
     const mockAgent = new MockCodingAgent(sessionStore);
+
+    class TestJulesAgent extends MockCodingAgent {
+      public override readonly id = 'jules';
+      public override readonly name = 'Google Jules';
+      public override async startSession(request: any): Promise<any> {
+        const sess = await super.startSession(request);
+        sess.sessionId = `jules_sess_${Math.random().toString(36).slice(2, 9)}`;
+        sess.id = sess.sessionId;
+        await sessionStore.saveSession({
+          sessionId: sess.sessionId,
+          agent: 'jules',
+          repository: request.repository,
+          branch: request.branch || 'main',
+          task: request.prompt,
+          state: sess.state,
+          automationMode: request.automationMode || 'AUTOMATION_MODE_UNSPECIFIED',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          activities: [],
+        });
+        return sess;
+      }
+    }
+    const julesAgent = new TestJulesAgent(sessionStore);
     
-    // Configurable mock agent
+    // Configurable mock / jules agent state
     if (customMockState) {
       mockAgent.setMockSession(customMockState);
+      julesAgent.setMockSession(customMockState);
     }
 
     const codingAgentManager = new CodingAgentManager({
       sessionStore,
-      julesAgent: mockAgent as any,
+      julesAgent,
       mockAgent,
     });
 
@@ -57,6 +82,14 @@ export async function runWorkflowOrchestratorUnitTests() {
     });
 
     const githubManager = new GitHubManager(mockGithubClient);
+    const tempGitDir = path.join(testDataDir, `repo_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`);
+    if (!fs.existsSync(tempGitDir)) {
+      fs.mkdirSync(tempGitDir, { recursive: true });
+    }
+    const gitOps = githubManager.getGitOps();
+    gitOps.verifyGitRepository = async () => ({ isValid: true, isInsideWorkTree: true, currentBranch: 'main' });
+    gitOps.runVerificationTests = async () => ({ passed: true, output: 'All unit verification tests passed', exitCode: 0 });
+
     const providerManager = new ProviderManager({ registerDefaults: false });
     const workspace = new VirtualWorkspace();
 
@@ -73,9 +106,11 @@ export async function runWorkflowOrchestratorUnitTests() {
       orchestrator,
       sessionStore,
       mockAgent,
+      julesAgent,
       codingAgentManager,
       githubManager,
       workspace,
+      tempGitDir,
     };
   }
 
@@ -146,7 +181,7 @@ export async function runWorkflowOrchestratorUnitTests() {
   // -------------------------------------------------------------
   {
     console.log('\nTest 3: RUNNING -> COMPLETED triggers full downstream pipeline');
-    const { orchestrator, mockAgent, githubManager } = setupTestHarness();
+    const { orchestrator, julesAgent, githubManager, tempGitDir } = setupTestHarness();
 
     let gitCalled = false;
     githubManager.processTaskResult = async (opts: any) => {
@@ -169,19 +204,20 @@ export async function runWorkflowOrchestratorUnitTests() {
     };
 
     const workflow = await orchestrator.startWorkflow({
-      agent: 'mock',
+      agent: 'jules',
+      workingDirectory: tempGitDir,
       repository: 'MohamedGH/agentTeam',
       branch: 'main',
       taskPrompt: 'Implement JWT auth token validator',
       commitPushAndCreatePR: true,
     });
 
-    // Transition mock session to COMPLETED
-    mockAgent.setMockSession({
+    // Transition jules session to COMPLETED
+    julesAgent.setMockSession({
       state: 'COMPLETED',
       resultSummary: 'Completed JWT validator implementation',
       prUrl: 'https://github.com/MohamedGH/agentTeam/pull/42',
-      gitBranch: 'mock/task-jwt',
+      gitBranch: 'jules/task-jwt',
     });
 
     // Poll to trigger handleJulesCompleted
@@ -206,6 +242,42 @@ export async function runWorkflowOrchestratorUnitTests() {
     assert.ok(phases.includes(7), 'Steps must include Phase 7 Final Delivery');
 
     console.log('✅ PASS: Full downstream verification executed cleanly after Jules COMPLETED');
+  }
+
+  // -------------------------------------------------------------
+  // TEST 3b: Mock/Simulation is STRICTLY FORBIDDEN from performing Git mutations (Non-Circumvention)
+  // -------------------------------------------------------------
+  {
+    console.log('\nTest 3b: Mock/Simulation is strictly forbidden from Git mutations');
+    const { orchestrator, mockAgent, githubManager } = setupTestHarness();
+
+    let gitCalledForMock = false;
+    githubManager.processTaskResult = async () => {
+      gitCalledForMock = true;
+      return { success: true };
+    };
+
+    const workflow = await orchestrator.startWorkflow({
+      agent: 'mock',
+      repository: 'MohamedGH/agentTeam',
+      branch: 'main',
+      taskPrompt: 'Attempt Git delivery with mock agent',
+      commitPushAndCreatePR: true,
+      realExecution: true, // Attempt caller flag poisoning!
+    } as any);
+
+    mockAgent.setMockSession({
+      state: 'COMPLETED',
+      resultSummary: 'Mock task completed',
+    });
+
+    const completedState = await orchestrator.pollWorkflow(workflow.sessionId);
+    assert.strictEqual(completedState.stage, 'FAILED');
+    assert.strictEqual(gitCalledForMock, false, 'Git delivery MUST NOT be called for mock agent, even if realExecution:true is passed in options');
+    assert.strictEqual(completedState.finalReport?.realExecution, false);
+    assert.strictEqual(completedState.finalReport?.simulated, true);
+    assert.match(completedState.error || '', /realExecution must strictly be true|Quality Gate authorization failed/i);
+    console.log('✅ PASS: Mock agent strictly blocked from Git mutations regardless of caller flags');
   }
 
   // -------------------------------------------------------------
@@ -349,7 +421,7 @@ export async function runWorkflowOrchestratorUnitTests() {
   // -------------------------------------------------------------
   {
     console.log('\nTest 7: Downstream verification & delivery executes EXACTLY ONCE');
-    const { orchestrator, mockAgent, githubManager } = setupTestHarness();
+    const { orchestrator, julesAgent, githubManager, tempGitDir } = setupTestHarness();
 
     let githubDeliveryCount = 0;
     githubManager.processTaskResult = async () => {
@@ -362,14 +434,15 @@ export async function runWorkflowOrchestratorUnitTests() {
     };
 
     const workflow = await orchestrator.startWorkflow({
-      agent: 'mock',
+      agent: 'jules',
+      workingDirectory: tempGitDir,
       repository: 'MohamedGH/agentTeam',
       branch: 'main',
       taskPrompt: 'Ensure downstream executes once',
       commitPushAndCreatePR: true,
     });
 
-    mockAgent.setMockSession({
+    julesAgent.setMockSession({
       state: 'COMPLETED',
       resultSummary: 'Finished initial coding pass',
     });
@@ -572,7 +645,7 @@ export async function runWorkflowOrchestratorUnitTests() {
   // -------------------------------------------------------------
   {
     console.log('\nTest 12: Double-poll simultaneity does not duplicate downstream delivery');
-    const { orchestrator, mockAgent, githubManager } = setupTestHarness();
+    const { orchestrator, julesAgent, githubManager, tempGitDir } = setupTestHarness();
 
     let gitDeliveryCalls = 0;
     githubManager.processTaskResult = async () => {
@@ -587,14 +660,15 @@ export async function runWorkflowOrchestratorUnitTests() {
     };
 
     const workflow = await orchestrator.startWorkflow({
-      agent: 'mock',
+      agent: 'jules',
+      workingDirectory: tempGitDir,
       repository: 'MohamedGH/agentTeam',
       branch: 'main',
       taskPrompt: 'Double poll concurrency test',
       commitPushAndCreatePR: true,
     });
 
-    mockAgent.setMockSession({
+    julesAgent.setMockSession({
       state: 'COMPLETED',
       resultSummary: 'Finished implementation',
     });
