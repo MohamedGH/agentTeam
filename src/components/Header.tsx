@@ -1,10 +1,10 @@
 import React from 'react';
-import { Users, Gauge, FolderTree, Sparkles, Activity, ShieldCheck, Zap, Globe, GitPullRequest } from 'lucide-react';
+import { Users, Gauge, FolderTree, Sparkles, Activity, ShieldCheck, Zap, Globe, GitPullRequest, Cpu } from 'lucide-react';
 import { AIProviderId, ProviderInfo } from '../types';
 
 interface HeaderProps {
-  activeTab: 'studio' | 'workspace' | 'quota' | 'roles' | 'jules';
-  setActiveTab: (tab: 'studio' | 'workspace' | 'quota' | 'roles' | 'jules') => void;
+  activeTab: 'studio' | 'workspace' | 'quota' | 'roles' | 'jules' | 'auto-improve';
+  setActiveTab: (tab: 'studio' | 'workspace' | 'quota' | 'roles' | 'jules' | 'auto-improve') => void;
   selectedTier: string;
   setSelectedTier: (tier: string) => void;
   isRunning: boolean;
@@ -121,6 +121,22 @@ export const Header: React.FC<HeaderProps> = ({
             Google Jules
             <span className="text-[10px] px-1.5 py-0.2 rounded bg-orange-500/20 text-orange-300 font-mono border border-orange-500/30">
               Agent
+            </span>
+          </button>
+
+          <button
+            id="tab-auto-improve"
+            onClick={() => setActiveTab('auto-improve')}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap cursor-pointer ${
+              activeTab === 'auto-improve'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'text-indigo-400/90 hover:text-indigo-300 hover:bg-slate-900'
+            }`}
+          >
+            <Cpu className="w-3.5 h-3.5" />
+            Auto-Improvement
+            <span className="text-[10px] px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 font-mono border border-indigo-500/30">
+              Loop
             </span>
           </button>
         </div>

@@ -10,6 +10,7 @@ import { codingAgentManager } from './server/codingAgents';
 import { workflowOrchestrator } from './server/workflowOrchestrator';
 import { cloudMonitoringQuotaService } from './server/cloudMonitoring';
 import { githubManager, evaluateQualityGate } from './server/github';
+import { selfImprovementEngine, improvementMemory } from './server/selfImprovement';
 
 async function startServer() {
   const app = express();
@@ -776,6 +777,155 @@ async function startServer() {
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
+  });
+
+  // -------------------------------------------------------------
+  // SELF-IMPROVEMENT ENGINE APIS & SSE STREAM
+  // -------------------------------------------------------------
+  app.get('/api/self-improvement/status', (req, res) => {
+    try {
+      const current = selfImprovementEngine.getCurrentCycle();
+      const all = selfImprovementEngine.getAllCycles();
+      res.json({
+        success: true,
+        isRunning: Boolean(current),
+        currentCycle: current,
+        totalCycles: all.length,
+        lastCompleted: all.find((c) => c.status === 'COMPLETED' || c.status === 'ROLLED_BACK'),
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get('/api/self-improvement/history', (req, res) => {
+    try {
+      const cycles = selfImprovementEngine.getAllCycles();
+      res.json({
+        success: true,
+        cycles,
+        total: cycles.length,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get('/api/self-improvement/cycles/:cycleId', (req, res) => {
+    try {
+      const cycleId = String(req.params.cycleId);
+      const cycle = selfImprovementEngine.getCycle(cycleId);
+      if (!cycle) {
+        return res.status(404).json({ error: `Cycle "${cycleId}" not found` });
+      }
+      res.json({ success: true, cycle });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/self-improvement/run', requireApiKey, async (req, res) => {
+    try {
+      const options = req.body || {};
+      const cycle = await selfImprovementEngine.runCycle(options);
+      res.status(200).json({
+        success: true,
+        cycleId: cycle.id,
+        status: cycle.status,
+        phase: cycle.currentPhase,
+        cycle,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/self-improvement/rollback/:cycleId', requireApiKey, async (req, res) => {
+    try {
+      const cycleId = String(req.params.cycleId);
+      const workingDirectory = req.body?.workingDirectory;
+      const success = await selfImprovementEngine.rollbackCycle(cycleId, workingDirectory);
+      if (!success) {
+        return res.status(400).json({
+          success: false,
+          error: `Unable to rollback cycle "${cycleId}". Backup not found or already reverted.`,
+        });
+      }
+      res.json({ success: true, cycleId, rolledBack: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get('/api/self-improvement/config', (req, res) => {
+    try {
+      const config = selfImprovementEngine.getConfig();
+      res.json({ success: true, config });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get('/api/self-improvement/memory', (req, res) => {
+    try {
+      const records = improvementMemory.getAllRecords();
+      const successful = improvementMemory.findSuccessfulImprovements();
+      const failed = improvementMemory.findFailedImprovements();
+      res.json({
+        success: true,
+        total: records.length,
+        successfulCount: successful.length,
+        failedCount: failed.length,
+        records,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete('/api/self-improvement/memory', requireApiKey, (req, res) => {
+    try {
+      improvementMemory.clearMemory();
+      res.json({ success: true, message: 'Improvement memory cleared.' });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/self-improvement/reset-failures', requireApiKey, (req, res) => {
+    try {
+      selfImprovementEngine.resetFailureCount();
+      res.json({ success: true, message: 'Consecutive failure counter reset.' });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get('/api/self-improvement/stream', requireApiKey, (req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders?.();
+
+    const sendEvent = (data: any) => {
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+    };
+
+    // Send initial status
+    sendEvent({
+      type: 'INIT',
+      current: selfImprovementEngine.getCurrentCycle(),
+      totalCycles: selfImprovementEngine.getAllCycles().length,
+    });
+
+    const unsubscribe = selfImprovementEngine.subscribe((event) => {
+      sendEvent({ type: 'CYCLE_EVENT', ...event });
+    });
+
+    req.on('close', () => {
+      unsubscribe();
+      res.end();
+    });
   });
 
   // -------------------------------------------------------------

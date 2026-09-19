@@ -1,6 +1,7 @@
 import assert from 'assert';
 import fs from 'fs';
 import path from 'path';
+import { execSync } from 'child_process';
 import { WorkflowOrchestrator } from '../../server/workflowOrchestrator';
 import { CodingAgentManager } from '../../server/codingAgents/codingAgentManager';
 import { MockCodingAgent } from '../../server/codingAgents/mockCodingAgent';
@@ -9,6 +10,7 @@ import { GitHubManager } from '../../server/github/githubManager';
 import { GitHubClient } from '../../server/github/githubClient';
 import { ProviderManager } from '../../server/providerManager';
 import { VirtualWorkspace } from '../../server/virtualWorkspace';
+import { ICodingAgent, CodingAgentSession, ICodingAgentSessionStore } from '../../server/codingAgents/types';
 
 export async function runWorkflowOrchestratorIntegrationTests() {
   console.log('\n====================================================');
@@ -27,19 +29,75 @@ export async function runWorkflowOrchestratorIntegrationTests() {
     console.log('Integration Test 1: Background Poller autonomously advances RUNNING -> COMPLETED with full Git delivery');
     const testSessionFile = path.join(testDataDir, 'test_poller_async.json');
     const sessionStore = new FileBackedCodingAgentSessionStore(testSessionFile);
-    const mockAgent = new MockCodingAgent(sessionStore);
     
-    // Start session in QUEUED
-    mockAgent.setMockSession({
-      state: 'QUEUED',
-      resultSummary: 'Session initialized in queue',
-    });
+    class StubJulesAgent implements ICodingAgent {
+      readonly id = 'jules';
+      readonly name = 'Google Jules';
+      private sessionStore: ICodingAgentSessionStore;
+      private mockSessionState: any = null;
+
+      constructor(sessionStore: ICodingAgentSessionStore) {
+        this.sessionStore = sessionStore;
+      }
+      setMockSession(state: any) {
+        this.mockSessionState = state;
+      }
+      async startSession(request: any): Promise<CodingAgentSession> {
+        const id = 'jules_sess_' + Math.random().toString(36).substring(2, 9);
+        const session: CodingAgentSession = {
+          id,
+          agentId: 'jules',
+          repository: request.repository,
+          branch: request.branch,
+          task: request.task,
+          state: 'QUEUED',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        await this.sessionStore.saveSession(session);
+        return session;
+      }
+      async getSession(id: string): Promise<CodingAgentSession> {
+        const stored = await this.sessionStore.getSession(id);
+        if (this.mockSessionState) {
+          return {
+            ...stored!,
+            ...this.mockSessionState,
+          };
+        }
+        return stored!;
+      }
+      async cancelSession(id: string): Promise<CodingAgentSession> {
+        const stored = await this.sessionStore.getSession(id);
+        const updated = { ...stored!, state: 'CANCELLED' as const };
+        await this.sessionStore.saveSession(updated);
+        return updated;
+      }
+      async sendPrompt(): Promise<CodingAgentSession> {
+        throw new Error('Not implemented');
+      }
+      async listActivities(): Promise<any[]> {
+        return [];
+      }
+    }
+
+    const julesAgent = new StubJulesAgent(sessionStore);
+    const mockAgent = new MockCodingAgent(sessionStore);
 
     const codingAgentManager = new CodingAgentManager({
       sessionStore,
-      julesAgent: mockAgent as any,
+      julesAgent: julesAgent as any,
       mockAgent,
     });
+
+    const tempGitDir = path.join(testDataDir, `repo_${Date.now()}`);
+    fs.mkdirSync(tempGitDir, { recursive: true });
+    execSync('git init', { cwd: tempGitDir, stdio: 'ignore' });
+    execSync('git remote add origin https://github.com/MohamedGH/agentTeam.git', { cwd: tempGitDir, stdio: 'ignore' });
+    execSync('git config user.name "Test Runner"', { cwd: tempGitDir, stdio: 'ignore' });
+    execSync('git config user.email "test@example.com"', { cwd: tempGitDir, stdio: 'ignore' });
+    fs.writeFileSync(path.join(tempGitDir, 'package.json'), JSON.stringify({ name: 'agent-team', scripts: { test: 'node -e "process.exit(0)"' } }));
+    execSync('git add package.json && git commit -m "init"', { cwd: tempGitDir, stdio: 'ignore' });
 
     let gitProcessed = false;
     const mockGithubClient = new GitHubClient({
@@ -88,7 +146,8 @@ export async function runWorkflowOrchestratorIntegrationTests() {
     });
 
     const workflow = await orchestrator.startWorkflow({
-      agent: 'mock',
+      agent: 'jules',
+      workingDirectory: tempGitDir,
       repository: 'MohamedGH/agentTeam',
       branch: 'main',
       taskPrompt: 'Async background orchestrator integration test',
@@ -101,14 +160,14 @@ export async function runWorkflowOrchestratorIntegrationTests() {
 
     // Simulate Jules making progressive activities and then completing in cloud
     setTimeout(() => {
-      mockAgent.setMockSession({
+      julesAgent.setMockSession({
         state: 'IN_PROGRESS',
         resultSummary: 'Implementing code changes',
       });
     }, 80);
 
     setTimeout(() => {
-      mockAgent.setMockSession({
+      julesAgent.setMockSession({
         state: 'COMPLETED',
         resultSummary: 'All code generated and verified in cloud',
         prUrl: 'https://github.com/MohamedGH/agentTeam/pull/55',

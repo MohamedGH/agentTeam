@@ -1,6 +1,7 @@
 import assert from 'assert';
 import { codingAgentManager } from '../../server/codingAgents/codingAgentManager';
 import { agentTeamEngine } from '../../server/agentTeam';
+import { workflowOrchestrator } from '../../server/workflowOrchestrator';
 import { GitHubManager } from '../../server/github/githubManager';
 import { GitHubClient } from '../../server/github/githubClient';
 import { GitHubRepository } from '../../server/github/githubRepository';
@@ -93,9 +94,50 @@ export async function runGitHubWorkflowIntegrationTests() {
   // Inject test GitHubManager into CodingAgentManager
   (codingAgentManager as any).githubManager = testGitHubManager;
 
+  const stubJules = {
+    id: 'jules',
+    name: 'Google Jules',
+    isConfigured: () => true,
+    executeTask: async (task: any) => ({
+      sessionId: 'jules_sess_' + Math.random().toString(36).substring(2, 9),
+      status: 'COMPLETED',
+      executionStatus: 'COMPLETED',
+      summary: 'Automated changes completed',
+      gitBranch: task.branch || 'main',
+    }),
+    startSession: async (task: any) => {
+      const id = 'jules_sess_' + Math.random().toString(36).substring(2, 9);
+      return {
+        id,
+        agentId: 'jules',
+        repository: task.repository,
+        branch: task.branch || 'main',
+        task: task.task,
+        state: 'COMPLETED',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    },
+    getSession: async (id: string) => ({
+      id,
+      agentId: 'jules',
+      repository: 'MohamedGH/agentTeam',
+      branch: 'main',
+      task: 'task',
+      state: 'COMPLETED',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }),
+    listActivities: async () => [],
+    sendMessage: async () => {},
+    approvePlan: async () => {},
+    cancelSession: async () => ({ state: 'CANCELLED' }),
+  };
+  codingAgentManager.registerAgent(stubJules as any);
+
   // 3a. Test Unverified Review Safety: codingAgentManager blocks Git mutation when reviewApproved is undefined
   const unreviewedResult = await codingAgentManager.execute({
-    agent: 'mock',
+    agent: 'jules',
     repository: 'MohamedGH/agentTeam',
     branch: 'main',
     task: 'Enhance automated GitHub deployment for Jules agent without review',
@@ -111,7 +153,7 @@ export async function runGitHubWorkflowIntegrationTests() {
 
   // 3b. Test Jules -> Modification -> Commit -> Push -> PR Workflow with explicit review approval
   const fullWorkflowResult = await codingAgentManager.execute({
-    agent: 'mock',
+    agent: 'jules',
     repository: 'MohamedGH/agentTeam',
     branch: 'main',
     task: 'Enhance automated GitHub deployment for Jules agent',
@@ -161,6 +203,7 @@ export async function runGitHubWorkflowIntegrationTests() {
 
   // 5. Test Full AgentTeam Workflow with Jules & GitHub Pipeline
   (codingAgentManager as any).githubManager = testGitHubManager;
+  (workflowOrchestrator as any).githubManager = testGitHubManager;
 
   const teamRunResult = await agentTeamEngine.runWorkflow(
     'Refactor error handling and push PR to GitHub',
@@ -168,7 +211,7 @@ export async function runGitHubWorkflowIntegrationTests() {
     undefined,
     {
       provider: 'mock',
-      codingAgent: 'mock',
+      codingAgent: 'jules',
       repository: 'MohamedGH/agentTeam',
       branch: 'main',
       commitPushAndCreatePR: true,

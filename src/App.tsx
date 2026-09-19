@@ -7,6 +7,7 @@ import { WorkspaceExplorer } from './components/WorkspaceExplorer';
 import { QuotaDashboard } from './components/QuotaDashboard';
 import { RolesGuide } from './components/RolesGuide';
 import { JulesDashboard } from './components/JulesDashboard';
+import { SelfImprovementDashboard } from './components/SelfImprovementDashboard';
 import { AgentStep, FinalReport, AgentRole, ModelQuotaStatus, AIProviderId, ProviderInfo } from './types';
 import { routeManager, AppRoute } from './managers/routeManager';
 import {
@@ -639,6 +640,9 @@ export default function App() {
 
         {/* VIEW 5: GOOGLE JULES CODING AGENT DASHBOARD */}
         {activeTab === 'jules' && <JulesDashboard />}
+
+        {/* VIEW 6: SELF-IMPROVEMENT AUTONOMOUS ENGINE */}
+        {activeTab === 'auto-improve' && <SelfImprovementDashboard />}
       </main>
 
       {/* Footer */}

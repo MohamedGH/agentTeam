@@ -8,6 +8,7 @@ import { runErrorClassifierAndFailoverUnitTests } from './errorClassifierAndFail
 import { runHardeningVerificationTests } from './hardeningVerification.test';
 import { runWorkflowOrchestratorUnitTests } from './workflowOrchestrator.test';
 import { runTenRemediationsUnitTests } from './tenRemediations.test';
+import { runSelfImprovementUnitTests } from './selfImprovement.test';
 
 export async function runAllUnitTests() {
   console.log('====================================================');
@@ -24,6 +25,7 @@ export async function runAllUnitTests() {
   await runHardeningVerificationTests();
   await runWorkflowOrchestratorUnitTests();
   await runTenRemediationsUnitTests();
+  await runSelfImprovementUnitTests();
 
   console.log('\n🎉 ALL UNIT TESTS PASSED (100%)\n');
 }
