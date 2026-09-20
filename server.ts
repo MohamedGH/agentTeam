@@ -11,6 +11,7 @@ import { workflowOrchestrator } from './server/workflowOrchestrator';
 import { cloudMonitoringQuotaService } from './server/cloudMonitoring';
 import { githubManager, evaluateQualityGate } from './server/github';
 import { selfImprovementEngine, improvementMemory } from './server/selfImprovement';
+import { createLLMRoutes } from './server/llmRoutes';
 
 async function startServer() {
   const app = express();
@@ -263,6 +264,9 @@ async function startServer() {
       res.status(500).json({ error: err.message });
     }
   });
+
+  // Adaptive Multi-LLM Routing & Empirical Benchmarking APIs
+  app.use('/api/llm', createLLMRoutes());
 
   // -------------------------------------------------------------
   // AUTONOMOUS CODING AGENT APIS (Google Jules)

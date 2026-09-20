@@ -3,7 +3,7 @@
  * Manages active application views, query parameters, deep links, and browser hash navigation.
  */
 
-export type AppRoute = 'studio' | 'workspace' | 'quota' | 'roles' | 'jules' | 'auto-improve';
+export type AppRoute = 'studio' | 'workspace' | 'quota' | 'roles' | 'jules' | 'auto-improve' | 'adaptive-llm';
 
 export interface RouteState {
   currentRoute: AppRoute;

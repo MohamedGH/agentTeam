@@ -146,10 +146,10 @@ export class ProviderManager {
     return p ? p.isConfigured() : false;
   }
 
-  public getProvidersList(): ProviderInfo[] {
+  public getProvidersList(includeMock = false): ProviderInfo[] {
     const list: ProviderInfo[] = [];
     for (const [id, p] of this.providers.entries()) {
-      if (id === 'mock') continue; // Hidden from standard customer list
+      if (id === 'mock' && !includeMock) continue; // Hidden from standard customer list unless requested
       list.push({
         id,
         name: p.name,
@@ -162,6 +162,14 @@ export class ProviderManager {
       });
     }
     return list;
+  }
+
+  public getProviders(includeMock = true): ProviderInfo[] {
+    return this.getProvidersList(includeMock);
+  }
+
+  public getAllRegisteredProviders(): IAIProvider[] {
+    return Array.from(this.providers.values());
   }
 
   public hasValidCredentials(provider: AIProviderId = this.activeProvider): boolean {

@@ -376,6 +376,22 @@ export class QuotaManager {
     return (Date.now() / 1000) < this.state[model].cooloff_until;
   }
 
+  public clearCooldown(model: string) {
+    if (this.state[model]) {
+      this.state[model].cooloff_until = 0;
+      this.saveState();
+    }
+  }
+
+  public clearAllCooldowns() {
+    for (const key of Object.keys(this.state)) {
+      if (this.state[key]) {
+        this.state[key].cooloff_until = 0;
+      }
+    }
+    this.saveState();
+  }
+
   public resetState(model?: string) {
     if (model && this.state[model]) {
       const now = Date.now() / 1000;

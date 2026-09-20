@@ -8,6 +8,7 @@ import { QuotaDashboard } from './components/QuotaDashboard';
 import { RolesGuide } from './components/RolesGuide';
 import { JulesDashboard } from './components/JulesDashboard';
 import { SelfImprovementDashboard } from './components/SelfImprovementDashboard';
+import { AdaptiveLLMDashboard } from './components/AdaptiveLLMDashboard';
 import { AgentStep, FinalReport, AgentRole, ModelQuotaStatus, AIProviderId, ProviderInfo } from './types';
 import { routeManager, AppRoute } from './managers/routeManager';
 import {
@@ -643,6 +644,9 @@ export default function App() {
 
         {/* VIEW 6: SELF-IMPROVEMENT AUTONOMOUS ENGINE */}
         {activeTab === 'auto-improve' && <SelfImprovementDashboard />}
+
+        {/* VIEW 7: ADAPTIVE MULTI-LLM EMPIRICAL ROUTING */}
+        {activeTab === 'adaptive-llm' && <AdaptiveLLMDashboard />}
       </main>
 
       {/* Footer */}
