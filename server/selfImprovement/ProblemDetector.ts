@@ -43,8 +43,30 @@ export class ProblemDetector {
     const gitProblems = this.detectGitAnomalies(snapshot);
     problems.push(...gitProblems);
 
+    // 8. Detect LLM Empirical Anomalies
+    const llmProblems = this.detectLLMAnomalies(snapshot);
+    problems.push(...llmProblems);
+
     // Prioritize problems deterministically (functional sort)
     return this.prioritizeProblems(problems);
+  }
+
+  public detectLLMAnomalies(snapshot: ObservationSnapshot): DetectedProblem[] {
+    if (!snapshot.llmMetrics || !snapshot.llmMetrics.anomalies || snapshot.llmMetrics.anomalies.length === 0) {
+      return [];
+    }
+
+    return snapshot.llmMetrics.anomalies.map((anom, idx) => ({
+      id: `prob_llm_${anom.type.toLowerCase()}_${idx}_${snapshot.id.slice(-6)}`,
+      category: 'RUNTIME_ERROR' as any,
+      severity: anom.type === 'SUSTAINED_LOW_SUCCESS' ? 'HIGH' : 'MEDIUM',
+      title: `LLM Routing Anomaly: ${anom.type} on ${anom.modelId}`,
+      description: anom.details,
+      targetFiles: ['server/llm/LLMSelector.ts', 'server/llm/LLMRankingEngine.ts'],
+      suggestedFix: `Apply adaptive self-improvement plan for anomaly ${anom.type} (e.g. cooldown or exploration boost).`,
+      confidence: 0.9,
+      sourceSnapshotId: snapshot.id,
+    }));
   }
 
   public detectTestFailures(snapshot: ObservationSnapshot): DetectedProblem[] {

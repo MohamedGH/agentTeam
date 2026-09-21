@@ -162,6 +162,18 @@ export interface ObservationSnapshot {
     providerFailovers: number;
     lastError?: string;
   };
+  llmMetrics?: {
+    totalEvaluations: number;
+    operationalEvaluations: number;
+    averageScore: number;
+    modelsMeasured: number;
+    anomalies: Array<{
+      type: string;
+      modelId: string;
+      category?: string;
+      details: string;
+    }>;
+  };
 }
 
 export interface DetectedProblem {

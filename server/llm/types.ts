@@ -21,6 +21,16 @@ export type LLMStatus = 'UNMEASURED' | 'LOW_CONFIDENCE' | 'MEASURED' | 'UNAVAILA
 
 export type EvaluationSource = 'HERMETIC_FIXTURE' | 'LIVE_PROVIDER' | 'REAL_TASK';
 
+export type FailureClass =
+  | 'MODEL_FAILURE'
+  | 'PROVIDER_FAILURE'
+  | 'AUTH_FAILURE'
+  | 'QUOTA_FAILURE'
+  | 'TIMEOUT'
+  | 'EVALUATION_FAILURE';
+
+export type CostSource = 'REAL_COST' | 'ESTIMATED_COST' | 'UNKNOWN_COST';
+
 export interface ExactBenchmarkExecutionResult {
   text: string;
   requestedModelId: string;
@@ -33,6 +43,9 @@ export interface ExactBenchmarkExecutionResult {
   completionTokens?: number;
   success: boolean;
   error?: string;
+  failureClass?: FailureClass;
+  cost?: number;
+  costSource?: CostSource;
   latencyMs: number;
 }
 
@@ -63,11 +76,16 @@ export interface LLMModelEntry {
   contextWindow?: number;
   status: LLMStatus;
   evaluationHistoryCount: number;
+  hermeticCount?: number;
+  liveProviderCount?: number;
+  realTaskCount?: number;
+  operationalCount?: number;
   lastEvaluatedAt?: number;
 }
 
 export interface LLMEvaluation {
   id: string;
+  runId?: string;
   modelId: string;
   providerId: AIProviderId;
   modelVersion?: string;
@@ -79,11 +97,13 @@ export interface LLMEvaluation {
   score: number; // 0.0 to 1.0
   latencyMs: number;
   estimatedCost?: number;
+  costSource?: CostSource;
   testsPassed: number;
   totalTests: number;
   regressionDetected: boolean;
   evaluatorVersion: string;
   timestamp: number;
+  failureClass?: FailureClass;
   details?: Record<string, any>;
   isLiveBenchmark?: boolean;
   outputSample?: string;
@@ -93,6 +113,7 @@ export interface LLMEvaluation {
     actualModelId: string;
     actualProviderId: AIProviderId;
     failoverUsed: boolean;
+    failureClass?: FailureClass;
   };
 }
 
@@ -157,7 +178,7 @@ export interface SelectionConstraints {
 export interface SelectionDecision {
   selectedModelId: string;
   selectedProviderId: AIProviderId;
-  decisionType: 'EXPLOITATION' | 'EXPLORATION' | 'FALLBACK';
+  decisionType: 'EXPLOITATION' | 'EXPLORATION' | 'FALLBACK' | 'MANUAL_OVERRIDE' | 'CONSTRAINT_FALLBACK';
   candidateEvaluatedCount: number;
   reason: string;
   confidence: number;

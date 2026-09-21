@@ -3,6 +3,7 @@ import { quotaManager } from '../quotaManager';
 import { BENCHMARK_DATASET } from '../../tests/benchmarks/dataset';
 import {
   BenchmarkDefinition,
+  CostSource,
   ExactBenchmarkExecutionResult,
   LLMEvaluation,
   LLMTelemetryEvent,
@@ -11,6 +12,7 @@ import {
 import { LLMPerformanceEvaluator, llmPerformanceEvaluator as defaultEvaluator } from './LLMPerformanceEvaluator';
 import { LLMPerformanceMemory, llmPerformanceMemory as defaultMemory } from './LLMPerformanceMemory';
 import { LLMRegistry, llmRegistry as defaultRegistry } from './LLMRegistry';
+import { calculateModelCost } from './pricing';
 
 export interface BenchmarkRunOptions {
   categories?: ProblemCategory[];
@@ -28,6 +30,9 @@ export interface BenchmarkRunResult {
   successfulEvaluations: number;
   evaluations: LLMEvaluation[];
   skippedDueToQuota: string[];
+  skippedDueToCost: string[];
+  totalCost: number;
+  remainingBudget?: number;
   durationMs: number;
 }
 
@@ -114,7 +119,10 @@ export class LLMBenchmarkEngine {
 
     const evaluations: LLMEvaluation[] = [];
     const skippedDueToQuota: string[] = [];
+    const skippedDueToCost: string[] = [];
     let executedRequests = 0;
+    let totalCost = 0;
+    const maxCostBudget = options.maxCostBudget !== undefined ? options.maxCostBudget : (isLive ? 5.0 : 100.0);
 
     // 3. Paired Controlled Execution:
     // For each benchmark problem, run each candidate model under identical prompt and constraints
@@ -122,6 +130,13 @@ export class LLMBenchmarkEngine {
       for (const modelEntry of modelsToTest) {
         if (executedRequests >= maxRequests) {
           break;
+        }
+
+        // Check cost budget before executing request
+        const estimatedNextCost = calculateModelCost(modelEntry.modelId, 500, 1000, 1500);
+        if (isLive && totalCost + estimatedNextCost.cost > maxCostBudget) {
+          skippedDueToCost.push(modelEntry.modelId);
+          continue;
         }
 
         // Check quota and cooldown in live mode
@@ -138,8 +153,16 @@ export class LLMBenchmarkEngine {
         }
 
         executedRequests++;
-        const evalResult = await this.executeSingleBenchmark(bench, modelEntry.modelId, modelEntry.providerId, isLive);
+        const evalResult = await this.executeSingleBenchmark(
+          bench,
+          modelEntry.modelId,
+          modelEntry.providerId,
+          isLive,
+          runId
+        );
         evaluations.push(evalResult);
+
+        totalCost += evalResult.estimatedCost || 0;
 
         // Store evaluation in memory
         this.memory.addEvaluation(evalResult);
@@ -152,7 +175,13 @@ export class LLMBenchmarkEngine {
           providerId: modelEntry.providerId,
           category: bench.category,
           evaluationId: evalResult.id,
-          details: { score: evalResult.score, success: evalResult.success, source: evalResult.evaluationSource },
+          details: {
+            score: evalResult.score,
+            success: evalResult.success,
+            source: evalResult.evaluationSource,
+            cost: evalResult.estimatedCost,
+            costSource: evalResult.costSource,
+          },
         });
       }
     }
@@ -167,6 +196,8 @@ export class LLMBenchmarkEngine {
       details: {
         total: evaluations.length,
         successful: successfulEvaluations,
+        totalCost,
+        remainingBudget: Math.max(0, maxCostBudget - totalCost),
         durationMs,
       },
     });
@@ -178,6 +209,9 @@ export class LLMBenchmarkEngine {
       successfulEvaluations,
       evaluations,
       skippedDueToQuota,
+      skippedDueToCost,
+      totalCost: Math.round(totalCost * 1_000_000) / 1_000_000,
+      remainingBudget: Math.max(0, Math.round((maxCostBudget - totalCost) * 1_000_000) / 1_000_000),
       durationMs,
     };
   }
@@ -189,11 +223,12 @@ export class LLMBenchmarkEngine {
     bench: BenchmarkDefinition,
     modelId: string,
     providerId: any,
-    isLive: boolean
+    isLive: boolean,
+    runId?: string
   ): Promise<LLMEvaluation> {
     const startTime = Date.now();
     let outputText = '';
-    let estimatedCost = 0;
+    let costResult: { cost: number; source: CostSource } = { cost: 0, source: 'REAL_COST' };
     let proof: ExactBenchmarkExecutionResult | undefined;
 
     const fullPrompt = `You are solving an objective benchmark.
@@ -213,7 +248,7 @@ Provide a clean, precise solution adhering strictly to requirements.`;
         if (bench.category === 'MATHEMATICS' && bench.criteria.expectedExactAnswer !== undefined) {
           outputText += `Result: ${bench.criteria.expectedExactAnswer}`;
         }
-        estimatedCost = 0;
+        costResult = { cost: 0, source: 'REAL_COST' };
       } else {
         // Live provider or Mock provider execution using ZERO FAILOVER method
         proof = await this.providerMgr.generateExactModelForBenchmark({
@@ -225,32 +260,39 @@ Provide a clean, precise solution adhering strictly to requirements.`;
         });
 
         outputText = proof.text;
-        const tokens = proof.totalTokens || 250;
-        estimatedCost = this.estimateCost(modelId, tokens);
+        costResult = calculateModelCost(
+          modelId,
+          proof.promptTokens,
+          proof.completionTokens,
+          proof.totalTokens,
+          Boolean(proof.promptTokens && proof.completionTokens)
+        );
       }
     } catch (err: any) {
       console.warn(`[LLMBenchmarkEngine] Model ${modelId} failed during benchmark ${bench.id}:`, err);
       outputText = '';
+      costResult = calculateModelCost(modelId, 0, 0, 0);
     }
 
     const latencyMs = Date.now() - startTime;
 
-    return this.evaluator.evaluateBenchmarkOutput(
+    const evaluation = this.evaluator.evaluateBenchmarkOutput(
       bench,
       modelId,
       providerId,
       outputText,
       latencyMs,
-      estimatedCost,
+      costResult.cost,
       isLive,
       proof
     );
-  }
 
-  private estimateCost(modelId: string, totalTokens: number): number {
-    if (modelId.includes('ultra') || modelId.includes('opus')) return (totalTokens / 1000) * 0.015;
-    if (modelId.includes('pro') || modelId.includes('gpt-4') || modelId.includes('sonnet')) return (totalTokens / 1000) * 0.003;
-    return (totalTokens / 1000) * 0.00015;
+    evaluation.costSource = costResult.source;
+    if (runId) {
+      evaluation.runId = runId;
+    }
+
+    return evaluation;
   }
 }
 

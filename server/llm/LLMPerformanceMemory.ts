@@ -24,9 +24,26 @@ export class LLMPerformanceMemory {
 
   /**
    * Adds an evaluation record and invalidates relevant stats caches.
+   * Enforces duplicate identity protection to avoid inflating sample counts.
    */
   public addEvaluation(evaluation: LLMEvaluation): void {
-    this.evaluations.push(evaluation);
+    const existingIndex = this.evaluations.findIndex(
+      (e) =>
+        e.id === evaluation.id ||
+        (e.modelId === evaluation.modelId &&
+          e.category === evaluation.category &&
+          Boolean(e.problemId) &&
+          e.problemId === evaluation.problemId &&
+          Boolean(e.runId) &&
+          e.runId === evaluation.runId)
+    );
+
+    if (existingIndex >= 0) {
+      this.evaluations[existingIndex] = evaluation;
+    } else {
+      this.evaluations.push(evaluation);
+    }
+
     this.recomputeStatsFor(evaluation.modelId, evaluation.category, evaluation.complexity, evaluation.modelVersion);
     this.persist();
   }
@@ -36,7 +53,21 @@ export class LLMPerformanceMemory {
    */
   public addEvaluations(evals: LLMEvaluation[]): void {
     for (const e of evals) {
-      this.evaluations.push(e);
+      const existingIndex = this.evaluations.findIndex(
+        (existing) =>
+          existing.id === e.id ||
+          (existing.modelId === e.modelId &&
+            existing.category === e.category &&
+            Boolean(existing.problemId) &&
+            existing.problemId === e.problemId &&
+            Boolean(existing.runId) &&
+            existing.runId === e.runId)
+      );
+      if (existingIndex >= 0) {
+        this.evaluations[existingIndex] = e;
+      } else {
+        this.evaluations.push(e);
+      }
       this.recomputeStatsFor(e.modelId, e.category, e.complexity, e.modelVersion);
     }
     this.persist();
@@ -99,6 +130,35 @@ export class LLMPerformanceMemory {
   }
 
   /**
+   * Returns broken-down counts of evaluations across all source types
+   */
+  public getModelEvaluationCounts(modelId: string): {
+    hermeticCount: number;
+    liveProviderCount: number;
+    realTaskCount: number;
+    operationalCount: number;
+  } {
+    const allForModel = this.getEvaluations({ modelId, sources: ALL_SOURCES });
+    let hermeticCount = 0;
+    let liveProviderCount = 0;
+    let realTaskCount = 0;
+
+    for (const e of allForModel) {
+      const src = e.evaluationSource || (e.isLiveBenchmark ? 'LIVE_PROVIDER' : 'HERMETIC_FIXTURE');
+      if (src === 'HERMETIC_FIXTURE') hermeticCount++;
+      else if (src === 'LIVE_PROVIDER') liveProviderCount++;
+      else if (src === 'REAL_TASK') realTaskCount++;
+    }
+
+    return {
+      hermeticCount,
+      liveProviderCount,
+      realTaskCount,
+      operationalCount: liveProviderCount + realTaskCount,
+    };
+  }
+
+  /**
    * Timestamp of last evaluation for a given model
    */
   public getModelLastEvaluatedAt(modelId: string, sources?: EvaluationSource[]): number | undefined {
@@ -147,24 +207,14 @@ export class LLMPerformanceMemory {
     version?: string,
     sources?: EvaluationSource[]
   ): void {
-    let filtered = this.getEvaluations({
+    const targetSources = sources || OPERATIONAL_SOURCES;
+    const filtered = this.getEvaluations({
       modelId,
       category,
       complexity,
       version,
-      sources: sources || OPERATIONAL_SOURCES,
+      sources: targetSources,
     });
-
-    // If default (undefined sources) was requested and no operational evaluations exist, check ALL_SOURCES as fallback
-    if (!sources && filtered.length === 0) {
-      filtered = this.getEvaluations({
-        modelId,
-        category,
-        complexity,
-        version,
-        sources: ALL_SOURCES,
-      });
-    }
 
     const key = this.buildKey(modelId, category, complexity, version, sources);
 
@@ -173,20 +223,32 @@ export class LLMPerformanceMemory {
       return;
     }
 
-    const sampleCount = filtered.length;
-    const meanScore = filtered.reduce((acc, curr) => acc + curr.score, 0) / sampleCount;
-    const successCount = filtered.filter((e) => e.success).length;
+    // Only evaluations that succeeded OR failed due to model/evaluation failures are factored into performance scores
+    // Infrastructure failures (provider downtime, quota exhaustion, auth errors, network timeouts) are logged for telemetry
+    // but do not drag down the model's score or rank.
+    const rankableEvals = filtered.filter(
+      (e) => !e.failureClass || e.failureClass === 'MODEL_FAILURE' || e.failureClass === 'EVALUATION_FAILURE'
+    );
+
+    if (rankableEvals.length === 0) {
+      this.statsCache.delete(key);
+      return;
+    }
+
+    const sampleCount = rankableEvals.length;
+    const meanScore = rankableEvals.reduce((acc, curr) => acc + curr.score, 0) / sampleCount;
+    const successCount = rankableEvals.filter((e) => e.success).length;
     const successRate = successCount / sampleCount;
-    const meanLatencyMs = filtered.reduce((acc, curr) => acc + curr.latencyMs, 0) / sampleCount;
-    const meanCost = filtered.reduce((acc, curr) => acc + (curr.estimatedCost || 0), 0) / sampleCount;
-    const lastEvaluatedAt = Math.max(...filtered.map((e) => e.timestamp));
-    const providerId = filtered[0].providerId;
+    const meanLatencyMs = rankableEvals.reduce((acc, curr) => acc + curr.latencyMs, 0) / sampleCount;
+    const meanCost = rankableEvals.reduce((acc, curr) => acc + (curr.estimatedCost || 0), 0) / sampleCount;
+    const lastEvaluatedAt = Math.max(...rankableEvals.map((e) => e.timestamp));
+    const providerId = rankableEvals[0].providerId;
 
     // Statistical Confidence Calculation:
     // Uses sample count saturation curve with variance penalty
     // N / (N + 4) provides smooth confidence growth:
     // N=1 -> 0.20, N=3 -> 0.43, N=5 -> 0.56, N=10 -> 0.71, N=20 -> 0.83
-    const variance = filtered.reduce((acc, curr) => acc + Math.pow(curr.score - meanScore, 2), 0) / sampleCount;
+    const variance = rankableEvals.reduce((acc, curr) => acc + Math.pow(curr.score - meanScore, 2), 0) / sampleCount;
     const baseConfidence = sampleCount / (sampleCount + 4);
     const confidence = Math.max(0.05, Math.min(1.0, baseConfidence * (1 - Math.min(0.5, variance))));
 
@@ -255,22 +317,21 @@ export class LLMPerformanceMemory {
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
       }
-      fs.writeFileSync(
-        this.storagePath,
-        JSON.stringify(
-          {
-            version: '2.0.0',
-            updatedAt: Date.now(),
-            totalEvaluations: this.evaluations.length,
-            evaluations: this.evaluations,
-          },
-          null,
-          2
-        ),
-        'utf-8'
+      const tempPath = `${this.storagePath}.${Date.now()}.${Math.random().toString(36).substring(2, 8)}.tmp`;
+      const data = JSON.stringify(
+        {
+          version: '2.0.0',
+          updatedAt: Date.now(),
+          totalEvaluations: this.evaluations.length,
+          evaluations: this.evaluations,
+        },
+        null,
+        2
       );
+      fs.writeFileSync(tempPath, data, 'utf-8');
+      fs.renameSync(tempPath, this.storagePath);
     } catch (err) {
-      console.warn('[LLMPerformanceMemory] Failed to persist evaluations to disk:', err);
+      console.warn('[LLMPerformanceMemory] Failed to persist evaluations to disk atomically:', err);
     }
   }
 }

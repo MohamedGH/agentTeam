@@ -266,7 +266,7 @@ async function startServer() {
   });
 
   // Adaptive Multi-LLM Routing & Empirical Benchmarking APIs
-  app.use('/api/llm', createLLMRoutes());
+  app.use('/api/llm', createLLMRoutes(requireApiKey));
 
   // -------------------------------------------------------------
   // AUTONOMOUS CODING AGENT APIS (Google Jules)

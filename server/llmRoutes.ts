@@ -1,15 +1,16 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, RequestHandler } from 'express';
 import { problemClassifier } from './llm/ProblemClassifier';
 import { llmRegistry } from './llm/LLMRegistry';
 import { llmRankingEngine } from './llm/LLMRankingEngine';
 import { llmSelector } from './llm/LLMSelector';
 import { llmBenchmarkEngine } from './llm/LLMBenchmarkEngine';
 import { llmPerformanceMemory } from './llm/LLMPerformanceMemory';
-import { llmSelfImprovementAdapter } from './llm/LLMSelfImprovementAdapter';
+import { llmSelfImprovementAdapter } from './selfImprovement/LLMSelfImprovementAdapter';
 import { ProblemCategory, ProblemComplexity } from './llm/types';
 
-export function createLLMRoutes(): Router {
+export function createLLMRoutes(authMiddleware?: RequestHandler): Router {
   const router = Router();
+  const requireAuth = authMiddleware || ((_req: Request, _res: Response, next: () => void) => next());
 
   // 1. Classify a problem
   router.post('/classify', (req: Request, res: Response) => {
@@ -81,8 +82,8 @@ export function createLLMRoutes(): Router {
     }
   });
 
-  // 6. Run controlled benchmark suite
-  router.post('/benchmark/run', async (req: Request, res: Response) => {
+  // 6. Run controlled benchmark suite (MUTATION - Protected)
+  router.post('/benchmark/run', requireAuth, async (req: Request, res: Response) => {
     try {
       const { categories, benchmarkIds, candidateModels, isLive, maxRequestsBudget, maxCostBudget } = req.body;
       const result = await llmBenchmarkEngine.runBenchmarks({
@@ -114,8 +115,8 @@ export function createLLMRoutes(): Router {
     }
   });
 
-  // 8. Clear empirical memory
-  router.post('/memory/clear', (req: Request, res: Response) => {
+  // 8. Clear empirical memory (MUTATION - Protected)
+  router.post('/memory/clear', requireAuth, (req: Request, res: Response) => {
     try {
       llmPerformanceMemory.clear();
       res.json({ success: true, message: 'LLM performance memory cleared.' });
@@ -124,13 +125,47 @@ export function createLLMRoutes(): Router {
     }
   });
 
-  // 9. Self-Improvement diagnostic audit
-  router.get('/health', (req: Request, res: Response) => {
+  // 9. Self-Improvement anomalies detection
+  router.get('/self-improvement/anomalies', (req: Request, res: Response) => {
     try {
-      const health = llmSelfImprovementAdapter.inspectLLMPerformance();
-      res.json({ success: true, health });
+      const anomalies = llmSelfImprovementAdapter.detectAnomalies();
+      res.json({ success: true, count: anomalies.length, anomalies });
     } catch (err: any) {
-      res.status(500).json({ error: err.message || 'Failed to inspect health' });
+      res.status(500).json({ error: err.message || 'Failed to detect anomalies' });
+    }
+  });
+
+  // 10. Execute self-improvement adaptation cycle (MUTATION - Protected)
+  router.post('/self-improvement/adaptations/run', requireAuth, async (req: Request, res: Response) => {
+    try {
+      const anomalies = llmSelfImprovementAdapter.detectAnomalies();
+      const plans = llmSelfImprovementAdapter.planAdaptations(anomalies);
+      const records = [];
+
+      for (const plan of plans) {
+        const record = await llmSelfImprovementAdapter.applyAdaptation(plan);
+        await llmSelfImprovementAdapter.verifyAdaptation(record.id);
+        records.push(record);
+      }
+
+      res.json({
+        success: true,
+        anomaliesDetected: anomalies.length,
+        adaptationsExecuted: records.length,
+        records,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Adaptation run failed' });
+    }
+  });
+
+  // 11. Self-Improvement history
+  router.get('/self-improvement/history', (req: Request, res: Response) => {
+    try {
+      const history = llmSelfImprovementAdapter.getHistory();
+      res.json({ success: true, count: history.length, history });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to get history' });
     }
   });
 

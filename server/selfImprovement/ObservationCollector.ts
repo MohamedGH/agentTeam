@@ -10,6 +10,9 @@ import {
   LintMetric,
 } from './types';
 import { providerManager } from '../providerManager';
+import { llmSelfImprovementAdapter } from './LLMSelfImprovementAdapter';
+import { llmPerformanceMemory, OPERATIONAL_SOURCES } from '../llm/LLMPerformanceMemory';
+import { llmRegistry } from '../llm/LLMRegistry';
 
 export interface ObserverConfig {
   testCommand?: string;
@@ -64,6 +67,15 @@ export class ObservationCollector {
     const gitStatus = this.checkGitStatus(resolvedDir);
     const runtimeHealth = this.checkRuntimeHealth();
 
+    // Collect empirical LLM telemetry and anomalies
+    const operationalEvals = llmPerformanceMemory.getEvaluations({ sources: OPERATIONAL_SOURCES });
+    const allEvals = llmPerformanceMemory.getEvaluations();
+    const anomalies = llmSelfImprovementAdapter.detectAnomalies();
+    const modelsMeasured = llmRegistry.discoverModels().filter((m) => m.status === 'MEASURED').length;
+    const averageScore = operationalEvals.length > 0
+      ? Math.round((operationalEvals.reduce((a, b) => a + b.score, 0) / operationalEvals.length) * 100) / 100
+      : 0;
+
     return {
       id,
       timestamp,
@@ -81,6 +93,18 @@ export class ObservationCollector {
       codeSmells,
       git: gitStatus,
       runtimeHealth,
+      llmMetrics: {
+        totalEvaluations: allEvals.length,
+        operationalEvaluations: operationalEvals.length,
+        averageScore,
+        modelsMeasured,
+        anomalies: anomalies.map((a) => ({
+          type: a.type,
+          modelId: a.modelId,
+          category: a.category,
+          details: a.details,
+        })),
+      },
     };
   }
 

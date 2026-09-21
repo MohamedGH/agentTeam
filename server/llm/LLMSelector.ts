@@ -137,36 +137,112 @@ export class LLMSelector {
     if (constraints.forceModelId) {
       const entry = this.registry.getModel(constraints.forceModelId);
       if (entry && entry.availability) {
+        // Look up empirical statistics for this model in memory
+        const stats =
+          this.memory.getStats(
+            entry.modelId,
+            classified.category,
+            classified.complexity,
+            entry.version,
+            ['LIVE_PROVIDER', 'REAL_TASK']
+          ) ||
+          this.memory.getStats(
+            entry.modelId,
+            classified.category,
+            undefined,
+            entry.version,
+            ['LIVE_PROVIDER', 'REAL_TASK']
+          );
+
+        const confidence = stats ? stats.confidence : 0.1;
+        const predictedScore = stats ? stats.meanScore : 0.5;
+
         return {
           selectedModelId: entry.modelId,
           selectedProviderId: entry.providerId,
-          decisionType: 'FALLBACK',
+          decisionType: 'MANUAL_OVERRIDE',
           candidateEvaluatedCount: 1,
-          reason: `Model explicitly requested via constraints: ${entry.modelId}`,
-          confidence: 1.0,
-          predictedScore: 0.8,
+          reason: `Model explicitly requested via manual override: ${entry.modelId}${
+            stats
+              ? ` (empirical score: ${stats.meanScore}, confidence: ${stats.confidence})`
+              : ' (no empirical data)'
+          }`,
+          confidence,
+          predictedScore,
           classifiedProblem: classified,
         };
       }
     }
 
     // 2. Discover available candidates filtered strictly by capabilities
-    const eligible = this.registry.getEligibleCandidates(
+    let eligible = this.registry.getEligibleCandidates(
       classified.requiredCapabilities,
       true, // allow unmeasured
       constraints.preferredProviders
     ).filter((m) => !constraints.excludeModels?.includes(m.modelId));
 
+    // Filter by quota and cooldown status
+    eligible = eligible.filter((m) => {
+      if (quotaManager.isModelInCooldown(m.modelId)) return false;
+      const quotaCheck = quotaManager.canUseModel(m.modelId, 'tier_3', classified.estimatedTokens || 1000);
+      return quotaCheck.ok;
+    });
+
+    // Enforce hard constraints: maxLatencyMs and maxCost
+    if (constraints.maxLatencyMs !== undefined || constraints.maxCost !== undefined) {
+      const constraintEligible = eligible.filter((m) => {
+        const stats =
+          this.memory.getStats(m.modelId, classified.category, classified.complexity, m.version, [
+            'LIVE_PROVIDER',
+            'REAL_TASK',
+          ]) ||
+          this.memory.getStats(m.modelId, classified.category, undefined, m.version, [
+            'LIVE_PROVIDER',
+            'REAL_TASK',
+          ]);
+
+        if (!stats || stats.sampleCount === 0) {
+          return true; // Allow exploration of unmeasured models unless strictly measured required
+        }
+
+        if (constraints.maxLatencyMs !== undefined && stats.meanLatencyMs > constraints.maxLatencyMs) {
+          return false;
+        }
+        if (constraints.maxCost !== undefined && stats.meanCost > constraints.maxCost) {
+          return false;
+        }
+        return true;
+      });
+
+      if (constraintEligible.length === 0 && eligible.length > 0) {
+        const fallback = eligible[0];
+        return {
+          selectedModelId: fallback.modelId,
+          selectedProviderId: fallback.providerId,
+          decisionType: 'CONSTRAINT_FALLBACK',
+          candidateEvaluatedCount: eligible.length,
+          reason: `All eligible candidates violated constraints (maxLatencyMs: ${constraints.maxLatencyMs}, maxCost: ${constraints.maxCost}). Selected fallback candidate ${fallback.modelId}.`,
+          confidence: 0.1,
+          predictedScore: 0.5,
+          classifiedProblem: classified,
+        };
+      }
+
+      eligible = constraintEligible;
+    }
+
     if (eligible.length === 0) {
       // Fallback to any active provider default model
-      const all = this.registry.discoverModels().filter((m) => m.availability);
+      const all = this.registry
+        .discoverModels()
+        .filter((m) => m.availability && !quotaManager.isModelInCooldown(m.modelId));
       const fallback = all[0] || { modelId: 'mock-agent-v1', providerId: 'mock' };
       return {
         selectedModelId: fallback.modelId,
-        selectedProviderId: fallback.providerId,
+        selectedProviderId: fallback.providerId as any,
         decisionType: 'FALLBACK',
         candidateEvaluatedCount: 0,
-        reason: 'No eligible candidates matching required capabilities and quota.',
+        reason: 'No eligible candidates matching required capabilities and quota/cooldown status.',
         confidence: 0.1,
         predictedScore: 0.5,
         classifiedProblem: classified,
@@ -252,7 +328,25 @@ export class LLMSelector {
         eligible.length >= 2
       ) {
         isEnsemble = true;
-        ensembleModels = eligible.slice(0, 3).map((e) => ({ modelId: e.modelId, providerId: e.providerId }));
+        const candidates: Array<{ modelId: string; providerId: AIProviderId }> = [];
+        // 1. Add top ranked eligible models
+        for (const ranked of ranking.rankedModels) {
+          const match = eligible.find((e) => e.modelId === ranked.modelId);
+          if (match && !candidates.some((c) => c.modelId === match.modelId)) {
+            candidates.push({ modelId: match.modelId, providerId: match.providerId });
+            if (candidates.length >= 3) break;
+          }
+        }
+        // 2. If fewer than 2 candidates, fill from remaining eligible models
+        if (candidates.length < 2) {
+          for (const e of eligible) {
+            if (!candidates.some((c) => c.modelId === e.modelId)) {
+              candidates.push({ modelId: e.modelId, providerId: e.providerId });
+              if (candidates.length >= 3) break;
+            }
+          }
+        }
+        ensembleModels = candidates;
       }
 
       const decision: SelectionDecision = {

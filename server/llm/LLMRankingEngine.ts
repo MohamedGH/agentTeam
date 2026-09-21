@@ -52,7 +52,7 @@ export class LLMRankingEngine {
         : complexityOrOptions || {};
 
     const complexity = options.complexity;
-    let targetSources: EvaluationSource[] = options.sources
+    const targetSources: EvaluationSource[] = options.sources
       ? options.sources
       : options.includeHermetic
       ? ALL_SOURCES
@@ -65,13 +65,7 @@ export class LLMRankingEngine {
       modelSet.set(m.modelId, { modelId: m.modelId, version: m.version });
     }
 
-    // If operational sources yielded no stats in memory and sources was not explicitly forced,
-    // fallback to ALL_SOURCES so test environments and initial fixtures remain rankable.
-    let availableStats = this.memory.getAllStats(targetSources);
-    if (!options.sources && !options.includeHermetic && availableStats.length === 0) {
-      targetSources = ALL_SOURCES;
-      availableStats = this.memory.getAllStats(ALL_SOURCES);
-    }
+    const availableStats = this.memory.getAllStats(targetSources);
 
     for (const stat of availableStats) {
       if (!modelSet.has(stat.modelId)) {

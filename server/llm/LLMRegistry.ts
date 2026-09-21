@@ -42,16 +42,26 @@ export class LLMRegistry {
         // Query memory for empirical status
         let status: LLMStatus = 'UNMEASURED';
         let evalCount = 0;
+        let hermeticCount = 0;
+        let liveProviderCount = 0;
+        let realTaskCount = 0;
+        let operationalCount = 0;
         let lastEvaluatedAt: number | undefined;
 
         if (this.memory) {
-          evalCount = this.memory.getModelEvaluationCount(m.name);
+          const counts = this.memory.getModelEvaluationCounts(m.name);
+          hermeticCount = counts.hermeticCount;
+          liveProviderCount = counts.liveProviderCount;
+          realTaskCount = counts.realTaskCount;
+          operationalCount = counts.operationalCount;
+          evalCount = operationalCount;
           lastEvaluatedAt = this.memory.getModelLastEvaluatedAt(m.name);
+
           if (!isAvailable) {
             status = 'UNAVAILABLE';
-          } else if (evalCount === 0) {
+          } else if (operationalCount === 0) {
             status = 'UNMEASURED';
-          } else if (evalCount < 3) {
+          } else if (operationalCount < 3) {
             status = 'LOW_CONFIDENCE';
           } else {
             status = 'MEASURED';
@@ -72,6 +82,10 @@ export class LLMRegistry {
           contextWindow: m.contextWindow,
           status,
           evaluationHistoryCount: evalCount,
+          hermeticCount,
+          liveProviderCount,
+          realTaskCount,
+          operationalCount,
           lastEvaluatedAt,
         });
       }
