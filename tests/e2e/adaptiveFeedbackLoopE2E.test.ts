@@ -214,7 +214,13 @@ export async function runAdaptiveFeedbackLoopE2ETests(): Promise<void> {
   // STEP 10: FULL PIPELINE INTEGRATION VIA AgentTeamEngine
   // --------------------------------------------------------------------------
   console.log('\n--- Step 10: Full Production AgentTeamEngine Workflow Real Task Ingestion ---');
-  const engine = new AgentTeamEngine();
+  const engine = new AgentTeamEngine({
+    llmPerformanceMemory: memory,
+    llmPerformanceEvaluator: evaluator,
+    llmSelector: selector,
+    problemClassifier: classifier,
+    rankingEngine,
+  });
   const runResult = await engine.runWorkflow(
     'Create an in-memory event bus in TypeScript',
     'tier_3',
@@ -227,9 +233,9 @@ export async function runAdaptiveFeedbackLoopE2ETests(): Promise<void> {
   assert(runResult.selectionDecision !== undefined, 'Workflow attaches selectionDecision');
   assert(runResult.realTaskEvaluationId !== undefined, 'Workflow produces realTaskEvaluationId');
 
-  // Verify that the engine's real task was recorded in global memory
-  const globalEvals = memory.getEvaluations({ sources: ['REAL_TASK'] });
-  assert(globalEvals.length >= 2, 'Global memory contains REAL_TASK records from production workflow');
+  // Verify that the engine's real task was recorded in memory
+  const memoryEvals = memory.getEvaluations({ sources: ['REAL_TASK'] });
+  assert(memoryEvals.length >= 2, 'Memory contains REAL_TASK records from production workflow');
 
   // Clean up test file
   if (fs.existsSync(testStoragePath)) {

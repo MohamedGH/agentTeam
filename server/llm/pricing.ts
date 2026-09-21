@@ -45,9 +45,9 @@ export const KNOWN_MODEL_PRICING: Record<string, ModelPricing> = {
 /**
  * Calculates model request cost based on exact model pricing registry.
  * Explicitly identifies the cost source:
- * - REAL_COST: mock models ($0) or explicit provider billed usage
- * - ESTIMATED_COST: calculated from exact model pricing table * actual token counts
- * - UNKNOWN_COST: model not in pricing table and no token data
+ * - REAL_COST: mock models ($0) or explicit provider billed usage with exact known rates
+ * - ESTIMATED_COST: calculated from exact model pricing table * estimated/counted token counts
+ * - UNKNOWN_COST: model not in pricing table or missing token data
  */
 export function calculateModelCost(
   modelId: string,
@@ -63,10 +63,6 @@ export function calculateModelCost(
 
   const pricing = KNOWN_MODEL_PRICING[modelId];
   if (!pricing) {
-    if (totalTokens && totalTokens > 0) {
-      // Industry standard default baseline ($0.50 per million)
-      return { cost: Math.round(((totalTokens / 1_000_000) * 0.50) * 1_000_000) / 1_000_000, source: 'ESTIMATED_COST' };
-    }
     return { cost: 0, source: 'UNKNOWN_COST' };
   }
 
@@ -82,4 +78,9 @@ export function calculateModelCost(
     cost: Math.round(cost * 1_000_000) / 1_000_000,
     source: isRealUsage && promptTokens !== undefined && completionTokens !== undefined ? 'REAL_COST' : 'ESTIMATED_COST',
   };
+}
+
+export function isKnownPricingModel(modelId: string): boolean {
+  if (modelId.startsWith('mock-')) return true;
+  return Boolean(KNOWN_MODEL_PRICING[modelId]);
 }

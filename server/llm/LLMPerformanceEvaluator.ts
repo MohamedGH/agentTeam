@@ -180,6 +180,7 @@ export class LLMPerformanceEvaluator {
     providerId: AIProviderId,
     executionResult: {
       success: boolean;
+      runId?: string;
       exitCode?: number;
       testsPassed?: number;
       totalTests?: number;
@@ -191,14 +192,47 @@ export class LLMPerformanceEvaluator {
       output?: string;
       failureClass?: FailureClass;
       context?: string;
+      proof?: {
+        requestedModelId: string;
+        requestedProviderId: AIProviderId;
+        actualModelId: string;
+        actualProviderId: AIProviderId;
+        failoverUsed: boolean;
+        failureClass?: FailureClass;
+      };
     }
   ): LLMEvaluation {
-    const totalTests = executionResult.totalTests || (executionResult.success ? 1 : 1);
+    const proof = executionResult.proof || {
+      requestedModelId: modelId,
+      requestedProviderId: providerId,
+      actualModelId: modelId,
+      actualProviderId: providerId,
+      failoverUsed: false,
+      failureClass: executionResult.failureClass,
+    };
+
+    // Strict validation: requested === actual && failoverUsed === false
+    const isConforming =
+      proof.requestedModelId === proof.actualModelId &&
+      proof.requestedProviderId === proof.actualProviderId &&
+      proof.failoverUsed === false;
+
+    let isSuccess = executionResult.success;
+    let failureClass = executionResult.failureClass;
+
+    if (!isConforming) {
+      isSuccess = false;
+      if (!failureClass) {
+        failureClass = 'PROVIDER_FAILURE';
+      }
+    }
+
+    const totalTests = executionResult.totalTests || (isSuccess ? 1 : 1);
     const testsPassed = executionResult.testsPassed !== undefined
       ? executionResult.testsPassed
-      : executionResult.success ? 1 : 0;
+      : isSuccess ? 1 : 0;
 
-    let score = executionResult.success ? 1.0 : 0.0;
+    let score = isSuccess ? 1.0 : 0.0;
     if (executionResult.totalTests && executionResult.totalTests > 0) {
       score = (executionResult.testsPassed || 0) / executionResult.totalTests;
     }
@@ -208,9 +242,15 @@ export class LLMPerformanceEvaluator {
     if (executionResult.compilerErrors && executionResult.compilerErrors.length > 0) {
       score = 0;
     }
+    if (!isConforming) {
+      score = 0;
+    }
+
+    const runId = executionResult.runId || `run_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
     return {
       id: `eval_real_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      runId,
       modelId,
       providerId,
       modelVersion: this.extractVersion(modelId),
@@ -218,7 +258,7 @@ export class LLMPerformanceEvaluator {
       category: task.category,
       complexity: task.complexity,
       evaluationSource: 'REAL_TASK',
-      success: executionResult.success && !executionResult.regressionDetected,
+      success: isSuccess && !executionResult.regressionDetected,
       score: Math.round(score * 100) / 100,
       latencyMs: executionResult.latencyMs,
       estimatedCost: executionResult.estimatedCost,
@@ -228,7 +268,7 @@ export class LLMPerformanceEvaluator {
       regressionDetected: Boolean(executionResult.regressionDetected),
       evaluatorVersion: this.version,
       timestamp: Date.now(),
-      failureClass: executionResult.failureClass,
+      failureClass,
       details: {
         exitCode: executionResult.exitCode,
         compilerErrors: executionResult.compilerErrors,
@@ -238,12 +278,12 @@ export class LLMPerformanceEvaluator {
       isLiveBenchmark: false,
       outputSample: executionResult.output ? executionResult.output.slice(0, 180) : undefined,
       proof: {
-        requestedModelId: modelId,
-        requestedProviderId: providerId,
-        actualModelId: modelId,
-        actualProviderId: providerId,
-        failoverUsed: false,
-        failureClass: executionResult.failureClass,
+        requestedModelId: proof.requestedModelId,
+        requestedProviderId: proof.requestedProviderId,
+        actualModelId: proof.actualModelId,
+        actualProviderId: proof.actualProviderId,
+        failoverUsed: proof.failoverUsed,
+        failureClass,
       },
     };
   }

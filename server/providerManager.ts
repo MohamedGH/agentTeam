@@ -4,6 +4,7 @@ import {
   AIProviderId,
   ProviderModelConfig,
   GenerationUsageResult,
+  ExactSelectedModelResult,
   TokenCountResult,
   GenerationOutcome,
 } from './providers/types';
@@ -25,6 +26,7 @@ export type {
   FailoverRecord,
   ProviderErrorReason,
   ClassifiedProviderError,
+  ExactSelectedModelResult,
 };
 import { GeminiProvider } from './providers/geminiProvider';
 import { OpenAIProvider } from './providers/openaiProvider';
@@ -33,7 +35,7 @@ import { GroqProvider, DeepSeekProvider, CustomProvider } from './providers/othe
 import { MockProvider } from './providers/mockProvider';
 import { cloudMonitoringQuotaService, CloudMonitoringQuotaResult } from './cloudMonitoring';
 import { quotaManager } from './quotaManager';
-import type { ExactBenchmarkExecutionResult } from './llm/types';
+import type { ExactBenchmarkExecutionResult, FailureClass } from './llm/types';
 
 export interface ProviderInfo {
   id: AIProviderId;
@@ -544,6 +546,172 @@ export class ProviderManager {
         failoverUsed: false,
         success: false,
         error: classified.sanitizedMessage,
+        latencyMs,
+      };
+    }
+  }
+
+  /**
+   * Generates content using the EXACT selected model and provider.
+   * Dedicated to adaptive routing execution.
+   * Strictly enforces using the requested provider and model with zero silent failover.
+   * Returns complete identity proof and execution metrics.
+   */
+  public async generateExactSelectedModel(options: {
+    modelId: string;
+    prompt: string;
+    fallbackText?: string;
+    role?: string;
+    providerId?: AIProviderId;
+    timeoutMs?: number;
+  }): Promise<ExactSelectedModelResult> {
+    const { modelId, prompt, fallbackText = '', role = 'assistant', timeoutMs = 60000 } = options;
+    const providerId = options.providerId || this.inferProviderFromModel(modelId) || this.activeProvider;
+    const startTime = Date.now();
+
+    const provider = this.providers.get(providerId);
+    if (!provider) {
+      return {
+        text: fallbackText,
+        promptTokens: 0,
+        completionTokens: 0,
+        totalTokens: 0,
+        provider: providerId,
+        model: modelId,
+        isRealProviderUsage: false,
+        tokenAccountingType: 'fallback_unknown',
+        generationOutcome: 'DEGRADED_FALLBACK',
+        requestedModelId: modelId,
+        requestedProviderId: providerId,
+        actualModelId: modelId,
+        actualProviderId: providerId,
+        failoverUsed: false,
+        success: false,
+        error: `AI Provider "${providerId}" is not registered`,
+        failureClass: 'INFRASTRUCTURE_FAILURE',
+        latencyMs: Date.now() - startTime,
+      };
+    }
+
+    if (!provider.isConfigured() && providerId !== 'mock') {
+      return {
+        text: fallbackText,
+        promptTokens: 0,
+        completionTokens: 0,
+        totalTokens: 0,
+        provider: providerId,
+        model: modelId,
+        isRealProviderUsage: false,
+        tokenAccountingType: 'fallback_unknown',
+        generationOutcome: 'DEGRADED_FALLBACK',
+        requestedModelId: modelId,
+        requestedProviderId: providerId,
+        actualModelId: modelId,
+        actualProviderId: providerId,
+        failoverUsed: false,
+        success: false,
+        error: `AI Provider "${providerId}" is not configured with credentials`,
+        failureClass: 'AUTH_FAILURE',
+        latencyMs: Date.now() - startTime,
+      };
+    }
+
+    try {
+      let timeoutHandle: any;
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutHandle = setTimeout(() => {
+          const timeoutErr = new Error(`Exact execution timed out after ${timeoutMs}ms for ${providerId}/${modelId}`);
+          (timeoutErr as any).code = 'ETIMEDOUT';
+          reject(timeoutErr);
+        }, timeoutMs);
+      });
+
+      const genPromise = provider.generateContent({
+        model: modelId,
+        prompt,
+        fallbackText,
+        role,
+      });
+
+      const res = await Promise.race([genPromise, timeoutPromise]).finally(() => {
+        if (timeoutHandle) clearTimeout(timeoutHandle);
+      });
+
+      const latencyMs = Date.now() - startTime;
+
+      if (res.isRealProviderUsage || providerId === 'mock') {
+        this.recordModelUsage(modelId, {
+          promptTokenCount: res.promptTokens,
+          candidatesTokenCount: res.completionTokens,
+          totalTokenCount: res.totalTokens,
+        });
+      }
+
+      const generationOutcome: GenerationOutcome =
+        res.generationOutcome === 'DEGRADED_FALLBACK'
+          ? 'DEGRADED_FALLBACK'
+          : (res.generationOutcome ||
+            (providerId === 'mock'
+              ? 'MOCK_SUCCESS'
+              : (res.isRealProviderUsage === true && res.text !== fallbackText
+                  ? 'REAL_PROVIDER_SUCCESS'
+                  : 'DEGRADED_FALLBACK')));
+
+      return {
+        ...res,
+        provider: providerId,
+        model: modelId,
+        requestedModelId: modelId,
+        requestedProviderId: providerId,
+        actualModelId: modelId,
+        actualProviderId: providerId,
+        failoverUsed: false,
+        success: generationOutcome !== 'DEGRADED_FALLBACK' || providerId === 'mock' || Boolean(res.text && res.text !== fallbackText),
+        generationOutcome,
+        latencyMs,
+      };
+    } catch (err: any) {
+      const latencyMs = Date.now() - startTime;
+      const classified = classifyProviderError(err);
+      console.warn(`[ProviderManager] Exact execution failed for ${providerId}/${modelId}:`, classified.sanitizedMessage);
+
+      if (classified.reason === 'RATE_LIMIT' || classified.reason === 'QUOTA') {
+        this.handleRateLimitError(modelId, classified.retryAfterSeconds || 60);
+      }
+
+      let failureClass: FailureClass = 'APPLICATION_ERROR';
+      const reason = classified.reason as string;
+      const errMsg = String(err?.message || '').toLowerCase();
+      if (reason === 'RATE_LIMIT' || reason === 'QUOTA') {
+        failureClass = 'QUOTA_FAILURE';
+      } else if (reason === 'AUTHENTICATION' || reason === 'CONFIGURATION') {
+        failureClass = 'AUTH_FAILURE';
+      } else if (errMsg.includes('time out') || errMsg.includes('timed out') || errMsg.includes('timeout')) {
+        failureClass = 'TIMEOUT';
+      } else if (reason === 'TEMPORARY_UNAVAILABLE' || reason === 'HIGH_DEMAND' || errMsg.includes('network') || errMsg.includes('econnrefused')) {
+        failureClass = 'INFRASTRUCTURE_FAILURE';
+      } else if (reason === 'MODEL_EXECUTION_ERROR') {
+        failureClass = 'MODEL_FAILURE';
+      }
+
+      return {
+        text: fallbackText,
+        promptTokens: 0,
+        completionTokens: 0,
+        totalTokens: 0,
+        provider: providerId,
+        model: modelId,
+        isRealProviderUsage: false,
+        tokenAccountingType: 'fallback_unknown',
+        generationOutcome: 'DEGRADED_FALLBACK',
+        requestedModelId: modelId,
+        requestedProviderId: providerId,
+        actualModelId: modelId,
+        actualProviderId: providerId,
+        failoverUsed: false,
+        success: false,
+        error: classified.sanitizedMessage,
+        failureClass,
         latencyMs,
       };
     }

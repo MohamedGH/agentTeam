@@ -132,8 +132,8 @@ export async function runAdaptiveRoutingHardeningTests() {
   assert(costEstimated.source === 'ESTIMATED_COST', 'Returns ESTIMATED_COST when only totalTokens provided');
 
   const costUnknown = calculateModelCost('some-future-unregistered-model', 500, 500, 1000);
-  assert(costUnknown.source === 'ESTIMATED_COST', 'Fallback pricing applied for unregistered models');
-  assert(costUnknown.cost > 0, 'Fallback pricing is non-zero');
+  assert(costUnknown.source === 'UNKNOWN_COST', 'Returns UNKNOWN_COST for unregistered models');
+  assert(costUnknown.cost === 0, 'Unknown cost defaults to 0');
 
   // --------------------------------------------------------------------------
   // TEST 4: Benchmark Engine Budget Enforcement

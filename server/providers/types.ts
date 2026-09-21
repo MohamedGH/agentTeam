@@ -62,6 +62,19 @@ export interface GenerationUsageResult {
   generationOutcome?: GenerationOutcome;
 }
 
+export interface ExactSelectedModelResult extends GenerationUsageResult {
+  requestedModelId: string;
+  requestedProviderId: AIProviderId;
+  actualModelId: string;
+  actualProviderId: AIProviderId;
+  failoverUsed: false;
+  success: boolean;
+  error?: string;
+  failureClass?: string;
+  latencyMs: number;
+  modelVersion?: string;
+}
+
 export interface GenerateOptions {
   model: string;
   prompt: string;

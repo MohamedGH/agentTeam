@@ -47,12 +47,11 @@ export class LLMPerformanceMemory {
     const existingIndex = this.evaluations.findIndex(
       (e) =>
         e.id === evaluation.id ||
+        (Boolean(e.runId) && Boolean(evaluation.runId) && e.runId === evaluation.runId) ||
         (e.modelId === evaluation.modelId &&
           e.category === evaluation.category &&
           Boolean(e.problemId) &&
-          e.problemId === evaluation.problemId &&
-          Boolean(e.runId) &&
-          e.runId === evaluation.runId)
+          e.problemId === evaluation.problemId)
     );
 
     if (existingIndex >= 0) {
@@ -73,12 +72,11 @@ export class LLMPerformanceMemory {
       const existingIndex = this.evaluations.findIndex(
         (existing) =>
           existing.id === e.id ||
+          (Boolean(existing.runId) && Boolean(e.runId) && existing.runId === e.runId) ||
           (existing.modelId === e.modelId &&
             existing.category === e.category &&
             Boolean(existing.problemId) &&
-            existing.problemId === e.problemId &&
-            Boolean(existing.runId) &&
-            existing.runId === e.runId)
+            existing.problemId === e.problemId)
       );
       if (existingIndex >= 0) {
         this.evaluations[existingIndex] = e;

@@ -1,14 +1,15 @@
 import { GoogleGenAI } from '@google/genai';
-import { providerManager } from './providerManager';
-import { quotaManager } from './quotaManager';
-import { workspace, VirtualWorkspace } from './virtualWorkspace';
-import { codingAgentManager, CodingAgentTask, CodingAgentResult } from './codingAgents';
-import { workflowOrchestrator } from './workflowOrchestrator';
+import { ProviderManager, providerManager as defaultProviderManager } from './providerManager';
+import { QuotaManager, quotaManager as defaultQuotaManager } from './quotaManager';
+import { workspace as defaultWorkspace, VirtualWorkspace } from './virtualWorkspace';
+import { codingAgentManager as defaultCodingAgentManager, CodingAgentTask, CodingAgentResult } from './codingAgents';
+import { workflowOrchestrator as defaultWorkflowOrchestrator } from './workflowOrchestrator';
 import { AgentStep, FinalReport, TeamRunResult, AgentRole, ExecutionStatus, deriveExecutionStatus, FailoverRecord } from '../src/types';
-import { llmSelector } from './llm/LLMSelector';
-import { llmPerformanceEvaluator } from './llm/LLMPerformanceEvaluator';
-import { llmPerformanceMemory } from './llm/LLMPerformanceMemory';
-import { problemClassifier } from './llm/ProblemClassifier';
+import { LLMSelector, llmSelector as defaultLLMSelector } from './llm/LLMSelector';
+import { LLMPerformanceEvaluator, llmPerformanceEvaluator as defaultLLMPerformanceEvaluator } from './llm/LLMPerformanceEvaluator';
+import { LLMPerformanceMemory, llmPerformanceMemory as defaultLLMPerformanceMemory } from './llm/LLMPerformanceMemory';
+import { ProblemClassifier, problemClassifier as defaultProblemClassifier } from './llm/ProblemClassifier';
+import { LLMRankingEngine, llmRankingEngine as defaultRankingEngine } from './llm/LLMRankingEngine';
 import { calculateModelCost } from './llm/pricing';
 import { SelectionDecision, SelectionConstraints, FailureClass } from './llm/types';
 import { AIProviderId } from './providers/types';
@@ -40,8 +41,43 @@ export interface TeamRunOptions {
   };
 }
 
+export interface AgentTeamEngineDependencies {
+  providerManager?: ProviderManager;
+  quotaManager?: QuotaManager;
+  llmSelector?: LLMSelector;
+  llmPerformanceEvaluator?: LLMPerformanceEvaluator;
+  llmPerformanceMemory?: LLMPerformanceMemory;
+  problemClassifier?: ProblemClassifier;
+  rankingEngine?: LLMRankingEngine;
+  workspace?: VirtualWorkspace;
+  workflowOrchestrator?: typeof defaultWorkflowOrchestrator;
+  codingAgentManager?: typeof defaultCodingAgentManager;
+}
+
 export class AgentTeamEngine {
-  constructor() {}
+  private providerManager: ProviderManager;
+  private quotaManager: QuotaManager;
+  private llmSelector: LLMSelector;
+  private llmPerformanceEvaluator: LLMPerformanceEvaluator;
+  private llmPerformanceMemory: LLMPerformanceMemory;
+  private problemClassifier: ProblemClassifier;
+  private rankingEngine: LLMRankingEngine;
+  private workspace: VirtualWorkspace;
+  private workflowOrchestrator: typeof defaultWorkflowOrchestrator;
+  private codingAgentManager: typeof defaultCodingAgentManager;
+
+  constructor(deps: AgentTeamEngineDependencies = {}) {
+    this.providerManager = deps.providerManager || defaultProviderManager;
+    this.quotaManager = deps.quotaManager || defaultQuotaManager;
+    this.llmSelector = deps.llmSelector || defaultLLMSelector;
+    this.llmPerformanceEvaluator = deps.llmPerformanceEvaluator || defaultLLMPerformanceEvaluator;
+    this.llmPerformanceMemory = deps.llmPerformanceMemory || defaultLLMPerformanceMemory;
+    this.problemClassifier = deps.problemClassifier || defaultProblemClassifier;
+    this.rankingEngine = deps.rankingEngine || defaultRankingEngine;
+    this.workspace = deps.workspace || defaultWorkspace;
+    this.workflowOrchestrator = deps.workflowOrchestrator || defaultWorkflowOrchestrator;
+    this.codingAgentManager = deps.codingAgentManager || defaultCodingAgentManager;
+  }
 
   /**
    * Run the Multi-Agent Autonomous Team Workflow.
@@ -67,8 +103,8 @@ export class AgentTeamEngine {
     if (options.model) {
       // Preserve explicit manual override without confusing with adaptive selection
       chosenModel = options.model;
-      activeProvider = (options.provider as AIProviderId) || providerManager.getActiveProvider();
-      const classified = problemClassifier.classify(taskPrompt);
+      activeProvider = (options.provider as AIProviderId) || this.providerManager.getActiveProvider();
+      const classified = this.problemClassifier.classify(taskPrompt);
       selectionDecision = {
         selectedModelId: chosenModel,
         selectedProviderId: activeProvider,
@@ -80,15 +116,15 @@ export class AgentTeamEngine {
         classifiedProblem: classified,
       };
     } else {
-      // Normal production routing path uses LLMSelector
+      // Normal production routing path uses LLMSelector across all available providers unless constrained
       const constraints: SelectionConstraints = {
-        preferredProviders: options.provider ? [options.provider] : [providerManager.getActiveProvider()],
-        maxLatencyMs: options.maxLatencyMs,
-        maxCost: options.maxCost,
+        preferredProviders: options.provider ? [options.provider] : options.constraints?.preferredProviders,
+        maxLatencyMs: options.maxLatencyMs ?? options.constraints?.maxLatencyMs,
+        maxCost: options.maxCost ?? options.constraints?.maxCost,
         ...options.constraints,
       };
 
-      selectionDecision = llmSelector.selectModelForTask(taskPrompt, undefined, constraints);
+      selectionDecision = this.llmSelector.selectModelForTask(taskPrompt, undefined, constraints);
 
       if (selectionDecision.decisionType === 'NO_FEASIBLE_MODEL') {
         throw new Error(`[LLMSelector] No feasible model satisfies constraints: ${selectionDecision.reason}`);
@@ -128,7 +164,7 @@ export class AgentTeamEngine {
     let totalPromptTokens = 0;
     let totalCompletionTokens = 0;
     let anyRealUsage = false;
-    const initialFiles = { ...workspace.getFiles() };
+    const initialFiles = { ...this.workspace.getFiles() };
     const changedFileList = new Set<string>();
     const allFailoverHistory: FailoverRecord[] = [];
 
@@ -142,17 +178,17 @@ export class AgentTeamEngine {
       const delegationTarget = codingAgentToUse ? `Google Jules (${codingAgentToUse})` : 'Senior Developer';
       const managerAnalysisPrompt = `You are the manager of an autonomous software development team.
 Understand the user's request: "${taskPrompt}".
-Current workspace files: ${Object.keys(workspace.getFiles()).join(', ')}.
+Current workspace files: ${Object.keys(this.workspace.getFiles()).join(', ')}.
 Target Developer: ${delegationTarget}.
 Provide your architectural breakdown and delegation plan.`;
 
-      const phase1Res = await providerManager.generateWithUsage(
-        chosenModel,
-        managerAnalysisPrompt,
-        `Task received: "${taskPrompt}".\nAnalyzing project architecture and existing codebase.\nDelegating implementation to ${delegationTarget} with focus on clean modular design, test coverage, and repository branch isolation.`,
-        'manager',
-        activeProvider
-      );
+      const phase1Res = await this.providerManager.generateExactSelectedModel({
+        modelId: chosenModel,
+        prompt: managerAnalysisPrompt,
+        fallbackText: `Task received: "${taskPrompt}".\nAnalyzing project architecture and existing codebase.\nDelegating implementation to ${delegationTarget} with focus on clean modular design, test coverage, and repository branch isolation.`,
+        role: 'manager',
+        providerId: activeProvider,
+      });
 
       if (phase1Res.failoverHistory && phase1Res.failoverHistory.length > 0) {
         allFailoverHistory.push(...phase1Res.failoverHistory);
@@ -206,7 +242,7 @@ Provide your architectural breakdown and delegation plan.`;
             output: `Target: ${repo}:${branch} | Mode: ${options.automationMode || 'AUTOMATION_MODE_UNSPECIFIED'}`,
           });
 
-          julesResult = await codingAgentManager.execute(
+          julesResult = await this.codingAgentManager.execute(
             {
               agent: codingAgentToUse,
               repository: repo,
@@ -291,7 +327,7 @@ Provide your architectural breakdown and delegation plan.`;
                   error: errorMsg,
                 },
               },
-              virtualFiles: workspace.getFiles(),
+              virtualFiles: this.workspace.getFiles(),
               error: errorMsg,
             };
           }
@@ -350,7 +386,7 @@ Provide your architectural breakdown and delegation plan.`;
                   codingAgentUsed: codingAgentToUse || undefined,
                 },
               },
-              virtualFiles: workspace.getFiles(),
+              virtualFiles: this.workspace.getFiles(),
               error: undefined,
             };
           }
@@ -418,7 +454,7 @@ Provide your architectural breakdown and delegation plan.`;
                   codingAgentUsed: codingAgentToUse || undefined,
                 },
               },
-              virtualFiles: workspace.getFiles(),
+              virtualFiles: this.workspace.getFiles(),
             };
           }
 
@@ -450,7 +486,7 @@ Provide your architectural breakdown and delegation plan.`;
           const devPrompt =
             developerCycle === 1
               ? `You are a Senior Full-Stack Developer. Implement: "${taskPrompt}".
-Workspace files: ${Object.keys(workspace.getFiles()).join(', ')}.
+Workspace files: ${Object.keys(this.workspace.getFiles()).join(', ')}.
 Describe the implementation strategy and modifications.`
               : `You are a Senior Full-Stack Developer. QA failed with: ${lastTesterFeedback}.
 Describe how you are patching the code.`;
@@ -460,13 +496,13 @@ Describe how you are patching the code.`;
               ? `Inspecting project structure, reading existing modules, and implementing requirements for: "${taskPrompt}".`
               : `Received QA failure report. Applying targeted patch and fixing edge cases based on: ${lastTesterFeedback}`;
 
-          const devRes = await providerManager.generateWithUsage(
-            chosenModel,
-            devPrompt,
-            devFallback,
-            'developer',
-            activeProvider
-          );
+          const devRes = await this.providerManager.generateExactSelectedModel({
+            modelId: chosenModel,
+            prompt: devPrompt,
+            fallbackText: devFallback,
+            role: 'developer',
+            providerId: activeProvider,
+          });
 
           if (devRes.failoverHistory && devRes.failoverHistory.length > 0) {
             allFailoverHistory.push(...devRes.failoverHistory);
@@ -503,7 +539,7 @@ Describe how you are patching the code.`;
         // PHASE 3: TESTING (Tester)
         // -------------------------------------------------------------
         const testCommand = 'pytest tests/ -v';
-        const testExec = workspace.executeCommand(testCommand);
+        const testExec = this.workspace.executeCommand(testCommand);
         const testOutput = testExec.output;
         const testPassed = testExec.exitCode === 0 && testExec.success;
 
@@ -514,13 +550,13 @@ Provide QA evaluation and regression analysis.`;
 
         const testerFallback = `Executing test suite via '${testCommand}', analyzing regression safety, and validating edge conditions.`;
 
-        const testerRes = await providerManager.generateWithUsage(
-          chosenModel,
-          testerPrompt,
-          testerFallback,
-          'tester',
-          activeProvider
-        );
+        const testerRes = await this.providerManager.generateExactSelectedModel({
+          modelId: chosenModel,
+          prompt: testerPrompt,
+          fallbackText: testerFallback,
+          role: 'tester',
+          providerId: activeProvider,
+        });
 
         if (testerRes.failoverHistory && testerRes.failoverHistory.length > 0) {
           allFailoverHistory.push(...testerRes.failoverHistory);
@@ -531,7 +567,7 @@ Provide QA evaluation and regression analysis.`;
             id: 'tc_' + Math.random().toString(36).substring(2, 7),
             name: 'git_status',
             args: {},
-            result: workspace.gitStatus(),
+            result: this.workspace.gitStatus(),
             timestamp: Date.now(),
           },
           {
@@ -600,7 +636,7 @@ Provide QA evaluation and regression analysis.`;
 
       while (!reviewerApproved && reviewCycles < 2) {
         reviewCycles++;
-        const gitDiff = workspace.gitDiff();
+        const gitDiff = this.workspace.gitDiff();
 
         const revPrompt = `You are the Lead Code Reviewer & Security Auditor.
 Inspect the Git Diff:
@@ -610,13 +646,13 @@ Evaluate code quality, security implications, maintainability, and clean archite
 
         const revFallback = `Reviewing git diff, validating security parameters, ensuring no hardcoded keys or insecure endpoints, and verifying architectural compliance.`;
 
-        const revRes = await providerManager.generateWithUsage(
-          chosenModel,
-          revPrompt,
-          revFallback,
-          'reviewer',
-          activeProvider
-        );
+        const revRes = await this.providerManager.generateExactSelectedModel({
+          modelId: chosenModel,
+          prompt: revPrompt,
+          fallbackText: revFallback,
+          role: 'reviewer',
+          providerId: activeProvider,
+        });
 
         if (revRes.failoverHistory && revRes.failoverHistory.length > 0) {
           allFailoverHistory.push(...revRes.failoverHistory);
@@ -718,7 +754,7 @@ Evaluate code quality, security implications, maintainability, and clean archite
         };
 
         // Strictly route through workflowOrchestrator.executeDelivery - NO customGhManager bypass!
-        gitDeliveryResult = await workflowOrchestrator.executeDelivery(deliveryOpts);
+        gitDeliveryResult = await this.workflowOrchestrator.executeDelivery(deliveryOpts);
 
           if (!julesResult) {
             julesResult = {
@@ -780,13 +816,13 @@ Evaluate code quality, security implications, maintainability, and clean archite
       const delivPrompt = `You are the Manager. Summarize the successful delivery for task "${taskPrompt}". Files changed: ${Array.from(changedFileList).join(', ')}.${prInfo}`;
       const delivFallback = `Synthesizing team deliverables and preparing the final verification report.${prInfo}`;
 
-      const delivRes = await providerManager.generateWithUsage(
-        chosenModel,
-        delivPrompt,
-        delivFallback,
-        'manager',
-        activeProvider
-      );
+      const delivRes = await this.providerManager.generateExactSelectedModel({
+        modelId: chosenModel,
+        prompt: delivPrompt,
+        fallbackText: delivFallback,
+        role: 'manager',
+        providerId: activeProvider,
+      });
 
       if (delivRes.failoverHistory && delivRes.failoverHistory.length > 0) {
         allFailoverHistory.push(...delivRes.failoverHistory);
@@ -812,14 +848,15 @@ Evaluate code quality, security implications, maintainability, and clean archite
 
       const workflowSuccess = Boolean(testerPassed && reviewerApproved);
 
-      // OBLIGATOIRE: REAL_TASK evaluation post-execution
+      // OBLIGATOIRE: REAL_TASK evaluation post-execution with strict identity and execution proof
       let realTaskEvalRecord: any = null;
       try {
-        realTaskEvalRecord = llmPerformanceEvaluator.evaluateRealTaskExecution(
+        realTaskEvalRecord = this.llmPerformanceEvaluator.evaluateRealTaskExecution(
           selectionDecision.classifiedProblem,
           chosenModel,
           activeProvider,
           {
+            runId: taskId,
             success: workflowSuccess,
             exitCode: workflowSuccess ? 0 : 1,
             testsPassed: testerPassed ? 1 : 0,
@@ -831,10 +868,17 @@ Evaluate code quality, security implications, maintainability, and clean archite
             compilerErrors: !testerPassed ? ['Unit tests or reviewer criteria failed'] : undefined,
             output: delivRes.text,
             failureClass: workflowSuccess ? undefined : 'MODEL_FAILURE',
+            proof: {
+              requestedModelId: chosenModel,
+              requestedProviderId: activeProvider,
+              actualModelId: chosenModel,
+              actualProviderId: activeProvider,
+              failoverUsed: false,
+            },
           }
         );
 
-        llmPerformanceMemory.addEvaluation(realTaskEvalRecord);
+        this.llmPerformanceMemory.addEvaluation(realTaskEvalRecord);
       } catch (evalErr) {
         console.warn('[AgentTeam] Warning: Failed to record REAL_TASK evaluation in memory:', evalErr);
       }
@@ -915,7 +959,7 @@ Evaluate code quality, security implications, maintainability, and clean archite
         git: julesResult?.git,
         steps,
         finalReport,
-        virtualFiles: workspace.getFiles(),
+        virtualFiles: this.workspace.getFiles(),
       };
     } catch (error: any) {
       console.error('[AgentTeam] Error running workflow:', error);
@@ -946,11 +990,12 @@ Evaluate code quality, security implications, maintainability, and clean archite
             anyRealUsage
           );
 
-          errorEvalRecord = llmPerformanceEvaluator.evaluateRealTaskExecution(
+          errorEvalRecord = this.llmPerformanceEvaluator.evaluateRealTaskExecution(
             selectionDecision.classifiedProblem,
             chosenModel,
             activeProvider,
             {
+              runId: taskId,
               success: false,
               exitCode: 1,
               testsPassed: 0,
@@ -962,10 +1007,18 @@ Evaluate code quality, security implications, maintainability, and clean archite
               compilerErrors: [errMsg],
               output: errMsg,
               failureClass,
+              proof: {
+                requestedModelId: chosenModel,
+                requestedProviderId: activeProvider,
+                actualModelId: chosenModel,
+                actualProviderId: activeProvider,
+                failoverUsed: false,
+                failureClass,
+              },
             }
           );
 
-          llmPerformanceMemory.addEvaluation(errorEvalRecord);
+          this.llmPerformanceMemory.addEvaluation(errorEvalRecord);
         } catch (evalErr) {
           console.warn('[AgentTeam] Failed to record error evaluation:', evalErr);
         }
@@ -981,7 +1034,7 @@ Evaluate code quality, security implications, maintainability, and clean archite
         selectionDecision,
         realTaskEvaluationId: errorEvalRecord?.id,
         steps,
-        virtualFiles: workspace.getFiles(),
+        virtualFiles: this.workspace.getFiles(),
         error: error.message || 'Workflow execution error',
       };
     }
@@ -1087,8 +1140,8 @@ def test_invalid_signature():
     tampered = token[:-4] + "xxxx"
     assert manager.verify_token(tampered) is None
 `;
-      workspace.writeFile('src/auth.py', authCode);
-      workspace.writeFile('tests/test_auth.py', testAuthCode);
+      this.workspace.writeFile('src/auth.py', authCode);
+      this.workspace.writeFile('tests/test_auth.py', testAuthCode);
       changedFiles.add('src/auth.py');
       changedFiles.add('tests/test_auth.py');
 
@@ -1114,9 +1167,9 @@ def test_invalid_signature():
     delay = min(max_delay, initial_delay * (factor ** attempt))
     return delay
 `;
-      const curContent = workspace.readFile('src/math_utils.py');
+      const curContent = this.workspace.readFile('src/math_utils.py');
       if (!curContent.includes('calculate_exponential_backoff')) {
-        workspace.patchFile('src/math_utils.py', 'def apply_tax', `${quotaEnhanceCode}\ndef apply_tax`);
+        this.workspace.patchFile('src/math_utils.py', 'def apply_tax', `${quotaEnhanceCode}\ndef apply_tax`);
         changedFiles.add('src/math_utils.py');
         toolCalls.push({
           id: 'tc_' + Math.random().toString(36).substring(2, 7),
@@ -1158,8 +1211,8 @@ def test_empty_payload_raises():
     with pytest.raises(ValueError):
         mod.execute({})
 `;
-      workspace.writeFile('src/feature.py', featureCode);
-      workspace.writeFile('tests/test_feature.py', testCode);
+      this.workspace.writeFile('src/feature.py', featureCode);
+      this.workspace.writeFile('tests/test_feature.py', testCode);
       changedFiles.add('src/feature.py');
       changedFiles.add('tests/test_feature.py');
 
