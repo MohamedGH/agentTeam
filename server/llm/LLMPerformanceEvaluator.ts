@@ -3,20 +3,34 @@ import { AIProviderId } from '../providers/types';
 import {
   BenchmarkDefinition,
   ClassifiedProblem,
+  EvaluationSource,
   LLMEvaluation,
   ProblemCategory,
   ProblemComplexity,
 } from './types';
 
+export interface TestExecutionOutcome {
+  total: number;
+  passed: number;
+  success: boolean;
+  regression: boolean;
+  error?: string;
+  failures?: string[];
+}
+
 /**
  * LLMPerformanceEvaluator
  * 
- * Conducts objective, multi-dimensional evaluations of LLM outputs across
- * all categories (code, debugging, refactoring, security, architecture, reasoning, math).
- * Never awards scores based solely on subjective text or assertions when verifiable criteria exist.
+ * Conducts objective, multi-dimensional, sandboxed empirical evaluations of LLM outputs across
+ * all categories (code generation, debugging, refactoring, security, architecture, reasoning, math).
+ * 
+ * Invariants:
+ * - Real execution of test assertions (no hardcoded 5/5 or binary mock counts).
+ * - Sandboxed execution (fail-closed, no filesystem/network/process access).
+ * - Accurate evaluationSource attribution (HERMETIC_FIXTURE, LIVE_PROVIDER, REAL_TASK).
  */
 export class LLMPerformanceEvaluator {
-  private readonly version = '1.0.0-objective';
+  private readonly version = '2.0.0-empirical';
 
   public evaluateBenchmarkOutput(
     benchmark: BenchmarkDefinition,
@@ -25,7 +39,14 @@ export class LLMPerformanceEvaluator {
     output: string,
     latencyMs: number,
     estimatedCost = 0,
-    isLiveBenchmark = false
+    isLiveBenchmark = false,
+    proof?: {
+      requestedModelId: string;
+      requestedProviderId: AIProviderId;
+      actualModelId: string;
+      actualProviderId: AIProviderId;
+      failoverUsed: boolean;
+    }
   ): LLMEvaluation {
     const startTime = Date.now();
     let score = 0;
@@ -37,6 +58,36 @@ export class LLMPerformanceEvaluator {
 
     const cleanOutput = (output || '').trim();
     const extractedCode = this.extractCodeBlock(cleanOutput);
+
+    // If proof indicates failover occurred, fail immediately with 0 score (Zero Failover rule)
+    if (proof && (proof.failoverUsed || proof.actualModelId !== proof.requestedModelId || proof.actualProviderId !== proof.requestedProviderId)) {
+      return {
+        id: `eval_failover_blocked_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        modelId,
+        providerId,
+        modelVersion: this.extractVersion(modelId),
+        problemId: benchmark.id,
+        category: benchmark.category,
+        complexity: benchmark.difficulty,
+        evaluationSource: isLiveBenchmark ? 'LIVE_PROVIDER' : 'HERMETIC_FIXTURE',
+        success: false,
+        score: 0,
+        latencyMs,
+        estimatedCost,
+        testsPassed: 0,
+        totalTests: 1,
+        regressionDetected: true,
+        evaluatorVersion: this.version,
+        timestamp: startTime,
+        details: {
+          failoverBlocked: true,
+          error: `Failover detected in benchmark execution: requested ${proof.requestedProviderId}/${proof.requestedModelId} but executed ${proof.actualProviderId}/${proof.actualModelId}`,
+        },
+        isLiveBenchmark,
+        outputSample: cleanOutput.slice(0, 180),
+        proof,
+      };
+    }
 
     switch (benchmark.criteria.method) {
       case 'test_execution': {
@@ -91,6 +142,8 @@ export class LLMPerformanceEvaluator {
       }
     }
 
+    const evaluationSource: EvaluationSource = isLiveBenchmark ? 'LIVE_PROVIDER' : 'HERMETIC_FIXTURE';
+
     return {
       id: `eval_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       modelId,
@@ -99,6 +152,7 @@ export class LLMPerformanceEvaluator {
       problemId: benchmark.id,
       category: benchmark.category,
       complexity: benchmark.difficulty,
+      evaluationSource,
       success,
       score: Math.round(score * 100) / 100,
       latencyMs,
@@ -111,11 +165,12 @@ export class LLMPerformanceEvaluator {
       details,
       isLiveBenchmark,
       outputSample: cleanOutput.slice(0, 180),
+      proof,
     };
   }
 
   /**
-   * Evaluates real production tasks post-execution to feed memory without benchmarks.
+   * Evaluates real production tasks post-execution to feed memory without artificial fixtures.
    */
   public evaluateRealTaskExecution(
     task: ClassifiedProblem,
@@ -157,6 +212,7 @@ export class LLMPerformanceEvaluator {
       problemId: `task_${task.category.toLowerCase()}_${Date.now()}`,
       category: task.category,
       complexity: task.complexity,
+      evaluationSource: 'REAL_TASK',
       success: executionResult.success && !executionResult.regressionDetected,
       score: Math.round(score * 100) / 100,
       latencyMs: executionResult.latencyMs,
@@ -175,33 +231,124 @@ export class LLMPerformanceEvaluator {
     };
   }
 
-  private runTestExecution(code: string, testHarness?: string): {
-    total: number;
-    passed: number;
-    success: boolean;
-    regression: boolean;
-    error?: string;
-  } {
+  /**
+   * Executes code and test harness in a hardened, isolated sandbox with counted assertions.
+   */
+  public runTestExecution(code: string, testHarness?: string): TestExecutionOutcome {
     if (!testHarness) {
-      return { total: 1, passed: code.length > 20 ? 1 : 0, success: code.length > 20, regression: false };
+      const basicSuccess = code.length > 20;
+      return { total: 1, passed: basicSuccess ? 1 : 0, success: basicSuccess, regression: !basicSuccess };
     }
 
+    // Fail-closed security pre-scan: reject unsafe primitives or prototype pollution attempts
+    const unsafePatterns = [
+      /\bprocess\b/,
+      /\brequire\s*\(/,
+      /\bimport\s*\(/,
+      /\bchild_process\b/,
+      /\bfs\b/,
+      /\b__proto__\b/,
+      /\bconstructor\s*\.\s*constructor\b/,
+    ];
+    for (const pat of unsafePatterns) {
+      if (pat.test(code)) {
+        return {
+          total: 1,
+          passed: 0,
+          success: false,
+          regression: true,
+          error: `Security violation: code contains forbidden primitive or escape pattern: ${pat}`,
+          failures: ['Blocked by security sandbox pre-scan'],
+        };
+      }
+    }
+
+    let assertionTotal = 0;
+    let assertionPassed = 0;
+    const failures: string[] = [];
+
+    // Custom assert runner injected into sandbox
+    const assertFn = (condition: any, message?: string) => {
+      assertionTotal++;
+      if (Boolean(condition)) {
+        assertionPassed++;
+      } else {
+        const failureMsg = message || `Assertion ${assertionTotal} failed`;
+        failures.push(failureMsg);
+      }
+    };
+
     try {
-      // Execute the test harness with the generated code injected safely inside sandboxed VM with timeout
-      const wrappedScript = `
-        (function(code) {
+      // Create isolated sandbox context with zero OS/network/process capabilities
+      const sandboxContext = Object.create(null);
+      Object.assign(sandboxContext, {
+        assert: assertFn,
+        Math,
+        Array,
+        Object,
+        String,
+        Number,
+        Boolean,
+        Date,
+        RegExp,
+        Set,
+        Map,
+        JSON,
+        parseInt,
+        parseFloat,
+        isNaN,
+        isFinite,
+        console: {
+          log: () => {},
+          warn: () => {},
+          error: () => {},
+        },
+      });
+
+      const context = vm.createContext(sandboxContext);
+
+      // Clean TypeScript annotations if any simple ones exist
+      const sanitizedCode = this.stripSimpleTsTypes(code);
+
+      // Script executes candidate code then runs test harness assertions
+      const fullScript = `
+        (function() {
+          "use strict";
+          ${sanitizedCode}
           ${testHarness}
-        })(${JSON.stringify(code)});
+        })();
       `;
-      vm.runInNewContext(wrappedScript, { console, Math, Array, Object, String, Number, Boolean, Error }, { timeout: 500 });
-      return { total: 5, passed: 5, success: true, regression: false };
-    } catch (err: any) {
+
+      vm.runInContext(fullScript, context, {
+        timeout: 500, // Strict 500ms timeout
+        displayErrors: false,
+      });
+
+      // If test harness didn't call assertFn explicitly but completed without throwing, mark 1 passed test
+      if (assertionTotal === 0) {
+        assertionTotal = 1;
+        assertionPassed = 1;
+      }
+
       return {
-        total: 5,
-        passed: 0,
+        total: assertionTotal,
+        passed: assertionPassed,
+        success: assertionTotal > 0 && assertionPassed === assertionTotal,
+        regression: assertionPassed < assertionTotal,
+        failures: failures.length > 0 ? failures : undefined,
+      };
+    } catch (err: any) {
+      if (assertionTotal === 0) {
+        assertionTotal = 1;
+        assertionPassed = 0;
+      }
+      return {
+        total: assertionTotal,
+        passed: assertionPassed,
         success: false,
         regression: true,
         error: err?.message || String(err),
+        failures: failures.length > 0 ? failures : [err?.message || String(err)],
       };
     }
   }
@@ -261,6 +408,13 @@ export class LLMPerformanceEvaluator {
   private extractCodeBlock(text: string): string {
     const match = text.match(/```(?:typescript|ts|javascript|js)?\s*([\s\S]*?)```/i);
     return match ? match[1].trim() : text;
+  }
+
+  private stripSimpleTsTypes(code: string): string {
+    // Strips common TypeScript type annotations for raw JS VM execution
+    return code
+      .replace(/:\s*(?:string|number|boolean|any|void|unknown|never|Promise<[^>]+>|Array<[^>]+>|Record<[^>]+>)(?=[,\);=\s])/g, '')
+      .replace(/<[A-Z0-9_,\s]+>(?=\()/g, '');
   }
 
   private escapeRegExp(str: string): string {

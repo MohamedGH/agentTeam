@@ -10,6 +10,7 @@ import { LLMPerformanceMemory } from './LLMPerformanceMemory';
  * Dynamically queries ProviderManager and registered providers.
  * Reflects models actually available, without static duplicate lists.
  * Associates empirical evaluation status (UNMEASURED, LOW_CONFIDENCE, MEASURED, UNAVAILABLE).
+ * Enforces strict capability filtering.
  */
 export class LLMRegistry {
   private providerMgr: ProviderManager;
@@ -88,7 +89,8 @@ export class LLMRegistry {
   }
 
   /**
-   * Filters candidate models suitable for a set of capabilities and availability
+   * Filters candidate models suitable for a set of capabilities and availability.
+   * Strictly enforces requiredCapabilities.
    */
   public getEligibleCandidates(
     requiredCapabilities: string[] = [],
@@ -102,6 +104,10 @@ export class LLMRegistry {
       if (preferredProviders && preferredProviders.length > 0 && !preferredProviders.includes(entry.providerId)) {
         return false;
       }
+      if (requiredCapabilities && requiredCapabilities.length > 0) {
+        const hasAllCaps = requiredCapabilities.every((cap) => entry.capabilities.includes(cap));
+        if (!hasAllCaps) return false;
+      }
       return true;
     });
   }
@@ -112,6 +118,7 @@ export class LLMRegistry {
     if (m.contextWindow >= 128000) caps.push('large_context_window');
     if (m.costTier === 'ultra' || m.costTier === 'pro') caps.push('deep_reasoning');
     if (providerId === 'gemini') caps.push('multimodal', 'google_grounding');
+    if (providerId === 'openai' || providerId === 'anthropic') caps.push('multimodal');
     return caps;
   }
 

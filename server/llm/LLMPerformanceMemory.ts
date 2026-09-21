@@ -1,13 +1,16 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { LLMEvaluation, ModelRankingStats, ProblemCategory, ProblemComplexity, LLMStatus } from './types';
+import { LLMEvaluation, ModelRankingStats, ProblemCategory, ProblemComplexity, LLMStatus, EvaluationSource } from './types';
+
+export const OPERATIONAL_SOURCES: EvaluationSource[] = ['LIVE_PROVIDER', 'REAL_TASK'];
+export const ALL_SOURCES: EvaluationSource[] = ['LIVE_PROVIDER', 'REAL_TASK', 'HERMETIC_FIXTURE'];
 
 /**
  * LLMPerformanceMemory
  * 
  * Persists and indexes empirical evaluation outcomes.
- * Strictly separates different versions of the same model.
- * Computes live statistical aggregates (sample count, mean score, latency, cost, confidence).
+ * Strictly separates different versions of the same model and evaluation sources (HERMETIC vs LIVE vs REAL_TASK).
+ * Computes live statistical aggregates (sample count, mean score, latency, cost, confidence, uncertainty penalty).
  */
 export class LLMPerformanceMemory {
   private storagePath: string;
@@ -47,48 +50,59 @@ export class LLMPerformanceMemory {
     category?: ProblemCategory;
     complexity?: ProblemComplexity;
     version?: string;
+    sources?: EvaluationSource[];
   }): LLMEvaluation[] {
     return this.evaluations.filter((e) => {
       if (filter?.modelId && e.modelId !== filter.modelId) return false;
       if (filter?.category && e.category !== filter.category) return false;
       if (filter?.complexity && e.complexity !== filter.complexity) return false;
       if (filter?.version && e.modelVersion !== filter.version) return false;
+      if (filter?.sources && filter.sources.length > 0) {
+        const itemSource = e.evaluationSource || (e.isLiveBenchmark ? 'LIVE_PROVIDER' : 'HERMETIC_FIXTURE');
+        if (!filter.sources.includes(itemSource)) return false;
+      }
       return true;
     });
   }
 
   /**
-   * Retrieves aggregated statistics for a specific (model, category, complexity) slice
+   * Retrieves aggregated statistics for a specific (model, category, complexity, sources) slice.
+   * If sources is not specified, defaults to operational sources (LIVE_PROVIDER, REAL_TASK),
+   * falling back to ALL_SOURCES if no operational evaluations exist for testing.
    */
   public getStats(
     modelId: string,
     category: ProblemCategory,
     complexity?: ProblemComplexity,
-    version?: string
+    version?: string,
+    sources?: EvaluationSource[]
   ): ModelRankingStats | null {
-    const key = this.buildKey(modelId, category, complexity, version);
+    const key = this.buildKey(modelId, category, complexity, version, sources);
     return this.statsCache.get(key) || null;
   }
 
   /**
-   * Returns all computed stats across all categories and models
+   * Returns all computed stats across all categories and models for given sources
    */
-  public getAllStats(): ModelRankingStats[] {
-    return Array.from(this.statsCache.values());
+  public getAllStats(sources?: EvaluationSource[]): ModelRankingStats[] {
+    const targetKeySuffix = sources ? sources.slice().sort().join('+') : 'default';
+    return Array.from(this.statsCache.entries())
+      .filter(([k]) => k.endsWith(`::${targetKeySuffix}`))
+      .map(([, v]) => v);
   }
 
   /**
    * Total number of evaluations recorded for a given model
    */
-  public getModelEvaluationCount(modelId: string): number {
-    return this.evaluations.filter((e) => e.modelId === modelId).length;
+  public getModelEvaluationCount(modelId: string, sources?: EvaluationSource[]): number {
+    return this.getEvaluations({ modelId, sources }).length;
   }
 
   /**
    * Timestamp of last evaluation for a given model
    */
-  public getModelLastEvaluatedAt(modelId: string): number | undefined {
-    const list = this.evaluations.filter((e) => e.modelId === modelId);
+  public getModelLastEvaluatedAt(modelId: string, sources?: EvaluationSource[]): number | undefined {
+    const list = this.getEvaluations({ modelId, sources });
     if (list.length === 0) return undefined;
     return Math.max(...list.map((e) => e.timestamp));
   }
@@ -108,28 +122,51 @@ export class LLMPerformanceMemory {
     complexity?: ProblemComplexity,
     version?: string
   ): void {
-    // 1. Compute specific slice (model, category, complexity, version)
-    this.computeAndStore(modelId, category, complexity, version);
+    const sourceVariations: Array<EvaluationSource[] | undefined> = [
+      undefined, // default (operational prioritized)
+      OPERATIONAL_SOURCES,
+      ALL_SOURCES,
+      ['HERMETIC_FIXTURE'],
+      ['LIVE_PROVIDER'],
+      ['REAL_TASK'],
+    ];
 
-    // 2. Compute category-level aggregate (regardless of complexity)
-    this.computeAndStore(modelId, category, undefined, version);
+    for (const s of sourceVariations) {
+      // 1. Compute specific slice (model, category, complexity, version, sources)
+      this.computeAndStore(modelId, category, complexity, version, s);
+
+      // 2. Compute category-level aggregate (regardless of complexity)
+      this.computeAndStore(modelId, category, undefined, version, s);
+    }
   }
 
   private computeAndStore(
     modelId: string,
     category: ProblemCategory,
     complexity?: ProblemComplexity,
-    version?: string
+    version?: string,
+    sources?: EvaluationSource[]
   ): void {
-    const filtered = this.evaluations.filter((e) => {
-      if (e.modelId !== modelId) return false;
-      if (e.category !== category) return false;
-      if (complexity && e.complexity !== complexity) return false;
-      if (version && e.modelVersion !== version) return false;
-      return true;
+    let filtered = this.getEvaluations({
+      modelId,
+      category,
+      complexity,
+      version,
+      sources: sources || OPERATIONAL_SOURCES,
     });
 
-    const key = this.buildKey(modelId, category, complexity, version);
+    // If default (undefined sources) was requested and no operational evaluations exist, check ALL_SOURCES as fallback
+    if (!sources && filtered.length === 0) {
+      filtered = this.getEvaluations({
+        modelId,
+        category,
+        complexity,
+        version,
+        sources: ALL_SOURCES,
+      });
+    }
+
+    const key = this.buildKey(modelId, category, complexity, version, sources);
 
     if (filtered.length === 0) {
       this.statsCache.delete(key);
@@ -188,9 +225,11 @@ export class LLMPerformanceMemory {
     modelId: string,
     category: ProblemCategory,
     complexity?: ProblemComplexity,
-    version?: string
+    version?: string,
+    sources?: EvaluationSource[]
   ): string {
-    return `${modelId}::${version || 'any'}::${category}::${complexity || 'all'}`;
+    const srcKey = sources ? sources.slice().sort().join('+') : 'default';
+    return `${modelId}::${version || 'any'}::${category}::${complexity || 'all'}::${srcKey}`;
   }
 
   private load(): void {
@@ -220,7 +259,7 @@ export class LLMPerformanceMemory {
         this.storagePath,
         JSON.stringify(
           {
-            version: '1.0.0',
+            version: '2.0.0',
             updatedAt: Date.now(),
             totalEvaluations: this.evaluations.length,
             evaluations: this.evaluations,

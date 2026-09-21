@@ -33,6 +33,7 @@ import { GroqProvider, DeepSeekProvider, CustomProvider } from './providers/othe
 import { MockProvider } from './providers/mockProvider';
 import { cloudMonitoringQuotaService, CloudMonitoringQuotaResult } from './cloudMonitoring';
 import { quotaManager } from './quotaManager';
+import type { ExactBenchmarkExecutionResult } from './llm/types';
 
 export interface ProviderInfo {
   id: AIProviderId;
@@ -419,6 +420,133 @@ export class ProviderManager {
       generationOutcome: 'DEGRADED_FALLBACK',
       failoverHistory: failoverHistory.length > 0 ? failoverHistory : undefined,
     };
+  }
+
+  /**
+   * Generates content for an EXACT requested model and provider with ZERO failover.
+   * Dedicated to empirical benchmarking and fair comparative evaluation.
+   * Never falls back to alternative models or providers.
+   */
+  public async generateExactModelForBenchmark(options: {
+    providerId: AIProviderId;
+    modelId: string;
+    prompt: string;
+    fallbackText?: string;
+    role?: string;
+    timeoutMs?: number;
+  }): Promise<ExactBenchmarkExecutionResult> {
+    const { providerId, modelId, prompt, fallbackText, role, timeoutMs = 60000 } = options;
+    const startTime = Date.now();
+
+    const provider = this.providers.get(providerId);
+    if (!provider) {
+      return {
+        text: '',
+        requestedModelId: modelId,
+        requestedProviderId: providerId,
+        actualModelId: modelId,
+        actualProviderId: providerId,
+        failoverUsed: false,
+        success: false,
+        error: `Provider "${providerId}" is not registered`,
+        latencyMs: Date.now() - startTime,
+      };
+    }
+
+    if (!provider.isConfigured()) {
+      return {
+        text: '',
+        requestedModelId: modelId,
+        requestedProviderId: providerId,
+        actualModelId: modelId,
+        actualProviderId: providerId,
+        failoverUsed: false,
+        success: false,
+        error: `Provider "${providerId}" is not configured (missing credentials or API key)`,
+        latencyMs: Date.now() - startTime,
+      };
+    }
+
+    // Ensure model is supported by this provider
+    const modelSupported = provider.models.some((m) => m.name === modelId);
+    if (!modelSupported) {
+      return {
+        text: '',
+        requestedModelId: modelId,
+        requestedProviderId: providerId,
+        actualModelId: modelId,
+        actualProviderId: providerId,
+        failoverUsed: false,
+        success: false,
+        error: `Model "${modelId}" is not supported by provider "${providerId}"`,
+        latencyMs: Date.now() - startTime,
+      };
+    }
+
+    try {
+      // Execute only this specific model on this provider with timeout protection
+      let timeoutHandle: any;
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutHandle = setTimeout(() => {
+          reject(new Error(`Exact benchmark execution timed out after ${timeoutMs}ms for ${providerId}/${modelId}`));
+        }, timeoutMs);
+      });
+
+      const genPromise = provider.generateContent({
+        model: modelId,
+        prompt,
+        fallbackText: fallbackText || '',
+        role,
+      });
+
+      const res = await Promise.race([genPromise, timeoutPromise]).finally(() => {
+        if (timeoutHandle) clearTimeout(timeoutHandle);
+      });
+
+      const latencyMs = Date.now() - startTime;
+
+      if (res.isRealProviderUsage || providerId === 'mock') {
+        this.recordModelUsage(modelId, {
+          promptTokenCount: res.promptTokens,
+          candidatesTokenCount: res.completionTokens,
+          totalTokenCount: res.totalTokens,
+        });
+      }
+
+      return {
+        text: res.text,
+        requestedModelId: modelId,
+        requestedProviderId: providerId,
+        actualModelId: modelId,
+        actualProviderId: providerId,
+        failoverUsed: false,
+        totalTokens: res.totalTokens,
+        promptTokens: res.promptTokens,
+        completionTokens: res.completionTokens,
+        success: true,
+        latencyMs,
+      };
+    } catch (err: any) {
+      const latencyMs = Date.now() - startTime;
+      const classified = classifyProviderError(err);
+      console.warn(`[ProviderManager] Exact benchmark execution failed for ${providerId}/${modelId}:`, classified.sanitizedMessage);
+
+      if (classified.reason === 'RATE_LIMIT') {
+        this.handleRateLimitError(modelId, classified.retryAfterSeconds || 60);
+      }
+
+      return {
+        text: '',
+        requestedModelId: modelId,
+        requestedProviderId: providerId,
+        actualModelId: modelId,
+        actualProviderId: providerId,
+        failoverUsed: false,
+        success: false,
+        error: classified.sanitizedMessage,
+        latencyMs,
+      };
+    }
   }
 
   public inferProviderFromModel(model: string): AIProviderId | null {

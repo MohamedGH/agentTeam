@@ -19,6 +19,27 @@ export type ProblemComplexity = 'LOW' | 'MEDIUM' | 'HIGH' | 'EXTREME';
 
 export type LLMStatus = 'UNMEASURED' | 'LOW_CONFIDENCE' | 'MEASURED' | 'UNAVAILABLE';
 
+export type EvaluationSource = 'HERMETIC_FIXTURE' | 'LIVE_PROVIDER' | 'REAL_TASK';
+
+export interface ExactBenchmarkExecutionResult {
+  text: string;
+  requestedModelId: string;
+  requestedProviderId: AIProviderId;
+  actualModelId: string;
+  actualProviderId: AIProviderId;
+  failoverUsed: boolean;
+  totalTokens?: number;
+  promptTokens?: number;
+  completionTokens?: number;
+  success: boolean;
+  error?: string;
+  latencyMs: number;
+}
+
+export interface RandomProvider {
+  next(): number;
+}
+
 export interface ClassifiedProblem {
   category: ProblemCategory;
   subcategory: string;
@@ -53,6 +74,7 @@ export interface LLMEvaluation {
   problemId: string;
   category: ProblemCategory;
   complexity: ProblemComplexity;
+  evaluationSource: EvaluationSource;
   success: boolean;
   score: number; // 0.0 to 1.0
   latencyMs: number;
@@ -65,6 +87,13 @@ export interface LLMEvaluation {
   details?: Record<string, any>;
   isLiveBenchmark?: boolean;
   outputSample?: string;
+  proof?: {
+    requestedModelId: string;
+    requestedProviderId: AIProviderId;
+    actualModelId: string;
+    actualProviderId: AIProviderId;
+    failoverUsed: boolean;
+  };
 }
 
 export interface ModelRankingStats {
@@ -122,6 +151,7 @@ export interface SelectionConstraints {
   excludeModels?: string[];
   forceExploration?: boolean;
   forceModelId?: string;
+  randomProvider?: RandomProvider;
 }
 
 export interface SelectionDecision {

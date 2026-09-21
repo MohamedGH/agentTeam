@@ -3,7 +3,7 @@ import { quotaManager } from '../quotaManager';
 import { BENCHMARK_DATASET } from '../../tests/benchmarks/dataset';
 import {
   BenchmarkDefinition,
-  LLMAdaptiveConfig,
+  ExactBenchmarkExecutionResult,
   LLMEvaluation,
   LLMTelemetryEvent,
   ProblemCategory,
@@ -34,9 +34,14 @@ export interface BenchmarkRunResult {
 /**
  * LLMBenchmarkEngine
  * 
- * Conducts strictly controlled, paired evaluations across candidate LLMs
+ * Conducts strictly controlled, paired, empirical evaluations across candidate LLMs
  * on standardized, versioned reference benchmarks.
- * Employs identical prompts, identical constraints, and identical objective assertions.
+ * 
+ * Strict Scientific & Invariant Principles:
+ * - ZERO Failover: Calls generateExactModelForBenchmark() with strict proof verification.
+ * - Anti-Bias Failover Rejection: If failover occurs or provider/model mismatches, evaluation is invalidated immediately.
+ * - Separation of Hermetic Fixtures and Live Evaluations: Clear separation with evaluationSource.
+ * - Fairness: Paired execution with identical prompts, timeout, and objective sandboxed assertions.
  */
 export class LLMBenchmarkEngine {
   private providerMgr: ProviderManager;
@@ -75,7 +80,7 @@ export class LLMBenchmarkEngine {
   }
 
   /**
-   * Runs standardized benchmarks across selected models.
+   * Runs standardized benchmarks across selected models under paired, identical conditions.
    */
   public async runBenchmarks(options: BenchmarkRunOptions = {}): Promise<BenchmarkRunResult> {
     const runId = `bench_run_${Date.now()}`;
@@ -111,7 +116,8 @@ export class LLMBenchmarkEngine {
     const skippedDueToQuota: string[] = [];
     let executedRequests = 0;
 
-    // 3. Controlled execution: for each benchmark, compare each candidate under identical conditions
+    // 3. Paired Controlled Execution:
+    // For each benchmark problem, run each candidate model under identical prompt and constraints
     for (const bench of benchmarks) {
       for (const modelEntry of modelsToTest) {
         if (executedRequests >= maxRequests) {
@@ -146,7 +152,7 @@ export class LLMBenchmarkEngine {
           providerId: modelEntry.providerId,
           category: bench.category,
           evaluationId: evalResult.id,
-          details: { score: evalResult.score, success: evalResult.success },
+          details: { score: evalResult.score, success: evalResult.success, source: evalResult.evaluationSource },
         });
       }
     }
@@ -177,7 +183,7 @@ export class LLMBenchmarkEngine {
   }
 
   /**
-   * Executes a single benchmark on a specific model under controlled conditions
+   * Executes a single benchmark on an EXACT requested model and provider with Zero Failover.
    */
   public async executeSingleBenchmark(
     bench: BenchmarkDefinition,
@@ -188,9 +194,9 @@ export class LLMBenchmarkEngine {
     const startTime = Date.now();
     let outputText = '';
     let estimatedCost = 0;
+    let proof: ExactBenchmarkExecutionResult | undefined;
 
-    try {
-      const fullPrompt = `You are solving an objective benchmark.
+    const fullPrompt = `You are solving an objective benchmark.
 Problem ID: ${bench.id}
 Category: ${bench.category}
 Difficulty: ${bench.difficulty}
@@ -200,29 +206,29 @@ ${bench.prompt}
 ${bench.context ? `Context:\n${bench.context}\n` : ''}
 Provide a clean, precise solution adhering strictly to requirements.`;
 
+    try {
       if (!isLive && providerId !== 'mock') {
-        // Hermetic mock simulation for non-live benchmark execution
-        outputText = `// Hermetic benchmark response for ${modelId}\n// Method: ${bench.criteria.method}\n// Solution\n`;
-        if (bench.category === 'MATHEMATICS' && bench.criteria.expectedExactAnswer) {
+        // Hermetic fixture evaluation (explicitly tagged as HERMETIC_FIXTURE)
+        outputText = bench.criteria.referenceSolutions?.[0] || `// Hermetic benchmark fixture test\n`;
+        if (bench.category === 'MATHEMATICS' && bench.criteria.expectedExactAnswer !== undefined) {
           outputText += `Result: ${bench.criteria.expectedExactAnswer}`;
-        } else if (bench.category === 'CODE_DEBUGGING') {
-          outputText += `function solution() { return true; }`;
         }
         estimatedCost = 0;
       } else {
-        const genResult = await this.providerMgr.generateWithUsage(
+        // Live provider or Mock provider execution using ZERO FAILOVER method
+        proof = await this.providerMgr.generateExactModelForBenchmark({
+          providerId,
           modelId,
-          fullPrompt,
-          `// Fallback benchmark response for ${modelId}\n// Method: ${bench.criteria.method}`,
-          'benchmark_evaluator',
-          providerId
-        );
+          prompt: fullPrompt,
+          role: 'benchmark_evaluator',
+          timeoutMs: 45000,
+        });
 
-        outputText = genResult.text;
-        const tokens = genResult.totalTokens || 250;
+        outputText = proof.text;
+        const tokens = proof.totalTokens || 250;
         estimatedCost = this.estimateCost(modelId, tokens);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.warn(`[LLMBenchmarkEngine] Model ${modelId} failed during benchmark ${bench.id}:`, err);
       outputText = '';
     }
@@ -236,15 +242,15 @@ Provide a clean, precise solution adhering strictly to requirements.`;
       outputText,
       latencyMs,
       estimatedCost,
-      isLive
+      isLive,
+      proof
     );
   }
 
   private estimateCost(modelId: string, totalTokens: number): number {
-    // Standard approximate pricing per 1K tokens
     if (modelId.includes('ultra') || modelId.includes('opus')) return (totalTokens / 1000) * 0.015;
     if (modelId.includes('pro') || modelId.includes('gpt-4') || modelId.includes('sonnet')) return (totalTokens / 1000) * 0.003;
-    return (totalTokens / 1000) * 0.00015; // flash/mini/mock
+    return (totalTokens / 1000) * 0.00015;
   }
 }
 
