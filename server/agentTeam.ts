@@ -5,10 +5,20 @@ import { workspace, VirtualWorkspace } from './virtualWorkspace';
 import { codingAgentManager, CodingAgentTask, CodingAgentResult } from './codingAgents';
 import { workflowOrchestrator } from './workflowOrchestrator';
 import { AgentStep, FinalReport, TeamRunResult, AgentRole, ExecutionStatus, deriveExecutionStatus, FailoverRecord } from '../src/types';
+import { llmSelector } from './llm/LLMSelector';
+import { llmPerformanceEvaluator } from './llm/LLMPerformanceEvaluator';
+import { llmPerformanceMemory } from './llm/LLMPerformanceMemory';
+import { problemClassifier } from './llm/ProblemClassifier';
+import { calculateModelCost } from './llm/pricing';
+import { SelectionDecision, SelectionConstraints, FailureClass } from './llm/types';
+import { AIProviderId } from './providers/types';
 
 export interface TeamRunOptions {
   provider?: any;
   model?: string;
+  maxLatencyMs?: number;
+  maxCost?: number;
+  constraints?: SelectionConstraints;
   codingAgent?: 'jules' | 'mock' | 'none';
   repository?: string;
   branch?: string;
@@ -47,8 +57,46 @@ export class AgentTeamEngine {
     const taskId = 'task_' + Math.random().toString(36).substring(2, 9);
     const steps: AgentStep[] = [];
 
-    const activeProvider = options.provider || providerManager.getActiveProvider();
-    const chosenModel = options.model || (await providerManager.selectOptimalModel(undefined, tier, 2000, activeProvider));
+    // -------------------------------------------------------------
+    // ADAPTIVE MULTI-LLM SELECTION & ROUTING
+    // -------------------------------------------------------------
+    let chosenModel: string;
+    let activeProvider: AIProviderId;
+    let selectionDecision: SelectionDecision;
+
+    if (options.model) {
+      // Preserve explicit manual override without confusing with adaptive selection
+      chosenModel = options.model;
+      activeProvider = (options.provider as AIProviderId) || providerManager.getActiveProvider();
+      const classified = problemClassifier.classify(taskPrompt);
+      selectionDecision = {
+        selectedModelId: chosenModel,
+        selectedProviderId: activeProvider,
+        decisionType: 'MANUAL_OVERRIDE',
+        candidateEvaluatedCount: 1,
+        reason: `Model explicitly forced via options.model override: ${chosenModel}`,
+        confidence: 1.0,
+        predictedScore: 0.9,
+        classifiedProblem: classified,
+      };
+    } else {
+      // Normal production routing path uses LLMSelector
+      const constraints: SelectionConstraints = {
+        preferredProviders: options.provider ? [options.provider] : [providerManager.getActiveProvider()],
+        maxLatencyMs: options.maxLatencyMs,
+        maxCost: options.maxCost,
+        ...options.constraints,
+      };
+
+      selectionDecision = llmSelector.selectModelForTask(taskPrompt, undefined, constraints);
+
+      if (selectionDecision.decisionType === 'NO_FEASIBLE_MODEL') {
+        throw new Error(`[LLMSelector] No feasible model satisfies constraints: ${selectionDecision.reason}`);
+      }
+
+      chosenModel = selectionDecision.selectedModelId;
+      activeProvider = selectionDecision.selectedProviderId as AIProviderId;
+    }
 
     const addStep = (step: Omit<AgentStep, 'id' | 'timestamp'>): AgentStep => {
       const fullStep: AgentStep = {
@@ -63,6 +111,18 @@ export class AgentTeamEngine {
       }
       return fullStep;
     };
+
+    // Record initial step for model routing decision
+    addStep({
+      phase: 0,
+      phaseName: 'Model Selection',
+      agent: 'manager',
+      thought: `Adaptive routing selected ${chosenModel} (${activeProvider}) via ${selectionDecision.decisionType}. Reason: ${selectionDecision.reason}`,
+      status: 'COMPLETED',
+      output: `Selected ${chosenModel} [${activeProvider}] - Decision: ${selectionDecision.decisionType}, Problem: ${selectionDecision.classifiedProblem.category} (${selectionDecision.classifiedProblem.complexity}), Confidence: ${selectionDecision.confidence}`,
+      provider: activeProvider,
+      model: chosenModel,
+    });
 
     let totalTokens = 0;
     let totalPromptTokens = 0;
@@ -741,6 +801,44 @@ Evaluate code quality, security implications, maintainability, and clean archite
         ? (activeProvider === 'mock' ? 'mock' : 'real_provider')
         : 'fallback_unknown';
 
+      const executionDurationMs = Date.now() - startTime;
+      const costInfo = calculateModelCost(
+        chosenModel,
+        totalPromptTokens,
+        totalCompletionTokens,
+        totalTokens,
+        anyRealUsage
+      );
+
+      const workflowSuccess = Boolean(testerPassed && reviewerApproved);
+
+      // OBLIGATOIRE: REAL_TASK evaluation post-execution
+      let realTaskEvalRecord: any = null;
+      try {
+        realTaskEvalRecord = llmPerformanceEvaluator.evaluateRealTaskExecution(
+          selectionDecision.classifiedProblem,
+          chosenModel,
+          activeProvider,
+          {
+            success: workflowSuccess,
+            exitCode: workflowSuccess ? 0 : 1,
+            testsPassed: testerPassed ? 1 : 0,
+            totalTests: 1,
+            latencyMs: executionDurationMs,
+            estimatedCost: costInfo.cost,
+            costSource: costInfo.source,
+            regressionDetected: !reviewerApproved,
+            compilerErrors: !testerPassed ? ['Unit tests or reviewer criteria failed'] : undefined,
+            output: delivRes.text,
+            failureClass: workflowSuccess ? undefined : 'MODEL_FAILURE',
+          }
+        );
+
+        llmPerformanceMemory.addEvaluation(realTaskEvalRecord);
+      } catch (evalErr) {
+        console.warn('[AgentTeam] Warning: Failed to record REAL_TASK evaluation in memory:', evalErr);
+      }
+
       const finalReport: FinalReport = {
         implementation: 'PASS',
         tests: testerPassed ? 'PASS' : 'FAIL',
@@ -754,10 +852,14 @@ Evaluate code quality, security implications, maintainability, and clean archite
           reviewerCorrections: Math.max(0, reviewCycles - 1),
         },
         metrics: {
-          durationMs: Date.now() - startTime,
+          durationMs: executionDurationMs,
           modelUsed: chosenModel,
           providerUsed: activeProvider,
           codingAgentUsed: codingAgentToUse || undefined,
+          selectionDecision,
+          realTaskEvaluationId: realTaskEvalRecord?.id,
+          cost: costInfo.cost,
+          costSource: costInfo.source,
           prUrl: julesResult?.pullRequestUrl || julesResult?.prUrl,
           gitBranch: julesResult?.git?.branch || julesResult?.gitBranch,
           commitSha: julesResult?.commitSha,
@@ -801,6 +903,8 @@ Evaluate code quality, security implications, maintainability, and clean archite
         executionStatus: 'COMPLETED',
         modelUsed: chosenModel,
         codingAgentUsed: codingAgentToUse || undefined,
+        selectionDecision,
+        realTaskEvaluationId: realTaskEvalRecord?.id,
         failoverHistory: allFailoverHistory.length > 0 ? allFailoverHistory : undefined,
         prUrl: julesResult?.pullRequestUrl || julesResult?.prUrl,
         gitBranch: julesResult?.git?.branch || julesResult?.gitBranch,
@@ -815,6 +919,58 @@ Evaluate code quality, security implications, maintainability, and clean archite
       };
     } catch (error: any) {
       console.error('[AgentTeam] Error running workflow:', error);
+      const executionDurationMs = Date.now() - startTime;
+
+      let failureClass: FailureClass = 'APPLICATION_ERROR';
+      const errMsg = error?.message || String(error);
+      if (errMsg.includes('429') || errMsg.toLowerCase().includes('quota') || errMsg.toLowerCase().includes('rate limit')) {
+        failureClass = 'QUOTA_FAILURE';
+      } else if (errMsg.includes('401') || errMsg.includes('403') || errMsg.toLowerCase().includes('auth') || errMsg.toLowerCase().includes('api key')) {
+        failureClass = 'AUTH_FAILURE';
+      } else if (errMsg.toLowerCase().includes('timeout') || errMsg.toLowerCase().includes('etimedout')) {
+        failureClass = 'TIMEOUT';
+      } else if (errMsg.toLowerCase().includes('fetch failed') || errMsg.toLowerCase().includes('network') || errMsg.toLowerCase().includes('econnrefused') || errMsg.includes('502') || errMsg.includes('503')) {
+        failureClass = 'INFRASTRUCTURE_FAILURE';
+      } else if (errMsg.includes('[LLMSelector]') || errMsg.includes('No feasible model')) {
+        failureClass = 'MODEL_FAILURE';
+      }
+
+      let errorEvalRecord: any = null;
+      if (chosenModel && selectionDecision) {
+        try {
+          const costInfo = calculateModelCost(
+            chosenModel,
+            totalPromptTokens,
+            totalCompletionTokens,
+            totalTokens,
+            anyRealUsage
+          );
+
+          errorEvalRecord = llmPerformanceEvaluator.evaluateRealTaskExecution(
+            selectionDecision.classifiedProblem,
+            chosenModel,
+            activeProvider,
+            {
+              success: false,
+              exitCode: 1,
+              testsPassed: 0,
+              totalTests: 1,
+              latencyMs: executionDurationMs,
+              estimatedCost: costInfo.cost,
+              costSource: costInfo.source,
+              regressionDetected: true,
+              compilerErrors: [errMsg],
+              output: errMsg,
+              failureClass,
+            }
+          );
+
+          llmPerformanceMemory.addEvaluation(errorEvalRecord);
+        } catch (evalErr) {
+          console.warn('[AgentTeam] Failed to record error evaluation:', evalErr);
+        }
+      }
+
       return {
         taskId,
         taskPrompt,
@@ -822,6 +978,8 @@ Evaluate code quality, security implications, maintainability, and clean archite
         executionStatus: 'FAILED',
         modelUsed: chosenModel,
         codingAgentUsed: codingAgentToUse || undefined,
+        selectionDecision,
+        realTaskEvaluationId: errorEvalRecord?.id,
         steps,
         virtualFiles: workspace.getFiles(),
         error: error.message || 'Workflow execution error',

@@ -27,7 +27,10 @@ export type FailureClass =
   | 'AUTH_FAILURE'
   | 'QUOTA_FAILURE'
   | 'TIMEOUT'
-  | 'EVALUATION_FAILURE';
+  | 'EVALUATION_FAILURE'
+  | 'INFRASTRUCTURE_FAILURE'
+  | 'APPLICATION_ERROR'
+  | 'UNKNOWN_COST';
 
 export type CostSource = 'REAL_COST' | 'ESTIMATED_COST' | 'UNKNOWN_COST';
 
@@ -167,6 +170,7 @@ export interface BenchmarkDefinition {
 export interface SelectionConstraints {
   maxLatencyMs?: number;
   maxCost?: number;
+  allowUnmeasuredUnderConstraints?: boolean;
   requiredCapabilities?: string[];
   preferredProviders?: AIProviderId[];
   excludeModels?: string[];
@@ -178,7 +182,7 @@ export interface SelectionConstraints {
 export interface SelectionDecision {
   selectedModelId: string;
   selectedProviderId: AIProviderId;
-  decisionType: 'EXPLOITATION' | 'EXPLORATION' | 'FALLBACK' | 'MANUAL_OVERRIDE' | 'CONSTRAINT_FALLBACK';
+  decisionType: 'EXPLOITATION' | 'EXPLORATION' | 'FALLBACK' | 'MANUAL_OVERRIDE' | 'CONSTRAINT_FALLBACK' | 'NO_FEASIBLE_MODEL';
   candidateEvaluatedCount: number;
   reason: string;
   confidence: number;

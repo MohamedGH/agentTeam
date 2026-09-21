@@ -1,5 +1,6 @@
 import { AIProviderId } from '../providers/types';
 import { quotaManager } from '../quotaManager';
+import { calculateModelCost } from './pricing';
 import { ProblemClassifier, problemClassifier as defaultClassifier } from './ProblemClassifier';
 import { LLMRegistry, llmRegistry as defaultRegistry } from './LLMRegistry';
 import { LLMRankingEngine, llmRankingEngine as defaultRankingEngine } from './LLMRankingEngine';
@@ -76,6 +77,9 @@ export class LLMSelector {
 
   public updateConfig(patch: Partial<LLMAdaptiveConfig>): void {
     this.config = { ...this.config, ...patch };
+    if (patch.uncertaintyDecayFactor !== undefined) {
+      this.memory.setUncertaintyDecayFactor(patch.uncertaintyDecayFactor);
+    }
   }
 
   public setRandomProvider(provider: RandomProvider): void {
@@ -201,29 +205,57 @@ export class LLMSelector {
             'REAL_TASK',
           ]);
 
-        if (!stats || stats.sampleCount === 0) {
-          return true; // Allow exploration of unmeasured models unless strictly measured required
+        // 1. HARD LATENCY CONSTRAINT
+        if (constraints.maxLatencyMs !== undefined) {
+          if (stats && stats.sampleCount > 0) {
+            if (stats.meanLatencyMs > constraints.maxLatencyMs) {
+              return false;
+            }
+          } else {
+            // Model has no empirical latency stats.
+            // Under hard constraints, unknown latency is unsafe unless explicitly allowed.
+            if (!constraints.allowUnmeasuredUnderConstraints) {
+              return false;
+            }
+          }
         }
 
-        if (constraints.maxLatencyMs !== undefined && stats.meanLatencyMs > constraints.maxLatencyMs) {
-          return false;
+        // 2. HARD COST CONSTRAINT
+        if (constraints.maxCost !== undefined) {
+          const estTokens = classified.estimatedTokens || 2000;
+          const pTokens = Math.round(estTokens * 0.4);
+          const cTokens = Math.round(estTokens * 0.6);
+          const pricing = calculateModelCost(m.modelId, pTokens, cTokens, estTokens, false);
+
+          // Unknown cost cannot be assumed safe under a hard budget constraint
+          if (pricing.source === 'UNKNOWN_COST' && (!stats || stats.sampleCount === 0)) {
+            return false;
+          }
+
+          // Known pricing exceeds hard budget
+          if (pricing.source !== 'UNKNOWN_COST' && pricing.cost > constraints.maxCost) {
+            return false;
+          }
+
+          // Empirical historical cost exceeds hard budget
+          if (stats && stats.sampleCount > 0 && stats.meanCost > constraints.maxCost) {
+            return false;
+          }
         }
-        if (constraints.maxCost !== undefined && stats.meanCost > constraints.maxCost) {
-          return false;
-        }
+
         return true;
       });
 
-      if (constraintEligible.length === 0 && eligible.length > 0) {
-        const fallback = eligible[0];
+      if (constraintEligible.length === 0) {
+        // HARD CONSTRAINT: Never select a violating candidate!
         return {
-          selectedModelId: fallback.modelId,
-          selectedProviderId: fallback.providerId,
-          decisionType: 'CONSTRAINT_FALLBACK',
+          selectedModelId: '',
+          selectedProviderId: (constraints.preferredProviders?.[0] || 'mock') as AIProviderId,
+          decisionType: 'NO_FEASIBLE_MODEL',
           candidateEvaluatedCount: eligible.length,
-          reason: `All eligible candidates violated constraints (maxLatencyMs: ${constraints.maxLatencyMs}, maxCost: ${constraints.maxCost}). Selected fallback candidate ${fallback.modelId}.`,
-          confidence: 0.1,
-          predictedScore: 0.5,
+          reason: `All candidate models violated hard constraints (maxLatencyMs: ${constraints.maxLatencyMs}, maxCost: ${constraints.maxCost}). No candidate satisfies constraints.`,
+          confidence: 0,
+          predictedScore: 0,
           classifiedProblem: classified,
         };
       }

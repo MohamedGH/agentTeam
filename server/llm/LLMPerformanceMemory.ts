@@ -16,10 +16,27 @@ export class LLMPerformanceMemory {
   private storagePath: string;
   private evaluations: LLMEvaluation[] = [];
   private statsCache: Map<string, ModelRankingStats> = new Map();
+  private uncertaintyDecayFactor: number = 0.35;
 
   constructor(customStoragePath?: string) {
     this.storagePath = customStoragePath || path.resolve(process.cwd(), 'data', 'llm_performance.json');
     this.load();
+  }
+
+  public setUncertaintyDecayFactor(factor: number): void {
+    this.uncertaintyDecayFactor = factor;
+    this.recomputeAll();
+  }
+
+  public recomputeAll(): void {
+    this.statsCache.clear();
+    for (const e of this.evaluations) {
+      this.recomputeStatsFor(e.modelId, e.category, e.complexity, e.modelVersion);
+    }
+  }
+
+  public getUncertaintyDecayFactor(): number {
+    return this.uncertaintyDecayFactor;
   }
 
   /**
@@ -255,7 +272,7 @@ export class LLMPerformanceMemory {
     // Uncertainty Penalty:
     // Models with few samples receive a higher uncertainty penalty on their rank score
     // to prevent 1 lucky hit (1.0 on 1 sample) from beating a proven model (0.92 on 50 samples).
-    const uncertaintyPenalty = (1 - confidence) * 0.35;
+    const uncertaintyPenalty = (1 - confidence) * this.uncertaintyDecayFactor;
     const compositeRankScore = Math.max(0, (meanScore * 0.8 + successRate * 0.2) - uncertaintyPenalty);
 
     let status: LLMStatus = 'UNMEASURED';

@@ -221,6 +221,7 @@ export class LLMSelfImprovementAdapter {
           const { uncertaintyDecayFactor } = plan.action;
           if (uncertaintyDecayFactor) {
             this.selector.updateConfig({ uncertaintyDecayFactor });
+            this.memory.setUncertaintyDecayFactor(uncertaintyDecayFactor);
           }
           success = true;
           break;

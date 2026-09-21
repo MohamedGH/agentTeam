@@ -138,6 +138,10 @@ export interface FinalReport {
     isRealTokenUsage?: boolean;
     tokenAccountingType?: TokenAccountingType;
     failoverHistory?: FailoverRecord[];
+    selectionDecision?: any;
+    realTaskEvaluationId?: string;
+    cost?: number;
+    costSource?: string;
   };
 }
 
@@ -149,6 +153,8 @@ export interface TeamRunResult {
   modelUsed: string;
   codingAgentUsed?: string;
   failoverHistory?: FailoverRecord[];
+  selectionDecision?: any;
+  realTaskEvaluationId?: string;
   prUrl?: string;
   gitBranch?: string;
   commitSha?: string;

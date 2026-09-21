@@ -3,7 +3,9 @@ import { AIProviderId } from '../providers/types';
 import {
   BenchmarkDefinition,
   ClassifiedProblem,
+  CostSource,
   EvaluationSource,
+  FailureClass,
   LLMEvaluation,
   ProblemCategory,
   ProblemComplexity,
@@ -183,9 +185,12 @@ export class LLMPerformanceEvaluator {
       totalTests?: number;
       latencyMs: number;
       estimatedCost?: number;
+      costSource?: CostSource;
       regressionDetected?: boolean;
       compilerErrors?: string[];
       output?: string;
+      failureClass?: FailureClass;
+      context?: string;
     }
   ): LLMEvaluation {
     const totalTests = executionResult.totalTests || (executionResult.success ? 1 : 1);
@@ -209,7 +214,7 @@ export class LLMPerformanceEvaluator {
       modelId,
       providerId,
       modelVersion: this.extractVersion(modelId),
-      problemId: `task_${task.category.toLowerCase()}_${Date.now()}`,
+      problemId: `task_${task.category.toLowerCase()}_${Date.now()}_${Math.random().toString(36).substring(2, 5)}`,
       category: task.category,
       complexity: task.complexity,
       evaluationSource: 'REAL_TASK',
@@ -217,17 +222,29 @@ export class LLMPerformanceEvaluator {
       score: Math.round(score * 100) / 100,
       latencyMs: executionResult.latencyMs,
       estimatedCost: executionResult.estimatedCost,
+      costSource: executionResult.costSource || 'UNKNOWN_COST',
       testsPassed,
       totalTests,
       regressionDetected: Boolean(executionResult.regressionDetected),
       evaluatorVersion: this.version,
       timestamp: Date.now(),
+      failureClass: executionResult.failureClass,
       details: {
         exitCode: executionResult.exitCode,
         compilerErrors: executionResult.compilerErrors,
+        context: executionResult.context,
+        detectedLanguages: task.detectedLanguages,
       },
       isLiveBenchmark: false,
       outputSample: executionResult.output ? executionResult.output.slice(0, 180) : undefined,
+      proof: {
+        requestedModelId: modelId,
+        requestedProviderId: providerId,
+        actualModelId: modelId,
+        actualProviderId: providerId,
+        failoverUsed: false,
+        failureClass: executionResult.failureClass,
+      },
     };
   }
 

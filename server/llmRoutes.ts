@@ -12,10 +12,16 @@ export function createLLMRoutes(authMiddleware?: RequestHandler): Router {
   const router = Router();
   const requireAuth = authMiddleware || ((_req: Request, _res: Response, next: () => void) => next());
 
-  // 1. Classify a problem
+  // =========================================================================
+  // PUBLIC INSPECTION & DISCOVERY ENDPOINTS (Used by UI Dashboard)
+  // Read-only discovery and stateless classification/routing simulation.
+  // =========================================================================
+
+  // 1. Classify a problem (Public stateless classifier)
   router.post('/classify', (req: Request, res: Response) => {
     try {
-      const { taskPrompt, context } = req.body;
+      const taskPrompt = req.body.taskPrompt || req.body.prompt;
+      const context = req.body.context;
       if (!taskPrompt || typeof taskPrompt !== 'string') {
         return res.status(400).json({ error: 'taskPrompt is required and must be a string' });
       }
@@ -26,7 +32,7 @@ export function createLLMRoutes(authMiddleware?: RequestHandler): Router {
     }
   });
 
-  // 2. Discover available models and empirical status
+  // 2. Discover available models and empirical status (Public)
   router.get('/models', (req: Request, res: Response) => {
     try {
       const models = llmRegistry.discoverModels();
@@ -36,7 +42,7 @@ export function createLLMRoutes(authMiddleware?: RequestHandler): Router {
     }
   });
 
-  // 3. Get empirical rankings
+  // 3. Get empirical rankings (Public)
   router.get('/rankings', (req: Request, res: Response) => {
     try {
       const category = req.query.category as ProblemCategory | undefined;
@@ -54,10 +60,11 @@ export function createLLMRoutes(authMiddleware?: RequestHandler): Router {
     }
   });
 
-  // 4. Select model for a task using adaptive routing
+  // 4. Select model for a task using adaptive routing (Public Simulation/Inspection)
   router.post('/select', (req: Request, res: Response) => {
     try {
-      const { taskPrompt, context, constraints } = req.body;
+      const taskPrompt = req.body.taskPrompt || req.body.prompt;
+      const { context, constraints } = req.body;
       if (!taskPrompt) {
         return res.status(400).json({ error: 'taskPrompt is required' });
       }
@@ -68,10 +75,16 @@ export function createLLMRoutes(authMiddleware?: RequestHandler): Router {
     }
   });
 
-  // 5. Decompose complex task into specialized roles
-  router.post('/decompose-and-select', (req: Request, res: Response) => {
+  // =========================================================================
+  // PROTECTED MUTATION & HEAVY ORCHESTRATION ENDPOINTS (requireAuth)
+  // Endpoints that execute live test suites, mutate memory, or execute system adaptations.
+  // =========================================================================
+
+  // 5. Decompose complex task into specialized roles (PROTECTED)
+  router.post('/decompose-and-select', requireAuth, (req: Request, res: Response) => {
     try {
-      const { taskPrompt, context } = req.body;
+      const taskPrompt = req.body.taskPrompt || req.body.prompt;
+      const { context } = req.body;
       if (!taskPrompt) {
         return res.status(400).json({ error: 'taskPrompt is required' });
       }

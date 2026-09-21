@@ -165,7 +165,7 @@ export async function runAdaptiveRoutingHardeningTests() {
   assert(overrideDecision.confidence > 0, 'Confidence reflects empirical data from memory');
 
   // --------------------------------------------------------------------------
-  // TEST 6: LLMSelector Hard Constraints Enforcement
+  // TEST 6: LLMSelector Hard Constraints Enforcement (Zero Tolerance)
   // --------------------------------------------------------------------------
   console.log('\n--- Test 6: Hard Constraints Enforcement ---');
   // Both mock-fast-model (300ms) and mock-pro-model (500ms) exceed 10ms constraint
@@ -192,13 +192,34 @@ export async function runAdaptiveRoutingHardeningTests() {
   });
 
   assert(
-    strictConstraintDecision.decisionType === 'CONSTRAINT_FALLBACK',
-    'Returns CONSTRAINT_FALLBACK when all candidates violate maxLatencyMs'
+    strictConstraintDecision.decisionType === 'NO_FEASIBLE_MODEL',
+    'Returns NO_FEASIBLE_MODEL when all candidates violate maxLatencyMs'
   );
   assert(
-    strictConstraintDecision.reason.includes('violated constraints'),
-    'Reason explicitly reports constraint violation'
+    strictConstraintDecision.selectedModelId === '',
+    'Selected model is empty when no feasible candidate satisfies constraints'
   );
+  assert(
+    strictConstraintDecision.reason.includes('violated hard constraints'),
+    'Reason explicitly reports hard constraint violation'
+  );
+
+  // Dynamic Uncertainty Decay Factor Test
+  console.log('\n--- Test 6b: Dynamic Uncertainty Decay Factor Synchronization ---');
+  memory.setUncertaintyDecayFactor(0.8);
+  assert(memory.getUncertaintyDecayFactor() === 0.8, 'Memory correctly stored uncertaintyDecayFactor');
+  const statsHighDecay = memory.getStats('mock-fast-model', 'CODE_GENERATION');
+  
+  memory.setUncertaintyDecayFactor(0.1);
+  assert(memory.getUncertaintyDecayFactor() === 0.1, 'Memory updated uncertaintyDecayFactor');
+  const statsLowDecay = memory.getStats('mock-fast-model', 'CODE_GENERATION');
+
+  assert(
+    (statsLowDecay?.compositeRankScore || 0) > (statsHighDecay?.compositeRankScore || 0),
+    'Lower uncertainty decay factor produces higher compositeRankScore for low-confidence models'
+  );
+  // Restore baseline
+  memory.setUncertaintyDecayFactor(0.35);
 
   // --------------------------------------------------------------------------
   // TEST 7: LLMSelector Quota and Cooldown Protection

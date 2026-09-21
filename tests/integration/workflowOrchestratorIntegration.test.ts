@@ -90,14 +90,14 @@ export async function runWorkflowOrchestratorIntegrationTests() {
       mockAgent,
     });
 
-    const tempGitDir = path.join(testDataDir, `repo_${Date.now()}`);
+    const tempGitDir = path.join(testDataDir, `repo_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`);
     fs.mkdirSync(tempGitDir, { recursive: true });
-    execSync('git init', { cwd: tempGitDir, stdio: 'ignore' });
-    execSync('git remote add origin https://github.com/MohamedGH/agentTeam.git', { cwd: tempGitDir, stdio: 'ignore' });
+    execSync('git init -b main', { cwd: tempGitDir, stdio: 'ignore' });
     execSync('git config user.name "Test Runner"', { cwd: tempGitDir, stdio: 'ignore' });
     execSync('git config user.email "test@example.com"', { cwd: tempGitDir, stdio: 'ignore' });
+    execSync('git remote add origin https://github.com/MohamedGH/agentTeam.git', { cwd: tempGitDir, stdio: 'ignore' });
     fs.writeFileSync(path.join(tempGitDir, 'package.json'), JSON.stringify({ name: 'agent-team', scripts: { test: 'node -e "process.exit(0)"' } }));
-    execSync('git add package.json && git commit -m "init"', { cwd: tempGitDir, stdio: 'ignore' });
+    execSync('git add . && git commit -m "init"', { cwd: tempGitDir, stdio: 'ignore' });
 
     let gitProcessed = false;
     const mockGithubClient = new GitHubClient({
