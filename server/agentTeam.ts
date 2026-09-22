@@ -167,6 +167,7 @@ export class AgentTeamEngine {
     const initialFiles = { ...this.workspace.getFiles() };
     const changedFileList = new Set<string>();
     const allFailoverHistory: FailoverRecord[] = [];
+    let lastExactResult: any = null;
 
     let julesResult: CodingAgentResult | null = null;
     const codingAgentToUse = options.codingAgent && options.codingAgent !== 'none' ? options.codingAgent : null;
@@ -193,6 +194,7 @@ Provide your architectural breakdown and delegation plan.`;
       if (phase1Res.failoverHistory && phase1Res.failoverHistory.length > 0) {
         allFailoverHistory.push(...phase1Res.failoverHistory);
       }
+      lastExactResult = phase1Res;
 
       totalTokens += phase1Res.totalTokens;
       totalPromptTokens += phase1Res.promptTokens;
@@ -507,6 +509,7 @@ Describe how you are patching the code.`;
           if (devRes.failoverHistory && devRes.failoverHistory.length > 0) {
             allFailoverHistory.push(...devRes.failoverHistory);
           }
+          lastExactResult = devRes;
 
           // Perform actual virtual file operations according to the task
           const toolCalls = this.executeDeveloperActions(taskPrompt, developerCycle, changedFileList);
@@ -561,6 +564,7 @@ Provide QA evaluation and regression analysis.`;
         if (testerRes.failoverHistory && testerRes.failoverHistory.length > 0) {
           allFailoverHistory.push(...testerRes.failoverHistory);
         }
+        lastExactResult = testerRes;
 
         const testToolCalls = [
           {
@@ -657,6 +661,7 @@ Evaluate code quality, security implications, maintainability, and clean archite
         if (revRes.failoverHistory && revRes.failoverHistory.length > 0) {
           allFailoverHistory.push(...revRes.failoverHistory);
         }
+        lastExactResult = revRes;
 
         const reviewToolCalls = [
           {
@@ -827,6 +832,7 @@ Evaluate code quality, security implications, maintainability, and clean archite
       if (delivRes.failoverHistory && delivRes.failoverHistory.length > 0) {
         allFailoverHistory.push(...delivRes.failoverHistory);
       }
+      lastExactResult = delivRes;
 
       totalTokens += delivRes.totalTokens;
       totalPromptTokens += delivRes.promptTokens;
@@ -847,6 +853,18 @@ Evaluate code quality, security implications, maintainability, and clean archite
       );
 
       const workflowSuccess = Boolean(testerPassed && reviewerApproved);
+
+      // Extract verified execution identity directly from provider execution
+      const actualModelId = lastExactResult?.actualModelId || chosenModel;
+      const actualProviderId = lastExactResult?.actualProviderId || activeProvider;
+      const failoverUsed = Boolean(lastExactResult?.failoverUsed || allFailoverHistory.length > 0);
+      const isIdentityVerified = Boolean(
+        lastExactResult?.isIdentityVerified ??
+        (actualModelId === chosenModel && actualProviderId === activeProvider && !failoverUsed)
+      );
+      const isCompliantWithSelection = Boolean(
+        lastExactResult?.isCompliantWithSelection ?? (isIdentityVerified && !failoverUsed)
+      );
 
       // OBLIGATOIRE: REAL_TASK evaluation post-execution with strict identity and execution proof
       let realTaskEvalRecord: any = null;
@@ -871,9 +889,11 @@ Evaluate code quality, security implications, maintainability, and clean archite
             proof: {
               requestedModelId: chosenModel,
               requestedProviderId: activeProvider,
-              actualModelId: chosenModel,
-              actualProviderId: activeProvider,
-              failoverUsed: false,
+              actualModelId,
+              actualProviderId,
+              failoverUsed,
+              isIdentityVerified,
+              isCompliantWithSelection,
             },
           }
         );
@@ -949,6 +969,15 @@ Evaluate code quality, security implications, maintainability, and clean archite
         codingAgentUsed: codingAgentToUse || undefined,
         selectionDecision,
         realTaskEvaluationId: realTaskEvalRecord?.id,
+        execution: {
+          requestedModelId: chosenModel,
+          requestedProviderId: activeProvider,
+          actualModelId,
+          actualProviderId,
+          failoverUsed,
+          isIdentityVerified,
+          isCompliantWithSelection,
+        },
         failoverHistory: allFailoverHistory.length > 0 ? allFailoverHistory : undefined,
         prUrl: julesResult?.pullRequestUrl || julesResult?.prUrl,
         gitBranch: julesResult?.git?.branch || julesResult?.gitBranch,
@@ -980,6 +1009,17 @@ Evaluate code quality, security implications, maintainability, and clean archite
       }
 
       let errorEvalRecord: any = null;
+      const actualModelId = lastExactResult?.actualModelId || chosenModel;
+      const actualProviderId = lastExactResult?.actualProviderId || activeProvider;
+      const failoverUsed = Boolean(lastExactResult?.failoverUsed || allFailoverHistory.length > 0);
+      const isIdentityVerified = Boolean(
+        lastExactResult?.isIdentityVerified ??
+        (actualModelId === chosenModel && actualProviderId === activeProvider && !failoverUsed)
+      );
+      const isCompliantWithSelection = Boolean(
+        lastExactResult?.isCompliantWithSelection ?? (isIdentityVerified && !failoverUsed)
+      );
+
       if (chosenModel && selectionDecision) {
         try {
           const costInfo = calculateModelCost(
@@ -1010,10 +1050,12 @@ Evaluate code quality, security implications, maintainability, and clean archite
               proof: {
                 requestedModelId: chosenModel,
                 requestedProviderId: activeProvider,
-                actualModelId: chosenModel,
-                actualProviderId: activeProvider,
-                failoverUsed: false,
+                actualModelId,
+                actualProviderId,
+                failoverUsed,
                 failureClass,
+                isIdentityVerified,
+                isCompliantWithSelection,
               },
             }
           );
@@ -1033,6 +1075,15 @@ Evaluate code quality, security implications, maintainability, and clean archite
         codingAgentUsed: codingAgentToUse || undefined,
         selectionDecision,
         realTaskEvaluationId: errorEvalRecord?.id,
+        execution: {
+          requestedModelId: chosenModel,
+          requestedProviderId: activeProvider,
+          actualModelId,
+          actualProviderId,
+          failoverUsed,
+          isIdentityVerified,
+          isCompliantWithSelection,
+        },
         steps,
         virtualFiles: this.workspace.getFiles(),
         error: error.message || 'Workflow execution error',

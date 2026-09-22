@@ -117,6 +117,8 @@ export interface LLMEvaluation {
     actualProviderId: AIProviderId;
     failoverUsed: boolean;
     failureClass?: FailureClass;
+    isCompliantWithSelection?: boolean;
+    isIdentityVerified?: boolean;
   };
 }
 
@@ -132,6 +134,7 @@ export interface ModelRankingStats {
   successRate: number;
   meanLatencyMs: number;
   meanCost: number;
+  costKnown?: boolean;
   confidence: number; // 0.0 to 1.0 (statistical confidence based on sample size and variance)
   uncertaintyPenalty: number;
   compositeRankScore: number; // UCB or Bayesian mean score penalizing high variance / low sample
@@ -173,6 +176,7 @@ export interface SelectionConstraints {
   allowUnmeasuredUnderConstraints?: boolean;
   requiredCapabilities?: string[];
   preferredProviders?: AIProviderId[];
+  forceProviderId?: AIProviderId;
   excludeModels?: string[];
   forceExploration?: boolean;
   forceModelId?: string;

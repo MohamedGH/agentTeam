@@ -609,6 +609,8 @@ export class ProviderManager {
         actualModelId: modelId,
         actualProviderId: providerId,
         failoverUsed: false,
+        isIdentityVerified: false,
+        isCompliantWithSelection: false,
         success: false,
         error: `AI Provider "${providerId}" is not configured with credentials`,
         failureClass: 'AUTH_FAILURE',
@@ -657,15 +659,35 @@ export class ProviderManager {
                   ? 'REAL_PROVIDER_SUCCESS'
                   : 'DEGRADED_FALLBACK')));
 
+      // Extract actual identity from provider output directly, never self-assigned
+      const actualModelId = (res as any).actualModel || res.model || modelId;
+      const actualProviderId = (res as any).actualProvider || res.provider || providerId;
+      const failoverUsed = Boolean(
+        (res as any).failoverUsed ||
+        (res.failoverHistory && res.failoverHistory.length > 0)
+      );
+
+      const isIdentityVerified = Boolean(
+        actualModelId &&
+        actualProviderId &&
+        actualModelId === modelId &&
+        actualProviderId === providerId &&
+        !failoverUsed
+      );
+
+      const isCompliantWithSelection = isIdentityVerified && !failoverUsed;
+
       return {
         ...res,
-        provider: providerId,
-        model: modelId,
+        provider: actualProviderId,
+        model: actualModelId,
         requestedModelId: modelId,
         requestedProviderId: providerId,
-        actualModelId: modelId,
-        actualProviderId: providerId,
-        failoverUsed: false,
+        actualModelId,
+        actualProviderId,
+        failoverUsed,
+        isIdentityVerified,
+        isCompliantWithSelection,
         success: generationOutcome !== 'DEGRADED_FALLBACK' || providerId === 'mock' || Boolean(res.text && res.text !== fallbackText),
         generationOutcome,
         latencyMs,
@@ -709,6 +731,8 @@ export class ProviderManager {
         actualModelId: modelId,
         actualProviderId: providerId,
         failoverUsed: false,
+        isIdentityVerified: false,
+        isCompliantWithSelection: false,
         success: false,
         error: classified.sanitizedMessage,
         failureClass,

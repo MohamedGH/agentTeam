@@ -48,6 +48,9 @@ export class LLMPerformanceEvaluator {
       actualModelId: string;
       actualProviderId: AIProviderId;
       failoverUsed: boolean;
+      failureClass?: FailureClass;
+      isIdentityVerified?: boolean;
+      isCompliantWithSelection?: boolean;
     }
   ): LLMEvaluation {
     const startTime = Date.now();
@@ -199,6 +202,8 @@ export class LLMPerformanceEvaluator {
         actualProviderId: AIProviderId;
         failoverUsed: boolean;
         failureClass?: FailureClass;
+        isIdentityVerified?: boolean;
+        isCompliantWithSelection?: boolean;
       };
     }
   ): LLMEvaluation {
@@ -220,7 +225,18 @@ export class LLMPerformanceEvaluator {
     let isSuccess = executionResult.success;
     let failureClass = executionResult.failureClass;
 
-    if (!isConforming) {
+    const isIdentityVerified = Boolean(
+      (proof as any).isIdentityVerified ??
+      (proof.actualModelId &&
+        proof.actualProviderId &&
+        proof.actualModelId === proof.requestedModelId &&
+        proof.actualProviderId === proof.requestedProviderId &&
+        !proof.failoverUsed)
+    );
+
+    const isCompliantWithSelection = isConforming && isIdentityVerified;
+
+    if (!isConforming || !isCompliantWithSelection) {
       isSuccess = false;
       if (!failureClass) {
         failureClass = 'PROVIDER_FAILURE';
@@ -284,6 +300,8 @@ export class LLMPerformanceEvaluator {
         actualProviderId: proof.actualProviderId,
         failoverUsed: proof.failoverUsed,
         failureClass,
+        isIdentityVerified,
+        isCompliantWithSelection,
       },
     };
   }

@@ -155,6 +155,15 @@ export interface TeamRunResult {
   failoverHistory?: FailoverRecord[];
   selectionDecision?: any;
   realTaskEvaluationId?: string;
+  execution?: {
+    requestedModelId: string;
+    requestedProviderId: string;
+    actualModelId: string;
+    actualProviderId: string;
+    failoverUsed: boolean;
+    isIdentityVerified?: boolean;
+    isCompliantWithSelection?: boolean;
+  };
   prUrl?: string;
   gitBranch?: string;
   commitSha?: string;

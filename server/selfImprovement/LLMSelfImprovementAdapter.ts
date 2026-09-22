@@ -211,8 +211,12 @@ export class LLMSelfImprovementAdapter {
         }
 
         case 'DEPRIORITIZE_MODEL_CATEGORY': {
-          const { modelId, cooldownSeconds } = plan.action;
-          quotaManager.handleCooldown(modelId, cooldownSeconds || 60, 'DEPRIORITIZE');
+          const { modelId, cooldownSeconds, category } = plan.action;
+          if (category) {
+            this.selector.deprioritizeModelCategory(modelId, category, cooldownSeconds || 300);
+          } else {
+            quotaManager.handleCooldown(modelId, cooldownSeconds || 60, 'DEPRIORITIZE');
+          }
           success = true;
           break;
         }

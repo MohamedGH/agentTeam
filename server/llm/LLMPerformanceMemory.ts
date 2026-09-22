@@ -26,6 +26,7 @@ export class LLMPerformanceMemory {
   public setUncertaintyDecayFactor(factor: number): void {
     this.uncertaintyDecayFactor = factor;
     this.recomputeAll();
+    this.persist();
   }
 
   public recomputeAll(): void {
@@ -40,19 +41,39 @@ export class LLMPerformanceMemory {
   }
 
   /**
+   * Determines if two evaluation entries represent the identical evaluation outcome.
+   * Invariant: Distinguishes different models within the same benchmark runId.
+   */
+  private isSameEvaluation(a: LLMEvaluation, b: LLMEvaluation): boolean {
+    if (a.id && b.id && a.id === b.id) {
+      return true;
+    }
+    if (a.runId && b.runId && a.runId === b.runId) {
+      return (
+        a.modelId === b.modelId &&
+        a.providerId === b.providerId &&
+        a.problemId === b.problemId &&
+        (a.modelVersion || '') === (b.modelVersion || '')
+      );
+    }
+    if (a.problemId && b.problemId && a.problemId === b.problemId) {
+      return (
+        a.modelId === b.modelId &&
+        a.providerId === b.providerId &&
+        a.category === b.category &&
+        (a.modelVersion || '') === (b.modelVersion || '') &&
+        a.evaluationSource === b.evaluationSource
+      );
+    }
+    return false;
+  }
+
+  /**
    * Adds an evaluation record and invalidates relevant stats caches.
    * Enforces duplicate identity protection to avoid inflating sample counts.
    */
   public addEvaluation(evaluation: LLMEvaluation): void {
-    const existingIndex = this.evaluations.findIndex(
-      (e) =>
-        e.id === evaluation.id ||
-        (Boolean(e.runId) && Boolean(evaluation.runId) && e.runId === evaluation.runId) ||
-        (e.modelId === evaluation.modelId &&
-          e.category === evaluation.category &&
-          Boolean(e.problemId) &&
-          e.problemId === evaluation.problemId)
-    );
+    const existingIndex = this.evaluations.findIndex((e) => this.isSameEvaluation(e, evaluation));
 
     if (existingIndex >= 0) {
       this.evaluations[existingIndex] = evaluation;
@@ -69,15 +90,7 @@ export class LLMPerformanceMemory {
    */
   public addEvaluations(evals: LLMEvaluation[]): void {
     for (const e of evals) {
-      const existingIndex = this.evaluations.findIndex(
-        (existing) =>
-          existing.id === e.id ||
-          (Boolean(existing.runId) && Boolean(e.runId) && existing.runId === e.runId) ||
-          (existing.modelId === e.modelId &&
-            existing.category === e.category &&
-            Boolean(existing.problemId) &&
-            existing.problemId === e.problemId)
-      );
+      const existingIndex = this.evaluations.findIndex((existing) => this.isSameEvaluation(existing, e));
       if (existingIndex >= 0) {
         this.evaluations[existingIndex] = e;
       } else {
@@ -255,7 +268,18 @@ export class LLMPerformanceMemory {
     const successCount = rankableEvals.filter((e) => e.success).length;
     const successRate = successCount / sampleCount;
     const meanLatencyMs = rankableEvals.reduce((acc, curr) => acc + curr.latencyMs, 0) / sampleCount;
-    const meanCost = rankableEvals.reduce((acc, curr) => acc + (curr.estimatedCost || 0), 0) / sampleCount;
+
+    // Explicit Cost Accounting: Never transform UNKNOWN_COST into zero.
+    // If all evaluations have unknown cost, meanCost remains -1 and costKnown is false.
+    const knownCostEvals = rankableEvals.filter(
+      (e) => e.costSource !== 'UNKNOWN_COST' && typeof e.estimatedCost === 'number' && !isNaN(e.estimatedCost)
+    );
+    const meanCost =
+      knownCostEvals.length > 0
+        ? knownCostEvals.reduce((acc, curr) => acc + (curr.estimatedCost || 0), 0) / knownCostEvals.length
+        : -1;
+    const costKnown = knownCostEvals.length > 0;
+
     const lastEvaluatedAt = Math.max(...rankableEvals.map((e) => e.timestamp));
     const providerId = rankableEvals[0].providerId;
 
@@ -287,7 +311,8 @@ export class LLMPerformanceMemory {
       meanScore: Math.round(meanScore * 1000) / 1000,
       successRate: Math.round(successRate * 1000) / 1000,
       meanLatencyMs: Math.round(meanLatencyMs),
-      meanCost: Math.round(meanCost * 10000) / 10000,
+      meanCost: meanCost >= 0 ? Math.round(meanCost * 10000) / 10000 : -1,
+      costKnown,
       confidence: Math.round(confidence * 1000) / 1000,
       uncertaintyPenalty: Math.round(uncertaintyPenalty * 1000) / 1000,
       compositeRankScore: Math.round(compositeRankScore * 1000) / 1000,
@@ -314,6 +339,9 @@ export class LLMPerformanceMemory {
       if (fs.existsSync(this.storagePath)) {
         const raw = fs.readFileSync(this.storagePath, 'utf-8');
         const parsed = JSON.parse(raw);
+        if (typeof parsed.uncertaintyDecayFactor === 'number' && !isNaN(parsed.uncertaintyDecayFactor)) {
+          this.uncertaintyDecayFactor = parsed.uncertaintyDecayFactor;
+        }
         if (Array.isArray(parsed.evaluations)) {
           this.evaluations = parsed.evaluations;
           for (const e of this.evaluations) {
@@ -337,6 +365,7 @@ export class LLMPerformanceMemory {
         {
           version: '2.0.0',
           updatedAt: Date.now(),
+          uncertaintyDecayFactor: this.uncertaintyDecayFactor,
           totalEvaluations: this.evaluations.length,
           evaluations: this.evaluations,
         },

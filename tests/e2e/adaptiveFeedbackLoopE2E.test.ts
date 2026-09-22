@@ -233,9 +233,126 @@ export async function runAdaptiveFeedbackLoopE2ETests(): Promise<void> {
   assert(runResult.selectionDecision !== undefined, 'Workflow attaches selectionDecision');
   assert(runResult.realTaskEvaluationId !== undefined, 'Workflow produces realTaskEvaluationId');
 
-  // Verify that the engine's real task was recorded in memory
+  // STEP 11: VERIFY INDEPENDENT EXECUTION PROOF
+  console.log('\n--- Step 11: Verify Independent Execution Identity Proof ---');
+  assert(runResult.execution !== undefined, 'Execution proof object exists on TeamRunResult');
+  assert(runResult.execution.requestedModelId === runResult.modelUsed, 'Requested model matches modelUsed');
+  assert(runResult.execution.actualModelId === runResult.modelUsed, 'Actual model matches modelUsed');
+  assert(runResult.execution.failoverUsed === false, 'Zero failover used');
+  assert(runResult.execution.isIdentityVerified === true, 'Identity is independently verified');
+  assert(runResult.execution.isCompliantWithSelection === true, 'Execution is compliant with selection');
+
+  // Verify that the engine's real task was recorded in memory with verified proof
   const memoryEvals = memory.getEvaluations({ sources: ['REAL_TASK'] });
   assert(memoryEvals.length >= 2, 'Memory contains REAL_TASK records from production workflow');
+  const latestRecordedEval = memoryEvals.find((e) => e.id === runResult.realTaskEvaluationId);
+  assert(latestRecordedEval !== undefined, 'Latest execution is recorded in memory');
+  assert(latestRecordedEval?.proof?.isIdentityVerified === true, 'Recorded proof has isIdentityVerified=true');
+  assert(latestRecordedEval?.proof?.isCompliantWithSelection === true, 'Recorded proof has isCompliantWithSelection=true');
+
+  // STEP 12: DEDUPLICATION IN LLMPerformanceMemory (Different models in same runId must NOT collide)
+  console.log('\n--- Step 12: Verify Deduplication Distinction Across Models in Same Run ---');
+  const sharedRunId = 'benchmark_run_shared_42';
+  memory.addEvaluation({
+    id: 'eval_bench_model_x',
+    runId: sharedRunId,
+    modelId: 'mock-model-x',
+    providerId: 'mock',
+    problemId: 'bench_prob_1',
+    category: 'CODE_GENERATION',
+    evaluationSource: 'LIVE_PROVIDER',
+    success: true,
+    score: 0.88,
+    latencyMs: 150,
+    timestamp: Date.now(),
+  });
+  memory.addEvaluation({
+    id: 'eval_bench_model_y',
+    runId: sharedRunId,
+    modelId: 'mock-model-y',
+    providerId: 'mock',
+    problemId: 'bench_prob_1',
+    category: 'CODE_GENERATION',
+    evaluationSource: 'LIVE_PROVIDER',
+    success: true,
+    score: 0.92,
+    latencyMs: 180,
+    timestamp: Date.now(),
+  });
+
+  const evalsWithSharedRun = memory.getEvaluations().filter((e) => e.runId === sharedRunId);
+  assert(
+    evalsWithSharedRun.length === 2,
+    `Expected 2 distinct model evals for same runId, got ${evalsWithSharedRun.length}`
+  );
+  assert(
+    evalsWithSharedRun.some((e) => e.modelId === 'mock-model-x') &&
+    evalsWithSharedRun.some((e) => e.modelId === 'mock-model-y'),
+    'Both mock-model-x and mock-model-y co-exist under the same benchmark runId'
+  );
+
+  // STEP 13: UNKNOWN COST ACCOUNTING
+  console.log('\n--- Step 13: Verify Unknown Cost Accounting ---');
+  memory.addEvaluation({
+    id: 'eval_unknown_cost_test',
+    modelId: 'mock-nocost-model',
+    providerId: 'mock',
+    problemId: 'prob_nocost_1',
+    category: 'REFACTORING',
+    evaluationSource: 'REAL_TASK',
+    success: true,
+    score: 0.9,
+    latencyMs: 200,
+    estimatedCost: undefined,
+    costSource: 'UNKNOWN_COST',
+    timestamp: Date.now(),
+  });
+  const noCostStats = memory.getStats('mock-nocost-model', 'REFACTORING');
+  assert(noCostStats !== null, 'Stats computed for mock-nocost-model');
+  assert(noCostStats?.costKnown === false, 'costKnown should be false when cost is UNKNOWN_COST');
+  assert(noCostStats?.meanCost === -1, 'meanCost should be -1 (not 0) when all costs are unknown');
+
+  // STEP 14: CATEGORY-SCOPED DEPRIORITIZATION
+  console.log('\n--- Step 14: Verify Category-Scoped Deprioritization ---');
+  selector.deprioritizeModelCategory('mock-pro-model', 'ARCHITECTURE_PLANNING', 300);
+  assert(
+    selector.isModelDeprioritizedForCategory('mock-pro-model', 'ARCHITECTURE_PLANNING') === true,
+    'mock-pro-model is deprioritized for ARCHITECTURE_PLANNING'
+  );
+  assert(
+    selector.isModelDeprioritizedForCategory('mock-pro-model', 'CODE_GENERATION') === false,
+    'mock-pro-model is NOT deprioritized for CODE_GENERATION'
+  );
+
+  // Selection in ARCHITECTURE_PLANNING must NOT select mock-pro-model
+  const archSelection = selector.selectModelForTask('Design the high level architecture for a microservice', undefined, {
+    preferredProviders: ['mock'],
+  });
+  assert(
+    archSelection.selectedModelId !== 'mock-pro-model',
+    'mock-pro-model is avoided for ARCHITECTURE_PLANNING when deprioritized'
+  );
+
+  // Selection in CODE_GENERATION can still select mock-pro-model
+  const codeSelection = selector.selectModelForTask('Implement quicksort in TypeScript', undefined, {
+    preferredProviders: ['mock'],
+  });
+  assert(
+    codeSelection.selectedModelId === 'mock-pro-model',
+    'mock-pro-model remains selectable for CODE_GENERATION'
+  );
+
+  // STEP 15: PERSISTENCE OF UNCERTAINTY DECAY FACTOR
+  console.log('\n--- Step 15: Verify Persistence of uncertaintyDecayFactor ---');
+  memory.setUncertaintyDecayFactor(0.48);
+  assert(memory.getUncertaintyDecayFactor() === 0.48, 'Memory has updated uncertaintyDecayFactor');
+
+  // Re-instantiate from the same storage path
+  const reloadedMemory = new LLMPerformanceMemory(testStoragePath);
+  assert(
+    reloadedMemory.getUncertaintyDecayFactor() === 0.48,
+    `Expected reloaded uncertaintyDecayFactor to be 0.48, got ${reloadedMemory.getUncertaintyDecayFactor()}`
+  );
 
   // Clean up test file
   if (fs.existsSync(testStoragePath)) {

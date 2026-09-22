@@ -67,7 +67,9 @@ export interface ExactSelectedModelResult extends GenerationUsageResult {
   requestedProviderId: AIProviderId;
   actualModelId: string;
   actualProviderId: AIProviderId;
-  failoverUsed: false;
+  failoverUsed: boolean;
+  isIdentityVerified?: boolean;
+  isCompliantWithSelection?: boolean;
   success: boolean;
   error?: string;
   failureClass?: string;

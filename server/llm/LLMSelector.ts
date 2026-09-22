@@ -50,6 +50,7 @@ export class LLMSelector {
   private memory: LLMPerformanceMemory;
   private config: LLMAdaptiveConfig;
   private explorationCounts: Map<string, number> = new Map();
+  private categoryDeprioritizations: Map<string, number> = new Map();
   private defaultRandomProvider: RandomProvider = { next: () => Math.random() };
   private telemetryListeners: Array<(e: LLMTelemetryEvent) => void> = [];
 
@@ -69,6 +70,23 @@ export class LLMSelector {
     if (randomProvider) {
       this.defaultRandomProvider = randomProvider;
     }
+  }
+
+  public deprioritizeModelCategory(modelId: string, category: ProblemCategory, durationSeconds: number): void {
+    const key = `${modelId}::${category}`;
+    const until = Date.now() + durationSeconds * 1000;
+    this.categoryDeprioritizations.set(key, until);
+  }
+
+  public isModelDeprioritizedForCategory(modelId: string, category: ProblemCategory): boolean {
+    const key = `${modelId}::${category}`;
+    const until = this.categoryDeprioritizations.get(key);
+    if (!until) return false;
+    if (Date.now() > until) {
+      this.categoryDeprioritizations.delete(key);
+      return false;
+    }
+    return true;
   }
 
   public getConfig(): LLMAdaptiveConfig {
@@ -179,11 +197,19 @@ export class LLMSelector {
     }
 
     // 2. Discover available candidates filtered strictly by capabilities
+    const effectiveProviders = constraints.forceProviderId
+      ? [constraints.forceProviderId]
+      : constraints.preferredProviders;
+
     let eligible = this.registry.getEligibleCandidates(
       classified.requiredCapabilities,
       true, // allow unmeasured
-      constraints.preferredProviders
+      effectiveProviders
     ).filter((m) => !constraints.excludeModels?.includes(m.modelId));
+
+    if (constraints.forceProviderId) {
+      eligible = eligible.filter((m) => m.providerId === constraints.forceProviderId);
+    }
 
     // Filter by quota and cooldown status
     eligible = eligible.filter((m) => {
@@ -191,6 +217,14 @@ export class LLMSelector {
       const quotaCheck = quotaManager.canUseModel(m.modelId, 'tier_3', classified.estimatedTokens || 1000);
       return quotaCheck.ok;
     });
+
+    // Filter by category deprioritization (Scoped to modelId + category)
+    const categoryEligible = eligible.filter(
+      (m) => !this.isModelDeprioritizedForCategory(m.modelId, classified.category)
+    );
+    if (categoryEligible.length > 0) {
+      eligible = categoryEligible;
+    }
 
     // Enforce hard constraints: maxLatencyMs and maxCost
     if (constraints.maxLatencyMs !== undefined || constraints.maxCost !== undefined) {
