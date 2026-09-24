@@ -120,9 +120,10 @@ export class LLMSelfImprovementAdapter {
       }
     }
 
-    // 2. Check for high regression rates per model & category
-    const modelCategoryMap = new Map<string, typeof allEvaluations>();
-    for (const e of allEvaluations) {
+    // 2. Check for high regression rates per model & category (STRICTLY OPERATIONAL DATA: LIVE_PROVIDER and REAL_TASK)
+    const operationalEvaluations = this.memory.getEvaluations({ sources: OPERATIONAL_SOURCES });
+    const modelCategoryMap = new Map<string, typeof operationalEvaluations>();
+    for (const e of operationalEvaluations) {
       const key = `${e.modelId}::${e.category}`;
       if (!modelCategoryMap.has(key)) {
         modelCategoryMap.set(key, []);
@@ -143,20 +144,21 @@ export class LLMSelfImprovementAdapter {
             modelId,
             category,
             severity: 'HIGH',
-            details: `Model ${modelId} in category ${category} has excessive regression rate (${Math.round(regressionRate * 100)}% over ${total} observations).`,
+            details: `Model ${modelId} in category ${category} has excessive regression rate (${Math.round(regressionRate * 100)}% over ${total} operational observations).`,
             evidence: {
               totalObservations: total,
               regressionCount,
               regressionRate: Math.round(regressionRate * 1000) / 1000,
+              source: 'OPERATIONAL_ONLY',
             },
           });
         }
       }
     }
 
-    // 3. Check for high infrastructure / provider failure rates
-    const modelEvalsMap = new Map<string, typeof allEvaluations>();
-    for (const e of allEvaluations) {
+    // 3. Check for high infrastructure / provider failure rates (STRICTLY OPERATIONAL DATA: LIVE_PROVIDER and REAL_TASK)
+    const modelEvalsMap = new Map<string, typeof operationalEvaluations>();
+    for (const e of operationalEvaluations) {
       if (!modelEvalsMap.has(e.modelId)) {
         modelEvalsMap.set(e.modelId, []);
       }
@@ -180,11 +182,12 @@ export class LLMSelfImprovementAdapter {
             type: 'HIGH_INFRASTRUCTURE_FAILURE',
             modelId,
             severity: 'CRITICAL',
-            details: `Model ${modelId} has high infrastructure / connectivity failure rate (${Math.round(failureRate * 100)}% over ${total} attempts).`,
+            details: `Model ${modelId} has high infrastructure / connectivity failure rate (${Math.round(failureRate * 100)}% over ${total} operational attempts).`,
             evidence: {
               totalAttempts: total,
               infraFailures,
               failureRate: Math.round(failureRate * 1000) / 1000,
+              source: 'OPERATIONAL_ONLY',
             },
           });
         }
@@ -333,9 +336,9 @@ export class LLMSelfImprovementAdapter {
 
         case 'UPDATE_ROUTING_THRESHOLDS': {
           const { uncertaintyDecayFactor } = plan.action;
-          if (uncertaintyDecayFactor) {
+          if (uncertaintyDecayFactor !== undefined) {
+            // selector.updateConfig internally syncs and recomputes memory factor without redundant duplicate writes
             this.selector.updateConfig({ uncertaintyDecayFactor });
-            this.memory.setUncertaintyDecayFactor(uncertaintyDecayFactor);
           }
           success = true;
           break;
@@ -344,11 +347,14 @@ export class LLMSelfImprovementAdapter {
         case 'SCHEDULE_TARGETED_BENCHMARK': {
           const { modelId } = plan.action;
           // Trigger a lightweight benchmark run for the model
-          await this.benchmarkEngine.runBenchmarks({
+          const benchRes = await this.benchmarkEngine.runBenchmarks({
             candidateModels: [modelId],
             maxRequestsBudget: 2,
             isLive: false,
           });
+          if (benchRes && benchRes.runId) {
+            (plan.action as any).benchmarkRunId = benchRes.runId;
+          }
           success = true;
           break;
         }
@@ -440,15 +446,26 @@ export class LLMSelfImprovementAdapter {
       }
 
       case 'SCHEDULE_TARGETED_BENCHMARK': {
-        const { modelId } = record.plan.action;
+        const { modelId, benchmarkRunId } = record.plan.action;
         const preCount = record.preAdaptationMetrics.evaluationCount || 0;
         const postCount = this.memory.getModelEvaluationCount(modelId);
-        verified = postCount > preCount;
+        
+        // Strict verification: postCount > preCount AND newly added evaluations match modelId, valid benchmark source, and post-plan timestamp
+        const recentEvals = this.memory.getEvaluations().filter((e) => {
+          const isTargetModel = e.modelId === modelId;
+          const isBenchmarkSource = e.evaluationSource === 'LIVE_PROVIDER' || e.evaluationSource === 'HERMETIC_FIXTURE';
+          const isPostPlan = e.timestamp >= (record.appliedAt - 5000);
+          const matchesRunId = benchmarkRunId ? e.runId === benchmarkRunId : true;
+          return isTargetModel && isBenchmarkSource && isPostPlan && matchesRunId;
+        });
+
+        verified = Boolean(postCount > preCount && recentEvals.length > 0);
         record.postAdaptationMetrics = {
           timestamp: Date.now(),
           modelId,
           preEvaluationCount: preCount,
           postEvaluationCount: postCount,
+          matchedNewBenchmarkEvaluations: recentEvals.length,
           verified,
         };
         break;

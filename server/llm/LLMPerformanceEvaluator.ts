@@ -211,22 +211,30 @@ export class LLMPerformanceEvaluator {
     }
   ): LLMEvaluation {
     const rawProof = executionResult.proof;
+    const failoverUsed = Boolean(rawProof?.failoverUsed);
+    const rawActualModelId = typeof rawProof?.actualModelId === 'string' && rawProof.actualModelId.trim().length > 0 ? rawProof.actualModelId.trim() : undefined;
+    const rawActualProviderId = typeof rawProof?.actualProviderId === 'string' && rawProof.actualProviderId.trim().length > 0 ? rawProof.actualProviderId : undefined;
+    const hasValidIdentitySource = rawProof?.identitySource === 'PROVIDER_RESPONSE_PAYLOAD' || rawProof?.identitySource === 'MOCK_DETERMINISTIC_PROOF';
+
     const isIdentityVerified = Boolean(
       rawProof &&
       rawProof.isIdentityVerified === true &&
-      rawProof.actualModelId &&
-      rawProof.actualProviderId
+      hasValidIdentitySource &&
+      rawActualModelId !== undefined &&
+      rawActualProviderId !== undefined &&
+      rawActualModelId === modelId &&
+      rawActualProviderId === providerId &&
+      !failoverUsed
     );
-    const failoverUsed = Boolean(rawProof?.failoverUsed);
-    const actualModelId = isIdentityVerified ? rawProof?.actualModelId : undefined;
-    const actualProviderId = isIdentityVerified ? rawProof?.actualProviderId : undefined;
+
+    const actualModelId = rawActualModelId;
+    const actualProviderId = rawActualProviderId;
 
     const isCompliantWithSelection = Boolean(
       isIdentityVerified &&
       !failoverUsed &&
       actualProviderId === providerId &&
-      actualModelId &&
-      (actualModelId === modelId || actualModelId.startsWith(modelId) || modelId.startsWith(actualModelId))
+      actualModelId === modelId
     );
 
     let isSuccess = executionResult.success;

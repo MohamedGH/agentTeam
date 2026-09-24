@@ -862,21 +862,26 @@ Evaluate code quality, security implications, maintainability, and clean archite
       const workflowSuccess = Boolean(testerPassed && reviewerApproved);
 
       // Extract verified execution identity directly from provider execution
+      const failoverUsed = Boolean(lastExactResult?.failoverUsed || allFailoverHistory.length > 0);
+      const rawActualModelId = typeof lastExactResult?.actualModelId === 'string' && lastExactResult.actualModelId.trim().length > 0 ? lastExactResult.actualModelId.trim() : undefined;
+      const rawActualProviderId = typeof lastExactResult?.actualProviderId === 'string' && lastExactResult.actualProviderId.trim().length > 0 ? lastExactResult.actualProviderId : undefined;
+
       const isIdentityVerified = Boolean(
         lastExactResult?.isIdentityVerified === true &&
-        lastExactResult?.actualModelId &&
-        lastExactResult?.actualProviderId
+        rawActualModelId !== undefined &&
+        rawActualProviderId !== undefined &&
+        rawActualModelId === chosenModel &&
+        rawActualProviderId === activeProvider &&
+        !failoverUsed
       );
-      const actualModelId = isIdentityVerified ? lastExactResult?.actualModelId : undefined;
-      const actualProviderId = isIdentityVerified ? lastExactResult?.actualProviderId : undefined;
-      const failoverUsed = Boolean(lastExactResult?.failoverUsed || allFailoverHistory.length > 0);
+      const actualModelId = rawActualModelId;
+      const actualProviderId = rawActualProviderId;
       const isCompliantWithSelection = Boolean(
         lastExactResult?.isCompliantWithSelection &&
         isIdentityVerified &&
         !failoverUsed &&
         actualProviderId === activeProvider &&
-        actualModelId &&
-        (actualModelId === chosenModel || actualModelId.startsWith(chosenModel) || chosenModel.startsWith(actualModelId))
+        actualModelId === chosenModel
       );
       const identitySource = lastExactResult?.identitySource || (isIdentityVerified ? 'PROVIDER_RESPONSE_PAYLOAD' : 'NONE');
 

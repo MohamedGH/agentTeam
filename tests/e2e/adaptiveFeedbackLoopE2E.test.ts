@@ -84,7 +84,7 @@ export async function runAdaptiveFeedbackLoopE2ETests(): Promise<void> {
     providerId: 'mock',
     problemId: 'fixture_initial_seed_1',
     category: 'CODE_GENERATION',
-    evaluationSource: 'REAL_TASK',
+    evaluationSource: 'HERMETIC_FIXTURE',
     success: true,
     score: 0.95,
     latencyMs: 100,
@@ -112,7 +112,7 @@ export async function runAdaptiveFeedbackLoopE2ETests(): Promise<void> {
     providerId: 'mock',
     problemId: 'fixture_initial_seed_2',
     category: 'CODE_GENERATION',
-    evaluationSource: 'REAL_TASK',
+    evaluationSource: 'HERMETIC_FIXTURE',
     success: true,
     score: 0.85,
     latencyMs: 300,
@@ -132,6 +132,13 @@ export async function runAdaptiveFeedbackLoopE2ETests(): Promise<void> {
       identitySource: 'MOCK_DETERMINISTIC_PROOF',
     },
   });
+
+  // Strict invariant check: exactly 0 REAL_TASK evaluations prior to Task 1
+  assert.strictEqual(
+    memory.getEvaluations({ sources: ['REAL_TASK'] }).length,
+    0,
+    'Initial count of REAL_TASK evaluations in memory before Task 1 execution must strictly be 0'
+  );
 
   const initialRankings = rankingEngine.getRankings('CODE_GENERATION');
   assert(initialRankings.rankedModels.length >= 2, 'Initial rankings include both mock models');

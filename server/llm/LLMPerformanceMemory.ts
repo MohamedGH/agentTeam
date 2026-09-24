@@ -238,7 +238,7 @@ export class LLMPerformanceMemory {
     version?: string,
     sources?: EvaluationSource[]
   ): void {
-    const targetSources = sources || OPERATIONAL_SOURCES;
+    const targetSources = sources || ALL_SOURCES;
     const filtered = this.getEvaluations({
       modelId,
       category,
@@ -267,6 +267,11 @@ export class LLMPerformanceMemory {
     }
 
     const sampleCount = rankableEvals.length;
+    const hermeticCount = rankableEvals.filter((e) => e.evaluationSource === 'HERMETIC_FIXTURE').length;
+    const liveProviderCount = rankableEvals.filter((e) => e.evaluationSource === 'LIVE_PROVIDER').length;
+    const realTaskCount = rankableEvals.filter((e) => e.evaluationSource === 'REAL_TASK').length;
+    const operationalCount = liveProviderCount + realTaskCount;
+
     const meanScore = rankableEvals.reduce((acc, curr) => acc + curr.score, 0) / sampleCount;
     const successCount = rankableEvals.filter((e) => e.success).length;
     const successRate = successCount / sampleCount;
@@ -311,6 +316,10 @@ export class LLMPerformanceMemory {
       category,
       complexity,
       sampleCount,
+      hermeticCount,
+      liveProviderCount,
+      realTaskCount,
+      operationalCount,
       meanScore: Math.round(meanScore * 1000) / 1000,
       successRate: Math.round(successRate * 1000) / 1000,
       meanLatencyMs: Math.round(meanLatencyMs),

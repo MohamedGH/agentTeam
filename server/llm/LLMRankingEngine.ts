@@ -56,7 +56,7 @@ export class LLMRankingEngine {
       ? options.sources
       : options.includeHermetic
       ? ALL_SOURCES
-      : OPERATIONAL_SOURCES;
+      : ALL_SOURCES;
 
     const allRegistered = this.registry.discoverModels();
     const modelSet = new Map<string, { modelId: string; version?: string }>();
@@ -110,6 +110,16 @@ export class LLMRankingEngine {
       // Unavailable models always drop to the bottom of the operational rank
       if (a.status === 'UNAVAILABLE' && b.status !== 'UNAVAILABLE') return 1;
       if (b.status === 'UNAVAILABLE' && a.status !== 'UNAVAILABLE') return -1;
+
+      // Operational Precedence (Req 4): When evaluating models in operational production environments,
+      // proven models with operational data (REAL_TASK / LIVE_PROVIDER >= 3 samples) take precedence over models with only hermetic fixtures
+      const aOperational = (a.operationalCount || 0) >= 3 && a.successRate >= 0.7;
+      const bOperational = (b.operationalCount || 0) >= 3 && b.successRate >= 0.7;
+      const aHermeticOnly = (a.operationalCount || 0) === 0 && (a.hermeticCount || 0) > 0;
+      const bHermeticOnly = (b.operationalCount || 0) === 0 && (b.hermeticCount || 0) > 0;
+
+      if (aOperational && bHermeticOnly) return -1;
+      if (bOperational && aHermeticOnly) return 1;
 
       // Primary: composite rank score
       if (b.compositeRankScore !== a.compositeRankScore) {

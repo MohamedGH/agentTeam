@@ -135,6 +135,10 @@ export interface ModelRankingStats {
   category: ProblemCategory;
   complexity?: ProblemComplexity;
   sampleCount: number;
+  hermeticCount?: number;
+  liveProviderCount?: number;
+  realTaskCount?: number;
+  operationalCount?: number;
   meanScore: number;
   successRate: number;
   meanLatencyMs: number;

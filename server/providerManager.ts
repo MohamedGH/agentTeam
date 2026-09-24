@@ -532,15 +532,27 @@ export class ProviderManager {
         });
       }
 
-      const isIdentityVerified = Boolean(res.identityVerified === true && res.actualModelId && res.actualProviderId);
-      const actualModelId = isIdentityVerified ? res.actualModelId : undefined;
-      const actualProviderId = isIdentityVerified ? res.actualProviderId : undefined;
       const failoverUsed = Boolean(res.failoverHistory && res.failoverHistory.length > 0);
+      const rawActualModelId = typeof res.actualModelId === 'string' && res.actualModelId.trim().length > 0 ? res.actualModelId.trim() : undefined;
+      const rawActualProviderId = typeof res.actualProviderId === 'string' && res.actualProviderId.trim().length > 0 ? res.actualProviderId : undefined;
+
+      const isIdentityVerified = Boolean(
+        res.identityVerified === true &&
+        rawActualModelId !== undefined &&
+        rawActualProviderId !== undefined &&
+        rawActualModelId === modelId &&
+        rawActualProviderId === providerId &&
+        !failoverUsed
+      );
+
+      const actualModelId = isIdentityVerified ? rawActualModelId : rawActualModelId;
+      const actualProviderId = isIdentityVerified ? rawActualProviderId : rawActualProviderId;
+
       const isCompliantWithSelection = Boolean(
         isIdentityVerified &&
         !failoverUsed &&
         actualProviderId === providerId &&
-        (actualModelId === modelId || actualModelId?.startsWith(modelId) || modelId.startsWith(actualModelId || ''))
+        actualModelId === modelId
       );
 
       const generationOutcome: GenerationOutcome =
@@ -723,15 +735,27 @@ export class ProviderManager {
         });
       }
 
-      const isIdentityVerified = Boolean(res.identityVerified === true && res.actualModelId && res.actualProviderId);
-      const actualModelId = isIdentityVerified ? res.actualModelId : undefined;
-      const actualProviderId = isIdentityVerified ? res.actualProviderId : undefined;
       const failoverUsed = Boolean(res.failoverHistory && res.failoverHistory.length > 0);
+      const rawActualModelId = typeof res.actualModelId === 'string' && res.actualModelId.trim().length > 0 ? res.actualModelId.trim() : undefined;
+      const rawActualProviderId = typeof res.actualProviderId === 'string' && res.actualProviderId.trim().length > 0 ? res.actualProviderId : undefined;
+
+      const isIdentityVerified = Boolean(
+        res.identityVerified === true &&
+        rawActualModelId !== undefined &&
+        rawActualProviderId !== undefined &&
+        rawActualModelId === modelId &&
+        rawActualProviderId === providerId &&
+        !failoverUsed
+      );
+
+      const actualModelId = isIdentityVerified ? rawActualModelId : rawActualModelId;
+      const actualProviderId = isIdentityVerified ? rawActualProviderId : rawActualProviderId;
+
       const isCompliantWithSelection = Boolean(
         isIdentityVerified &&
         !failoverUsed &&
         actualProviderId === providerId &&
-        (actualModelId === modelId || actualModelId?.startsWith(modelId) || modelId.startsWith(actualModelId || ''))
+        actualModelId === modelId
       );
 
       const generationOutcome: GenerationOutcome =

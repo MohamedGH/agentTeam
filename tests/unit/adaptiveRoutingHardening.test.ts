@@ -291,6 +291,173 @@ export async function runAdaptiveRoutingHardeningTests() {
   const detectedProblems = detector.detectLLMAnomalies(snapshot);
   assert(Array.isArray(detectedProblems), 'ProblemDetector returns LLM anomalies array');
 
+  // --------------------------------------------------------------------------
+  // TEST 10: Strict Identity Compliance (Model Prefix / Variant Mismatch Rejected)
+  // --------------------------------------------------------------------------
+  console.log('\n--- Test 10: Strict Identity Compliance (No Prefix/Permissive Matching) ---');
+  // Demonstrates that requested = "model-v1" and actual = "model-v1-preview" is NOT compliant
+  const nonCompliantEval = evaluator.evaluateRealTaskExecution(
+    {
+      category: 'CODE_GENERATION',
+      complexity: 'MEDIUM',
+      subcategory: 'TEST',
+      requiredCapabilities: [],
+      constraints: [],
+      deterministicScore: 0.9,
+    },
+    'model-v1',
+    'mock',
+    {
+      success: true,
+      latencyMs: 120,
+      totalTests: 5,
+      testsPassed: 5,
+      proof: {
+        requestedModelId: 'model-v1',
+        requestedProviderId: 'mock',
+        actualModelId: 'model-v1-preview', // Suffix / prefix variant!
+        actualProviderId: 'mock',
+        failoverUsed: false,
+        isIdentityVerified: true,
+        identitySource: 'MOCK_DETERMINISTIC_PROOF',
+      },
+    }
+  );
+
+  assert(nonCompliantEval.proof?.isIdentityVerified === false, 'Strict equality failed: isIdentityVerified is false for model-v1 vs model-v1-preview');
+  assert(nonCompliantEval.proof?.isCompliantWithSelection === false, 'isCompliantWithSelection is strictly false when actualModelId !== requestedModelId');
+  assert(nonCompliantEval.success === false, 'Evaluation marked as unsuccessful due to identity non-compliance');
+  assert(nonCompliantEval.score === 0, 'Score is 0 for non-compliant model variant');
+  assert(nonCompliantEval.failureClass === 'PROVIDER_FAILURE', 'Failure class set to PROVIDER_FAILURE');
+
+  // --------------------------------------------------------------------------
+  // TEST 11: Fake Proof Protection (Spoofed isIdentityVerified Blocked)
+  // --------------------------------------------------------------------------
+  console.log('\n--- Test 11: Fake Proof Protection ---');
+  const fakeProofEval = evaluator.evaluateRealTaskExecution(
+    {
+      category: 'CODE_GENERATION',
+      complexity: 'MEDIUM',
+      subcategory: 'TEST',
+      requiredCapabilities: [],
+      constraints: [],
+      deterministicScore: 0.9,
+    },
+    'mock-fast-model',
+    'mock',
+    {
+      success: true,
+      latencyMs: 120,
+      totalTests: 5,
+      testsPassed: 5,
+      proof: {
+        requestedModelId: 'mock-fast-model',
+        requestedProviderId: 'mock',
+        actualModelId: 'mock-fast-model',
+        actualProviderId: 'mock',
+        failoverUsed: false,
+        isIdentityVerified: true,
+        identitySource: 'UNVERIFIED_DEFAULT', // Spoofed / invalid identity source
+      },
+    }
+  );
+
+  assert(fakeProofEval.proof?.isIdentityVerified === false, 'Spoofed proof with UNVERIFIED_DEFAULT rejected fail-closed');
+  assert(fakeProofEval.success === false, 'Spoofed proof cannot mark evaluation as successful');
+
+  // --------------------------------------------------------------------------
+  // TEST 12: Self-Improvement Operational-Only Isolation
+  // --------------------------------------------------------------------------
+  console.log('\n--- Test 12: Self-Improvement Operational-Only Isolation ---');
+  const isolationMemFile = path.join(testDir, `mem_isolation_${Date.now()}.json`);
+  const isolationMemory = new LLMPerformanceMemory(isolationMemFile);
+  const isolationAdapter = new LLMSelfImprovementAdapter(isolationMemory, registry, selector, benchEngine);
+
+  // Add 5 HERMETIC_FIXTURE evaluations with high regression rate
+  for (let i = 0; i < 5; i++) {
+    isolationMemory.addEvaluation({
+      id: `herm_regress_${i}`,
+      modelId: 'mock-hermetic-regressor',
+      providerId: 'mock',
+      problemId: `prob_herm_${i}`,
+      category: 'REFACTORING',
+      complexity: 'HIGH',
+      evaluationSource: 'HERMETIC_FIXTURE',
+      success: false,
+      score: 0.1,
+      latencyMs: 300,
+      testsPassed: 0,
+      totalTests: 5,
+      regressionDetected: true,
+      evaluatorVersion: '2.0.0',
+      timestamp: Date.now(),
+    });
+  }
+
+  const hermeticOnlyAnomalies = isolationAdapter.detectAnomalies();
+  const hermeticRegressionAnomaly = hermeticOnlyAnomalies.find(
+    (a) => a.modelId === 'mock-hermetic-regressor' && (a.type === 'HIGH_REGRESSION_RATE' || a.type === 'HIGH_INFRASTRUCTURE_FAILURE')
+  );
+  assert(hermeticRegressionAnomaly === undefined, 'HERMETIC_FIXTURE evaluations alone do NOT trigger operational regression/infrastructure anomalies');
+
+  // Add REAL_TASK operational evaluations with high regression rate
+  for (let i = 0; i < 4; i++) {
+    isolationMemory.addEvaluation({
+      id: `real_regress_${i}`,
+      modelId: 'mock-operational-regressor',
+      providerId: 'mock',
+      problemId: `prob_real_${i}`,
+      category: 'REFACTORING',
+      complexity: 'HIGH',
+      evaluationSource: 'REAL_TASK',
+      success: false,
+      score: 0.1,
+      latencyMs: 300,
+      testsPassed: 0,
+      totalTests: 5,
+      regressionDetected: true,
+      evaluatorVersion: '2.0.0',
+      timestamp: Date.now(),
+    });
+  }
+
+  const operationalAnomalies = isolationAdapter.detectAnomalies();
+  const operationalRegressionAnomaly = operationalAnomalies.find(
+    (a) => a.modelId === 'mock-operational-regressor' && a.type === 'HIGH_REGRESSION_RATE'
+  );
+  assert(operationalRegressionAnomaly !== undefined, 'REAL_TASK operational evaluations successfully trigger HIGH_REGRESSION_RATE anomaly');
+
+  // --------------------------------------------------------------------------
+  // TEST 13: Deduplication and Sample Count Invariant
+  // --------------------------------------------------------------------------
+  console.log('\n--- Test 13: Deduplication and Sample Count Invariant ---');
+  const countBeforeDedup = isolationMemory.getModelEvaluationCount('mock-operational-regressor');
+  // Update existing evaluation with new score
+  isolationMemory.addEvaluation({
+    id: `real_regress_0`,
+    modelId: 'mock-operational-regressor',
+    providerId: 'mock',
+    problemId: `prob_real_0`,
+    category: 'REFACTORING',
+    complexity: 'HIGH',
+    evaluationSource: 'REAL_TASK',
+    success: true,
+    score: 0.99,
+    latencyMs: 150,
+    testsPassed: 5,
+    totalTests: 5,
+    regressionDetected: false,
+    evaluatorVersion: '2.0.0',
+    timestamp: Date.now(),
+  });
+
+  const countAfterDedup = isolationMemory.getModelEvaluationCount('mock-operational-regressor');
+  assert(countAfterDedup === countBeforeDedup, 'Updating existing evaluation does NOT increase sample count');
+
+  if (fs.existsSync(isolationMemFile)) {
+    fs.unlinkSync(isolationMemFile);
+  }
+
   console.log('\n====================================================');
   console.log('🎉 ALL ADAPTIVE ROUTING HARDENING TESTS PASSED (100%)');
   console.log('====================================================\n');
