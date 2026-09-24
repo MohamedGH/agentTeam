@@ -40,6 +40,12 @@ export type GenerationOutcome =
   | 'MOCK_SUCCESS'
   | 'TASK_FAILURE';
 
+export type IdentitySource =
+  | 'PROVIDER_RESPONSE_PAYLOAD'
+  | 'MOCK_DETERMINISTIC_PROOF'
+  | 'UNVERIFIED_DEFAULT'
+  | 'NONE';
+
 export interface ProviderModelConfig {
   name: string;
   displayName: string;
@@ -60,16 +66,21 @@ export interface GenerationUsageResult {
   tokenAccountingType: TokenAccountingType;
   failoverHistory?: FailoverRecord[];
   generationOutcome?: GenerationOutcome;
+  actualModelId?: string;
+  actualProviderId?: AIProviderId;
+  identityVerified?: boolean;
+  identitySource?: IdentitySource;
 }
 
 export interface ExactSelectedModelResult extends GenerationUsageResult {
   requestedModelId: string;
   requestedProviderId: AIProviderId;
-  actualModelId: string;
-  actualProviderId: AIProviderId;
+  actualModelId?: string;
+  actualProviderId?: AIProviderId;
   failoverUsed: boolean;
-  isIdentityVerified?: boolean;
-  isCompliantWithSelection?: boolean;
+  isIdentityVerified: boolean;
+  isCompliantWithSelection: boolean;
+  identitySource: IdentitySource;
   success: boolean;
   error?: string;
   failureClass?: string;

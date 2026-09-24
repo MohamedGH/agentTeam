@@ -84,6 +84,7 @@ export class LLMSelfImprovementAdapter {
     const anomalies: LLMAnomaly[] = [];
     const models = this.registry.discoverModels();
     const allOperationalStats = this.memory.getAllStats(OPERATIONAL_SOURCES);
+    const allEvaluations = this.memory.getEvaluations();
 
     // 1. Check for sustained low success or excessive latency in operational data
     for (const stat of allOperationalStats) {
@@ -119,7 +120,78 @@ export class LLMSelfImprovementAdapter {
       }
     }
 
-    // 2. Check for unexplored models that are configured and available
+    // 2. Check for high regression rates per model & category
+    const modelCategoryMap = new Map<string, typeof allEvaluations>();
+    for (const e of allEvaluations) {
+      const key = `${e.modelId}::${e.category}`;
+      if (!modelCategoryMap.has(key)) {
+        modelCategoryMap.set(key, []);
+      }
+      modelCategoryMap.get(key)!.push(e);
+    }
+
+    for (const [key, evals] of modelCategoryMap.entries()) {
+      const [modelId, category] = key.split('::') as [string, ProblemCategory];
+      const total = evals.length;
+      if (total >= 3) {
+        const regressionCount = evals.filter((e) => e.regressionDetected).length;
+        const regressionRate = regressionCount / total;
+        if (regressionRate >= 0.33) {
+          anomalies.push({
+            id: `anom_regression_${modelId}_${category}_${Date.now()}`,
+            type: 'HIGH_REGRESSION_RATE',
+            modelId,
+            category,
+            severity: 'HIGH',
+            details: `Model ${modelId} in category ${category} has excessive regression rate (${Math.round(regressionRate * 100)}% over ${total} observations).`,
+            evidence: {
+              totalObservations: total,
+              regressionCount,
+              regressionRate: Math.round(regressionRate * 1000) / 1000,
+            },
+          });
+        }
+      }
+    }
+
+    // 3. Check for high infrastructure / provider failure rates
+    const modelEvalsMap = new Map<string, typeof allEvaluations>();
+    for (const e of allEvaluations) {
+      if (!modelEvalsMap.has(e.modelId)) {
+        modelEvalsMap.set(e.modelId, []);
+      }
+      modelEvalsMap.get(e.modelId)!.push(e);
+    }
+
+    for (const [modelId, evals] of modelEvalsMap.entries()) {
+      const total = evals.length;
+      if (total >= 3) {
+        const infraFailures = evals.filter(
+          (e) =>
+            e.failureClass &&
+            ['INFRASTRUCTURE_FAILURE', 'PROVIDER_FAILURE', 'TIMEOUT', 'AUTH_FAILURE', 'QUOTA_FAILURE'].includes(
+              e.failureClass
+            )
+        ).length;
+        const failureRate = infraFailures / total;
+        if (failureRate >= 0.4) {
+          anomalies.push({
+            id: `anom_infra_failure_${modelId}_${Date.now()}`,
+            type: 'HIGH_INFRASTRUCTURE_FAILURE',
+            modelId,
+            severity: 'CRITICAL',
+            details: `Model ${modelId} has high infrastructure / connectivity failure rate (${Math.round(failureRate * 100)}% over ${total} attempts).`,
+            evidence: {
+              totalAttempts: total,
+              infraFailures,
+              failureRate: Math.round(failureRate * 1000) / 1000,
+            },
+          });
+        }
+      }
+    }
+
+    // 4. Check for unexplored models that are configured and available
     const unmeasuredAvailable = models.filter((m) => m.availability && m.status === 'UNMEASURED');
     if (unmeasuredAvailable.length > 0) {
       for (const unmeasured of unmeasuredAvailable) {
@@ -160,7 +232,43 @@ export class LLMSelfImprovementAdapter {
           },
           expectedOutcome: `Immediate routing shift away from ${anom.modelId} in category ${anom.category}.`,
         });
+      } else if (anom.type === 'HIGH_REGRESSION_RATE') {
+        plans.push({
+          id: `plan_regression_cooldown_${anom.modelId}_${Date.now()}`,
+          anomalyId: anom.id,
+          type: 'DEPRIORITIZE_MODEL_CATEGORY',
+          description: `Deprioritize model ${anom.modelId} in category ${anom.category} due to severe regression rate.`,
+          action: {
+            modelId: anom.modelId,
+            cooldownSeconds: 600,
+            category: anom.category,
+          },
+          expectedOutcome: `Immediate suppression of ${anom.modelId} in category ${anom.category} to protect codebase stability.`,
+        });
+      } else if (anom.type === 'HIGH_INFRASTRUCTURE_FAILURE') {
+        plans.push({
+          id: `plan_infra_cooldown_${anom.modelId}_${Date.now()}`,
+          anomalyId: anom.id,
+          type: 'DEPRIORITIZE_MODEL_CATEGORY',
+          description: `Place failing model ${anom.modelId} into cooldown to prevent repeating infrastructure failures.`,
+          action: {
+            modelId: anom.modelId,
+            cooldownSeconds: 900,
+            category: anom.category,
+          },
+          expectedOutcome: `Prevent traffic routing to ${anom.modelId} while provider infrastructure is unstable.`,
+        });
       } else if (anom.type === 'UNEXPLORED_AVAILABLE_MODEL') {
+        plans.push({
+          id: `plan_target_bench_${anom.modelId}_${Date.now()}`,
+          anomalyId: anom.id,
+          type: 'SCHEDULE_TARGETED_BENCHMARK',
+          description: `Execute targeted standardized benchmark run for unmeasured model ${anom.modelId}.`,
+          action: {
+            modelId: anom.modelId,
+          },
+          expectedOutcome: `Generate empirical evaluation records in memory for unmeasured model ${anom.modelId}.`,
+        });
         plans.push({
           id: `plan_boost_explore_${anom.modelId}_${Date.now()}`,
           anomalyId: anom.id,
@@ -196,7 +304,9 @@ export class LLMSelfImprovementAdapter {
     const preMetrics = {
       timestamp: Date.now(),
       explorationRate: this.selector.getConfig().explorationRate,
+      uncertaintyDecayFactor: this.selector.getConfig().uncertaintyDecayFactor,
       unmeasuredCount: this.registry.discoverModels().filter((m) => m.status === 'UNMEASURED').length,
+      evaluationCount: plan.action?.modelId ? this.memory.getModelEvaluationCount(plan.action.modelId) : 0,
     };
 
     let success = false;
@@ -268,17 +378,88 @@ export class LLMSelfImprovementAdapter {
     const record = this.adaptationHistory.find((r) => r.id === adaptationRecordId);
     if (!record || !record.success) return false;
 
-    const currentUnmeasured = this.registry.discoverModels().filter((m) => m.status === 'UNMEASURED').length;
-    const currentExplorationRate = this.selector.getConfig().explorationRate;
+    let verified = false;
 
-    record.postAdaptationMetrics = {
-      timestamp: Date.now(),
-      currentUnmeasured,
-      currentExplorationRate,
-    };
+    switch (record.plan.type) {
+      case 'ADJUST_EXPLORATION_RATE': {
+        const targetRate = record.plan.action.targetRate;
+        const currentRate = this.selector.getConfig().explorationRate;
+        verified = Math.abs(currentRate - targetRate) < 0.001;
+        record.postAdaptationMetrics = {
+          timestamp: Date.now(),
+          currentExplorationRate: currentRate,
+          targetExplorationRate: targetRate,
+          verified,
+        };
+        break;
+      }
 
-    record.verified = true;
-    return true;
+      case 'DEPRIORITIZE_MODEL_CATEGORY': {
+        const { modelId, category } = record.plan.action;
+        if (category) {
+          const isTargetDeprioritized = this.selector.isModelDeprioritizedForCategory(modelId, category);
+          const otherCategory: ProblemCategory = category === 'CODE_GENERATION' ? 'SECURITY' : 'CODE_GENERATION';
+          const isOtherDeprioritized = this.selector.isModelDeprioritizedForCategory(modelId, otherCategory);
+          verified = isTargetDeprioritized && !isOtherDeprioritized;
+          record.postAdaptationMetrics = {
+            timestamp: Date.now(),
+            modelId,
+            category,
+            isTargetDeprioritized,
+            isOtherDeprioritized,
+            verified,
+          };
+        } else {
+          const inCooldown = quotaManager.isModelInCooldown(modelId);
+          verified = inCooldown;
+          record.postAdaptationMetrics = {
+            timestamp: Date.now(),
+            modelId,
+            inCooldown,
+            verified,
+          };
+        }
+        break;
+      }
+
+      case 'UPDATE_ROUTING_THRESHOLDS': {
+        const targetFactor = record.plan.action.uncertaintyDecayFactor;
+        const currentConfigFactor = this.selector.getConfig().uncertaintyDecayFactor;
+        const currentMemoryFactor = this.memory.getUncertaintyDecayFactor();
+        verified =
+          Math.abs(currentConfigFactor - targetFactor) < 0.001 &&
+          Math.abs(currentMemoryFactor - targetFactor) < 0.001;
+        record.postAdaptationMetrics = {
+          timestamp: Date.now(),
+          targetFactor,
+          currentConfigFactor,
+          currentMemoryFactor,
+          verified,
+        };
+        break;
+      }
+
+      case 'SCHEDULE_TARGETED_BENCHMARK': {
+        const { modelId } = record.plan.action;
+        const preCount = record.preAdaptationMetrics.evaluationCount || 0;
+        const postCount = this.memory.getModelEvaluationCount(modelId);
+        verified = postCount > preCount;
+        record.postAdaptationMetrics = {
+          timestamp: Date.now(),
+          modelId,
+          preEvaluationCount: preCount,
+          postEvaluationCount: postCount,
+          verified,
+        };
+        break;
+      }
+
+      default:
+        verified = false;
+    }
+
+    record.verified = verified;
+    return verified;
   }
 
   public getHistory(): LLMAdaptationRecord[] {

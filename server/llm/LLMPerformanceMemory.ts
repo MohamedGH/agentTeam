@@ -41,10 +41,13 @@ export class LLMPerformanceMemory {
   }
 
   /**
-   * Determines if two evaluation entries represent the identical evaluation outcome.
-   * Invariant: Distinguishes different models within the same benchmark runId.
+   * Determines if two evaluation entries represent the identical execution/evaluation outcome.
+   * Invariants:
+   * - Distinguishes different models within the same runId.
+   * - Distinguishes re-runs / new observations of the same problem across different times or runs.
+   * - Never collapses distinct observations based on problemId alone.
    */
-  private isSameEvaluation(a: LLMEvaluation, b: LLMEvaluation): boolean {
+  public isSameEvaluation(a: LLMEvaluation, b: LLMEvaluation): boolean {
     if (a.id && b.id && a.id === b.id) {
       return true;
     }
@@ -56,7 +59,7 @@ export class LLMPerformanceMemory {
         (a.modelVersion || '') === (b.modelVersion || '')
       );
     }
-    if (a.problemId && b.problemId && a.problemId === b.problemId) {
+    if (!a.runId && !b.runId && a.problemId && b.problemId && a.problemId === b.problemId && a.timestamp === b.timestamp) {
       return (
         a.modelId === b.modelId &&
         a.providerId === b.providerId &&

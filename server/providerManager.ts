@@ -446,24 +446,34 @@ export class ProviderManager {
         text: '',
         requestedModelId: modelId,
         requestedProviderId: providerId,
-        actualModelId: modelId,
-        actualProviderId: providerId,
+        actualModelId: undefined,
+        actualProviderId: undefined,
         failoverUsed: false,
+        isIdentityVerified: false,
+        isCompliantWithSelection: false,
+        identitySource: 'NONE',
         success: false,
+        failureClass: 'INFRASTRUCTURE_FAILURE',
+        generationOutcome: 'TASK_FAILURE',
         error: `Provider "${providerId}" is not registered`,
         latencyMs: Date.now() - startTime,
       };
     }
 
-    if (!provider.isConfigured()) {
+    if (!provider.isConfigured() && providerId !== 'mock') {
       return {
         text: '',
         requestedModelId: modelId,
         requestedProviderId: providerId,
-        actualModelId: modelId,
-        actualProviderId: providerId,
+        actualModelId: undefined,
+        actualProviderId: undefined,
         failoverUsed: false,
+        isIdentityVerified: false,
+        isCompliantWithSelection: false,
+        identitySource: 'NONE',
         success: false,
+        failureClass: 'AUTH_FAILURE',
+        generationOutcome: 'TASK_FAILURE',
         error: `Provider "${providerId}" is not configured (missing credentials or API key)`,
         latencyMs: Date.now() - startTime,
       };
@@ -476,10 +486,15 @@ export class ProviderManager {
         text: '',
         requestedModelId: modelId,
         requestedProviderId: providerId,
-        actualModelId: modelId,
-        actualProviderId: providerId,
+        actualModelId: undefined,
+        actualProviderId: undefined,
         failoverUsed: false,
+        isIdentityVerified: false,
+        isCompliantWithSelection: false,
+        identitySource: 'NONE',
         success: false,
+        failureClass: 'MODEL_FAILURE',
+        generationOutcome: 'TASK_FAILURE',
         error: `Model "${modelId}" is not supported by provider "${providerId}"`,
         latencyMs: Date.now() - startTime,
       };
@@ -490,7 +505,9 @@ export class ProviderManager {
       let timeoutHandle: any;
       const timeoutPromise = new Promise<never>((_, reject) => {
         timeoutHandle = setTimeout(() => {
-          reject(new Error(`Exact benchmark execution timed out after ${timeoutMs}ms for ${providerId}/${modelId}`));
+          const timeoutErr = new Error(`Exact benchmark execution timed out after ${timeoutMs}ms for ${providerId}/${modelId}`);
+          (timeoutErr as any).code = 'ETIMEDOUT';
+          reject(timeoutErr);
         }, timeoutMs);
       });
 
@@ -515,17 +532,50 @@ export class ProviderManager {
         });
       }
 
+      const isIdentityVerified = Boolean(res.identityVerified === true && res.actualModelId && res.actualProviderId);
+      const actualModelId = isIdentityVerified ? res.actualModelId : undefined;
+      const actualProviderId = isIdentityVerified ? res.actualProviderId : undefined;
+      const failoverUsed = Boolean(res.failoverHistory && res.failoverHistory.length > 0);
+      const isCompliantWithSelection = Boolean(
+        isIdentityVerified &&
+        !failoverUsed &&
+        actualProviderId === providerId &&
+        (actualModelId === modelId || actualModelId?.startsWith(modelId) || modelId.startsWith(actualModelId || ''))
+      );
+
+      const generationOutcome: GenerationOutcome =
+        res.generationOutcome === 'DEGRADED_FALLBACK'
+          ? 'DEGRADED_FALLBACK'
+          : (res.generationOutcome ||
+            (providerId === 'mock'
+              ? 'MOCK_SUCCESS'
+              : (res.isRealProviderUsage === true
+                  ? 'REAL_PROVIDER_SUCCESS'
+                  : 'DEGRADED_FALLBACK')));
+
+      const success = Boolean(
+        isIdentityVerified &&
+        isCompliantWithSelection &&
+        generationOutcome !== 'DEGRADED_FALLBACK' &&
+        generationOutcome !== 'TASK_FAILURE'
+      );
+
       return {
         text: res.text,
         requestedModelId: modelId,
         requestedProviderId: providerId,
-        actualModelId: modelId,
-        actualProviderId: providerId,
-        failoverUsed: false,
+        actualModelId,
+        actualProviderId,
+        failoverUsed,
+        isIdentityVerified,
+        isCompliantWithSelection,
+        identitySource: res.identitySource || (isIdentityVerified ? 'PROVIDER_RESPONSE_PAYLOAD' : 'NONE'),
         totalTokens: res.totalTokens,
         promptTokens: res.promptTokens,
         completionTokens: res.completionTokens,
-        success: true,
+        success,
+        failureClass: success ? undefined : 'PROVIDER_FAILURE',
+        generationOutcome,
         latencyMs,
       };
     } catch (err: any) {
@@ -537,15 +587,35 @@ export class ProviderManager {
         this.handleRateLimitError(modelId, classified.retryAfterSeconds || 60);
       }
 
+      let failureClass: FailureClass = 'APPLICATION_ERROR';
+      const reason = classified.reason as string;
+      const errMsg = String(err?.message || '').toLowerCase();
+      if (reason === 'RATE_LIMIT' || reason === 'QUOTA') {
+        failureClass = 'QUOTA_FAILURE';
+      } else if (reason === 'AUTHENTICATION' || reason === 'CONFIGURATION') {
+        failureClass = 'AUTH_FAILURE';
+      } else if (errMsg.includes('time out') || errMsg.includes('timed out') || errMsg.includes('timeout')) {
+        failureClass = 'TIMEOUT';
+      } else if (reason === 'TEMPORARY_UNAVAILABLE' || reason === 'HIGH_DEMAND' || errMsg.includes('network') || errMsg.includes('econnrefused')) {
+        failureClass = 'INFRASTRUCTURE_FAILURE';
+      } else if (reason === 'MODEL_EXECUTION_ERROR') {
+        failureClass = 'MODEL_FAILURE';
+      }
+
       return {
         text: '',
         requestedModelId: modelId,
         requestedProviderId: providerId,
-        actualModelId: modelId,
-        actualProviderId: providerId,
+        actualModelId: undefined,
+        actualProviderId: undefined,
         failoverUsed: false,
+        isIdentityVerified: false,
+        isCompliantWithSelection: false,
+        identitySource: 'NONE',
         success: false,
         error: classified.sanitizedMessage,
+        failureClass,
+        generationOutcome: 'TASK_FAILURE',
         latencyMs,
       };
     }
@@ -580,12 +650,15 @@ export class ProviderManager {
         model: modelId,
         isRealProviderUsage: false,
         tokenAccountingType: 'fallback_unknown',
-        generationOutcome: 'DEGRADED_FALLBACK',
+        generationOutcome: 'TASK_FAILURE',
         requestedModelId: modelId,
         requestedProviderId: providerId,
-        actualModelId: modelId,
-        actualProviderId: providerId,
+        actualModelId: undefined,
+        actualProviderId: undefined,
         failoverUsed: false,
+        isIdentityVerified: false,
+        isCompliantWithSelection: false,
+        identitySource: 'NONE',
         success: false,
         error: `AI Provider "${providerId}" is not registered`,
         failureClass: 'INFRASTRUCTURE_FAILURE',
@@ -603,14 +676,15 @@ export class ProviderManager {
         model: modelId,
         isRealProviderUsage: false,
         tokenAccountingType: 'fallback_unknown',
-        generationOutcome: 'DEGRADED_FALLBACK',
+        generationOutcome: 'TASK_FAILURE',
         requestedModelId: modelId,
         requestedProviderId: providerId,
-        actualModelId: modelId,
-        actualProviderId: providerId,
+        actualModelId: undefined,
+        actualProviderId: undefined,
         failoverUsed: false,
         isIdentityVerified: false,
         isCompliantWithSelection: false,
+        identitySource: 'NONE',
         success: false,
         error: `AI Provider "${providerId}" is not configured with credentials`,
         failureClass: 'AUTH_FAILURE',
@@ -649,6 +723,17 @@ export class ProviderManager {
         });
       }
 
+      const isIdentityVerified = Boolean(res.identityVerified === true && res.actualModelId && res.actualProviderId);
+      const actualModelId = isIdentityVerified ? res.actualModelId : undefined;
+      const actualProviderId = isIdentityVerified ? res.actualProviderId : undefined;
+      const failoverUsed = Boolean(res.failoverHistory && res.failoverHistory.length > 0);
+      const isCompliantWithSelection = Boolean(
+        isIdentityVerified &&
+        !failoverUsed &&
+        actualProviderId === providerId &&
+        (actualModelId === modelId || actualModelId?.startsWith(modelId) || modelId.startsWith(actualModelId || ''))
+      );
+
       const generationOutcome: GenerationOutcome =
         res.generationOutcome === 'DEGRADED_FALLBACK'
           ? 'DEGRADED_FALLBACK'
@@ -659,28 +744,16 @@ export class ProviderManager {
                   ? 'REAL_PROVIDER_SUCCESS'
                   : 'DEGRADED_FALLBACK')));
 
-      // Extract actual identity from provider output directly, never self-assigned
-      const actualModelId = (res as any).actualModel || res.model || modelId;
-      const actualProviderId = (res as any).actualProvider || res.provider || providerId;
-      const failoverUsed = Boolean(
-        (res as any).failoverUsed ||
-        (res.failoverHistory && res.failoverHistory.length > 0)
+      const success = Boolean(
+        isCompliantWithSelection &&
+        isIdentityVerified &&
+        (generationOutcome === 'REAL_PROVIDER_SUCCESS' || generationOutcome === 'MOCK_SUCCESS')
       );
-
-      const isIdentityVerified = Boolean(
-        actualModelId &&
-        actualProviderId &&
-        actualModelId === modelId &&
-        actualProviderId === providerId &&
-        !failoverUsed
-      );
-
-      const isCompliantWithSelection = isIdentityVerified && !failoverUsed;
 
       return {
         ...res,
-        provider: actualProviderId,
-        model: actualModelId,
+        provider: actualProviderId || providerId,
+        model: actualModelId || modelId,
         requestedModelId: modelId,
         requestedProviderId: providerId,
         actualModelId,
@@ -688,7 +761,9 @@ export class ProviderManager {
         failoverUsed,
         isIdentityVerified,
         isCompliantWithSelection,
-        success: generationOutcome !== 'DEGRADED_FALLBACK' || providerId === 'mock' || Boolean(res.text && res.text !== fallbackText),
+        identitySource: res.identitySource || (isIdentityVerified ? 'PROVIDER_RESPONSE_PAYLOAD' : 'NONE'),
+        success,
+        failureClass: success ? undefined : ((res as any).failureClass || 'PROVIDER_FAILURE'),
         generationOutcome,
         latencyMs,
       };
@@ -725,14 +800,15 @@ export class ProviderManager {
         model: modelId,
         isRealProviderUsage: false,
         tokenAccountingType: 'fallback_unknown',
-        generationOutcome: 'DEGRADED_FALLBACK',
+        generationOutcome: 'TASK_FAILURE',
         requestedModelId: modelId,
         requestedProviderId: providerId,
-        actualModelId: modelId,
-        actualProviderId: providerId,
+        actualModelId: undefined,
+        actualProviderId: undefined,
         failoverUsed: false,
         isIdentityVerified: false,
         isCompliantWithSelection: false,
+        identitySource: 'NONE',
         success: false,
         error: classified.sanitizedMessage,
         failureClass,

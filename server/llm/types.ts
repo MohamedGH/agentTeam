@@ -38,15 +38,19 @@ export interface ExactBenchmarkExecutionResult {
   text: string;
   requestedModelId: string;
   requestedProviderId: AIProviderId;
-  actualModelId: string;
-  actualProviderId: AIProviderId;
+  actualModelId?: string;
+  actualProviderId?: AIProviderId;
   failoverUsed: boolean;
+  isIdentityVerified: boolean;
+  isCompliantWithSelection: boolean;
+  identitySource: 'PROVIDER_RESPONSE_PAYLOAD' | 'MOCK_DETERMINISTIC_PROOF' | 'UNVERIFIED_DEFAULT' | 'NONE';
   totalTokens?: number;
   promptTokens?: number;
   completionTokens?: number;
   success: boolean;
   error?: string;
   failureClass?: FailureClass;
+  generationOutcome?: string;
   cost?: number;
   costSource?: CostSource;
   latencyMs: number;
@@ -113,12 +117,13 @@ export interface LLMEvaluation {
   proof?: {
     requestedModelId: string;
     requestedProviderId: AIProviderId;
-    actualModelId: string;
-    actualProviderId: AIProviderId;
+    actualModelId?: string;
+    actualProviderId?: AIProviderId;
     failoverUsed: boolean;
     failureClass?: FailureClass;
     isCompliantWithSelection?: boolean;
     isIdentityVerified?: boolean;
+    identitySource?: 'PROVIDER_RESPONSE_PAYLOAD' | 'MOCK_DETERMINISTIC_PROOF' | 'UNVERIFIED_DEFAULT' | 'NONE';
   };
 }
 

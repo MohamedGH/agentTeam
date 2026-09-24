@@ -67,6 +67,11 @@ export class LLMSelector {
     this.rankingEngine = rankingEngine;
     this.memory = memory;
     this.config = { ...DEFAULT_ADAPTIVE_CONFIG, ...config };
+    if (config.uncertaintyDecayFactor !== undefined) {
+      this.memory.setUncertaintyDecayFactor(config.uncertaintyDecayFactor);
+    } else {
+      this.config.uncertaintyDecayFactor = this.memory.getUncertaintyDecayFactor();
+    }
     if (randomProvider) {
       this.defaultRandomProvider = randomProvider;
     }
@@ -95,7 +100,7 @@ export class LLMSelector {
 
   public updateConfig(patch: Partial<LLMAdaptiveConfig>): void {
     this.config = { ...this.config, ...patch };
-    if (patch.uncertaintyDecayFactor !== undefined) {
+    if (patch.uncertaintyDecayFactor !== undefined && patch.uncertaintyDecayFactor !== this.memory.getUncertaintyDecayFactor()) {
       this.memory.setUncertaintyDecayFactor(patch.uncertaintyDecayFactor);
     }
   }

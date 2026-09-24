@@ -57,6 +57,10 @@ export class AnthropicProvider implements IAIProvider {
     const hasRealText = Boolean(rawText?.trim());
     const isRealProviderUsage = Boolean(usage) && hasRealText;
 
+    const actualModelId = typeof data.model === 'string' && data.model.length > 0 ? data.model : undefined;
+    const identityVerified = Boolean(actualModelId);
+    const identitySource = identityVerified ? 'PROVIDER_RESPONSE_PAYLOAD' : 'UNVERIFIED_DEFAULT';
+
     return {
       text,
       promptTokens,
@@ -67,6 +71,10 @@ export class AnthropicProvider implements IAIProvider {
       isRealProviderUsage,
       tokenAccountingType: 'real_provider',
       generationOutcome: hasRealText ? 'REAL_PROVIDER_SUCCESS' : 'DEGRADED_FALLBACK',
+      actualModelId: identityVerified ? actualModelId : undefined,
+      actualProviderId: identityVerified ? 'anthropic' : undefined,
+      identityVerified,
+      identitySource,
     };
   }
 

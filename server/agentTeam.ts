@@ -686,7 +686,14 @@ Evaluate code quality, security implications, maintainability, and clean archite
         }
 
         const revTextLower = revRes.text.toLowerCase();
-        if (revTextLower.includes('changes requested') || revTextLower.includes('reject') || revTextLower.includes('critical issue')) {
+        if (
+          revTextLower.includes('changes requested') ||
+          revTextLower.includes('changes_required') ||
+          revTextLower.includes('reject') ||
+          revTextLower.includes('fail') ||
+          revTextLower.includes('regression') ||
+          revTextLower.includes('critical issue')
+        ) {
           reviewIssues.push('Reviewer model flagged architectural or security concerns.');
         }
 
@@ -855,16 +862,23 @@ Evaluate code quality, security implications, maintainability, and clean archite
       const workflowSuccess = Boolean(testerPassed && reviewerApproved);
 
       // Extract verified execution identity directly from provider execution
-      const actualModelId = lastExactResult?.actualModelId || chosenModel;
-      const actualProviderId = lastExactResult?.actualProviderId || activeProvider;
-      const failoverUsed = Boolean(lastExactResult?.failoverUsed || allFailoverHistory.length > 0);
       const isIdentityVerified = Boolean(
-        lastExactResult?.isIdentityVerified ??
-        (actualModelId === chosenModel && actualProviderId === activeProvider && !failoverUsed)
+        lastExactResult?.isIdentityVerified === true &&
+        lastExactResult?.actualModelId &&
+        lastExactResult?.actualProviderId
       );
+      const actualModelId = isIdentityVerified ? lastExactResult?.actualModelId : undefined;
+      const actualProviderId = isIdentityVerified ? lastExactResult?.actualProviderId : undefined;
+      const failoverUsed = Boolean(lastExactResult?.failoverUsed || allFailoverHistory.length > 0);
       const isCompliantWithSelection = Boolean(
-        lastExactResult?.isCompliantWithSelection ?? (isIdentityVerified && !failoverUsed)
+        lastExactResult?.isCompliantWithSelection &&
+        isIdentityVerified &&
+        !failoverUsed &&
+        actualProviderId === activeProvider &&
+        actualModelId &&
+        (actualModelId === chosenModel || actualModelId.startsWith(chosenModel) || chosenModel.startsWith(actualModelId))
       );
+      const identitySource = lastExactResult?.identitySource || (isIdentityVerified ? 'PROVIDER_RESPONSE_PAYLOAD' : 'NONE');
 
       // OBLIGATOIRE: REAL_TASK evaluation post-execution with strict identity and execution proof
       let realTaskEvalRecord: any = null;
@@ -875,8 +889,8 @@ Evaluate code quality, security implications, maintainability, and clean archite
           activeProvider,
           {
             runId: taskId,
-            success: workflowSuccess,
-            exitCode: workflowSuccess ? 0 : 1,
+            success: workflowSuccess && isCompliantWithSelection,
+            exitCode: workflowSuccess && isCompliantWithSelection ? 0 : 1,
             testsPassed: testerPassed ? 1 : 0,
             totalTests: 1,
             latencyMs: executionDurationMs,
@@ -885,15 +899,17 @@ Evaluate code quality, security implications, maintainability, and clean archite
             regressionDetected: !reviewerApproved,
             compilerErrors: !testerPassed ? ['Unit tests or reviewer criteria failed'] : undefined,
             output: delivRes.text,
-            failureClass: workflowSuccess ? undefined : 'MODEL_FAILURE',
+            failureClass: (workflowSuccess && isCompliantWithSelection) ? undefined : 'MODEL_FAILURE',
             proof: {
               requestedModelId: chosenModel,
               requestedProviderId: activeProvider,
               actualModelId,
               actualProviderId,
               failoverUsed,
+              failureClass: (workflowSuccess && isCompliantWithSelection) ? undefined : 'MODEL_FAILURE',
               isIdentityVerified,
               isCompliantWithSelection,
+              identitySource,
             },
           }
         );
@@ -977,6 +993,7 @@ Evaluate code quality, security implications, maintainability, and clean archite
           failoverUsed,
           isIdentityVerified,
           isCompliantWithSelection,
+          identitySource,
         },
         failoverHistory: allFailoverHistory.length > 0 ? allFailoverHistory : undefined,
         prUrl: julesResult?.pullRequestUrl || julesResult?.prUrl,
@@ -1009,16 +1026,16 @@ Evaluate code quality, security implications, maintainability, and clean archite
       }
 
       let errorEvalRecord: any = null;
-      const actualModelId = lastExactResult?.actualModelId || chosenModel;
-      const actualProviderId = lastExactResult?.actualProviderId || activeProvider;
-      const failoverUsed = Boolean(lastExactResult?.failoverUsed || allFailoverHistory.length > 0);
       const isIdentityVerified = Boolean(
-        lastExactResult?.isIdentityVerified ??
-        (actualModelId === chosenModel && actualProviderId === activeProvider && !failoverUsed)
+        lastExactResult?.isIdentityVerified === true &&
+        lastExactResult?.actualModelId &&
+        lastExactResult?.actualProviderId
       );
-      const isCompliantWithSelection = Boolean(
-        lastExactResult?.isCompliantWithSelection ?? (isIdentityVerified && !failoverUsed)
-      );
+      const actualModelId = isIdentityVerified ? lastExactResult?.actualModelId : undefined;
+      const actualProviderId = isIdentityVerified ? lastExactResult?.actualProviderId : undefined;
+      const failoverUsed = Boolean(lastExactResult?.failoverUsed || allFailoverHistory.length > 0);
+      const isCompliantWithSelection = false;
+      const identitySource = lastExactResult?.identitySource || 'NONE';
 
       if (chosenModel && selectionDecision) {
         try {
@@ -1056,6 +1073,7 @@ Evaluate code quality, security implications, maintainability, and clean archite
                 failureClass,
                 isIdentityVerified,
                 isCompliantWithSelection,
+                identitySource,
               },
             }
           );
@@ -1083,6 +1101,7 @@ Evaluate code quality, security implications, maintainability, and clean archite
           failoverUsed,
           isIdentityVerified,
           isCompliantWithSelection,
+          identitySource,
         },
         steps,
         virtualFiles: this.workspace.getFiles(),

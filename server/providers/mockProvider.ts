@@ -9,10 +9,12 @@ export class MockProvider implements IAIProvider {
 
   public shouldSimulateError: '429' | '503' | 'network' | null = null;
   public mockTextOverride: string | null = null;
+  public simulateUnverifiedIdentity: boolean = false;
 
   public readonly models: ProviderModelConfig[] = [
     { name: 'mock-fast-model', displayName: 'Mock Fast Model', contextWindow: 128000, supportsTools: true, costTier: 'flash', providerId: 'mock' },
     { name: 'mock-pro-model', displayName: 'Mock Pro Model', contextWindow: 200000, supportsTools: true, costTier: 'pro', providerId: 'mock' },
+    { name: 'mock-failing-model', displayName: 'Mock Failing Model', contextWindow: 64000, supportsTools: true, costTier: 'flash', providerId: 'mock' },
   ];
 
   public isConfigured(): boolean {
@@ -37,6 +39,9 @@ export class MockProvider implements IAIProvider {
     const completionTokens = Math.max(24, Math.ceil(text.length / 4));
     const totalTokens = promptTokens + completionTokens;
 
+    const identityVerified = !this.simulateUnverifiedIdentity;
+    const identitySource = identityVerified ? 'MOCK_DETERMINISTIC_PROOF' : 'UNVERIFIED_DEFAULT';
+
     return {
       text,
       promptTokens,
@@ -47,6 +52,10 @@ export class MockProvider implements IAIProvider {
       isRealProviderUsage: true,
       tokenAccountingType: 'mock',
       generationOutcome: 'MOCK_SUCCESS',
+      actualModelId: identityVerified ? model : undefined,
+      actualProviderId: identityVerified ? 'mock' : undefined,
+      identityVerified,
+      identitySource,
     };
   }
 

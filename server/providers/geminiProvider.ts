@@ -63,6 +63,11 @@ export class GeminiProvider implements IAIProvider {
     const hasRealText = Boolean(response.text?.trim());
     const isRealProviderUsage = Boolean(usage && (usage.promptTokenCount !== undefined || usage.totalTokenCount !== undefined)) && hasRealText;
 
+    const rawModelVersion = (response as any)?.modelVersion || (response as any)?.model;
+    const actualModelId = typeof rawModelVersion === 'string' && rawModelVersion.length > 0 ? rawModelVersion : undefined;
+    const identityVerified = Boolean(actualModelId);
+    const identitySource = identityVerified ? 'PROVIDER_RESPONSE_PAYLOAD' : 'UNVERIFIED_DEFAULT';
+
     return {
       text,
       promptTokens,
@@ -73,6 +78,10 @@ export class GeminiProvider implements IAIProvider {
       isRealProviderUsage,
       tokenAccountingType: 'real_provider',
       generationOutcome: hasRealText ? 'REAL_PROVIDER_SUCCESS' : 'DEGRADED_FALLBACK',
+      actualModelId: identityVerified ? actualModelId : undefined,
+      actualProviderId: identityVerified ? 'gemini' : undefined,
+      identityVerified,
+      identitySource,
     };
   }
 

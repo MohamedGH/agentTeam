@@ -158,11 +158,12 @@ export interface TeamRunResult {
   execution?: {
     requestedModelId: string;
     requestedProviderId: string;
-    actualModelId: string;
-    actualProviderId: string;
+    actualModelId?: string;
+    actualProviderId?: string;
     failoverUsed: boolean;
     isIdentityVerified?: boolean;
     isCompliantWithSelection?: boolean;
+    identitySource?: string;
   };
   prUrl?: string;
   gitBranch?: string;

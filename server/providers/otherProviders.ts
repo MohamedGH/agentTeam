@@ -53,6 +53,10 @@ export class GroqProvider implements IAIProvider {
     const hasRealText = Boolean(rawText?.trim());
     const isRealProviderUsage = Boolean(usage) && hasRealText;
 
+    const actualModelId = typeof data.model === 'string' && data.model.length > 0 ? data.model : undefined;
+    const identityVerified = Boolean(actualModelId);
+    const identitySource = identityVerified ? 'PROVIDER_RESPONSE_PAYLOAD' : 'UNVERIFIED_DEFAULT';
+
     return {
       text,
       promptTokens,
@@ -63,6 +67,10 @@ export class GroqProvider implements IAIProvider {
       isRealProviderUsage,
       tokenAccountingType: 'real_provider',
       generationOutcome: hasRealText ? 'REAL_PROVIDER_SUCCESS' : 'DEGRADED_FALLBACK',
+      actualModelId: identityVerified ? actualModelId : undefined,
+      actualProviderId: identityVerified ? 'groq' : undefined,
+      identityVerified,
+      identitySource,
     };
   }
 
@@ -122,6 +130,10 @@ export class DeepSeekProvider implements IAIProvider {
     const hasRealText = Boolean(data.choices?.[0]?.message?.content?.trim());
     const isRealProviderUsage = Boolean(usage) && hasRealText;
 
+    const actualModelId = typeof data.model === 'string' && data.model.length > 0 ? data.model : undefined;
+    const identityVerified = Boolean(actualModelId);
+    const identitySource = identityVerified ? 'PROVIDER_RESPONSE_PAYLOAD' : 'UNVERIFIED_DEFAULT';
+
     return {
       text,
       promptTokens,
@@ -132,6 +144,10 @@ export class DeepSeekProvider implements IAIProvider {
       isRealProviderUsage,
       tokenAccountingType: 'real_provider',
       generationOutcome: hasRealText ? 'REAL_PROVIDER_SUCCESS' : 'DEGRADED_FALLBACK',
+      actualModelId: identityVerified ? actualModelId : undefined,
+      actualProviderId: identityVerified ? 'deepseek' : undefined,
+      identityVerified,
+      identitySource,
     };
   }
 
@@ -195,6 +211,10 @@ export class CustomProvider implements IAIProvider {
     const hasRealText = Boolean(data.choices?.[0]?.message?.content?.trim());
     const isRealProviderUsage = Boolean(usage) && hasRealText;
 
+    const actualModelId = typeof data.model === 'string' && data.model.length > 0 ? data.model : undefined;
+    const identityVerified = Boolean(actualModelId);
+    const identitySource = identityVerified ? 'PROVIDER_RESPONSE_PAYLOAD' : 'UNVERIFIED_DEFAULT';
+
     return {
       text,
       promptTokens,
@@ -205,6 +225,10 @@ export class CustomProvider implements IAIProvider {
       isRealProviderUsage,
       tokenAccountingType: 'real_provider',
       generationOutcome: hasRealText ? 'REAL_PROVIDER_SUCCESS' : 'DEGRADED_FALLBACK',
+      actualModelId: identityVerified ? actualModelId : undefined,
+      actualProviderId: identityVerified ? 'custom' : undefined,
+      identityVerified,
+      identitySource,
     };
   }
 

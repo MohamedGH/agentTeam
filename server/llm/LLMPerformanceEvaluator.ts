@@ -45,12 +45,13 @@ export class LLMPerformanceEvaluator {
     proof?: {
       requestedModelId: string;
       requestedProviderId: AIProviderId;
-      actualModelId: string;
-      actualProviderId: AIProviderId;
+      actualModelId?: string;
+      actualProviderId?: AIProviderId;
       failoverUsed: boolean;
       failureClass?: FailureClass;
       isIdentityVerified?: boolean;
       isCompliantWithSelection?: boolean;
+      identitySource?: 'PROVIDER_RESPONSE_PAYLOAD' | 'MOCK_DETERMINISTIC_PROOF' | 'UNVERIFIED_DEFAULT' | 'NONE';
     }
   ): LLMEvaluation {
     const startTime = Date.now();
@@ -64,8 +65,8 @@ export class LLMPerformanceEvaluator {
     const cleanOutput = (output || '').trim();
     const extractedCode = this.extractCodeBlock(cleanOutput);
 
-    // If proof indicates failover occurred, fail immediately with 0 score (Zero Failover rule)
-    if (proof && (proof.failoverUsed || proof.actualModelId !== proof.requestedModelId || proof.actualProviderId !== proof.requestedProviderId)) {
+    // If live benchmark and proof indicates failover occurred, identity unverified, or mismatch, fail immediately with 0 score
+    if (proof && (proof.failoverUsed || proof.isIdentityVerified === false || proof.isCompliantWithSelection === false || proof.actualModelId !== proof.requestedModelId || proof.actualProviderId !== proof.requestedProviderId)) {
       return {
         id: `eval_failover_blocked_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
         modelId,
@@ -84,9 +85,10 @@ export class LLMPerformanceEvaluator {
         regressionDetected: true,
         evaluatorVersion: this.version,
         timestamp: startTime,
+        failureClass: proof.failureClass || 'PROVIDER_FAILURE',
         details: {
           failoverBlocked: true,
-          error: `Failover detected in benchmark execution: requested ${proof.requestedProviderId}/${proof.requestedModelId} but executed ${proof.actualProviderId}/${proof.actualModelId}`,
+          error: `Execution proof rejected in benchmark: requested ${proof.requestedProviderId}/${proof.requestedModelId} but executed ${proof.actualProviderId}/${proof.actualModelId} (verified=${proof.isIdentityVerified}, compliant=${proof.isCompliantWithSelection})`,
         },
         isLiveBenchmark,
         outputSample: cleanOutput.slice(0, 180),
@@ -198,52 +200,46 @@ export class LLMPerformanceEvaluator {
       proof?: {
         requestedModelId: string;
         requestedProviderId: AIProviderId;
-        actualModelId: string;
-        actualProviderId: AIProviderId;
+        actualModelId?: string;
+        actualProviderId?: AIProviderId;
         failoverUsed: boolean;
         failureClass?: FailureClass;
         isIdentityVerified?: boolean;
         isCompliantWithSelection?: boolean;
+        identitySource?: string;
       };
     }
   ): LLMEvaluation {
-    const proof = executionResult.proof || {
-      requestedModelId: modelId,
-      requestedProviderId: providerId,
-      actualModelId: modelId,
-      actualProviderId: providerId,
-      failoverUsed: false,
-      failureClass: executionResult.failureClass,
-    };
+    const rawProof = executionResult.proof;
+    const isIdentityVerified = Boolean(
+      rawProof &&
+      rawProof.isIdentityVerified === true &&
+      rawProof.actualModelId &&
+      rawProof.actualProviderId
+    );
+    const failoverUsed = Boolean(rawProof?.failoverUsed);
+    const actualModelId = isIdentityVerified ? rawProof?.actualModelId : undefined;
+    const actualProviderId = isIdentityVerified ? rawProof?.actualProviderId : undefined;
 
-    // Strict validation: requested === actual && failoverUsed === false
-    const isConforming =
-      proof.requestedModelId === proof.actualModelId &&
-      proof.requestedProviderId === proof.actualProviderId &&
-      proof.failoverUsed === false;
+    const isCompliantWithSelection = Boolean(
+      isIdentityVerified &&
+      !failoverUsed &&
+      actualProviderId === providerId &&
+      actualModelId &&
+      (actualModelId === modelId || actualModelId.startsWith(modelId) || modelId.startsWith(actualModelId))
+    );
 
     let isSuccess = executionResult.success;
     let failureClass = executionResult.failureClass;
 
-    const isIdentityVerified = Boolean(
-      (proof as any).isIdentityVerified ??
-      (proof.actualModelId &&
-        proof.actualProviderId &&
-        proof.actualModelId === proof.requestedModelId &&
-        proof.actualProviderId === proof.requestedProviderId &&
-        !proof.failoverUsed)
-    );
-
-    const isCompliantWithSelection = isConforming && isIdentityVerified;
-
-    if (!isConforming || !isCompliantWithSelection) {
+    if (!isIdentityVerified || !isCompliantWithSelection || failoverUsed) {
       isSuccess = false;
       if (!failureClass) {
         failureClass = 'PROVIDER_FAILURE';
       }
     }
 
-    const totalTests = executionResult.totalTests || (isSuccess ? 1 : 1);
+    const totalTests = executionResult.totalTests || 1;
     const testsPassed = executionResult.testsPassed !== undefined
       ? executionResult.testsPassed
       : isSuccess ? 1 : 0;
@@ -258,7 +254,7 @@ export class LLMPerformanceEvaluator {
     if (executionResult.compilerErrors && executionResult.compilerErrors.length > 0) {
       score = 0;
     }
-    if (!isConforming) {
+    if (!isIdentityVerified || !isCompliantWithSelection || failoverUsed) {
       score = 0;
     }
 
@@ -294,14 +290,15 @@ export class LLMPerformanceEvaluator {
       isLiveBenchmark: false,
       outputSample: executionResult.output ? executionResult.output.slice(0, 180) : undefined,
       proof: {
-        requestedModelId: proof.requestedModelId,
-        requestedProviderId: proof.requestedProviderId,
-        actualModelId: proof.actualModelId,
-        actualProviderId: proof.actualProviderId,
-        failoverUsed: proof.failoverUsed,
+        requestedModelId: rawProof?.requestedModelId || modelId,
+        requestedProviderId: rawProof?.requestedProviderId || providerId,
+        actualModelId,
+        actualProviderId,
+        failoverUsed,
         failureClass,
         isIdentityVerified,
         isCompliantWithSelection,
+        identitySource: (rawProof?.identitySource as any) || (isIdentityVerified ? 'PROVIDER_RESPONSE_PAYLOAD' : 'NONE'),
       },
     };
   }
