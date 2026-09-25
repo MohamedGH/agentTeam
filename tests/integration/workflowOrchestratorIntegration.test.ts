@@ -1,0 +1,331 @@
+import assert from 'assert';
+import fs from 'fs';
+import path from 'path';
+import { execSync } from 'child_process';
+import { WorkflowOrchestrator } from '../../server/workflowOrchestrator';
+import { CodingAgentManager } from '../../server/codingAgents/codingAgentManager';
+import { MockCodingAgent } from '../../server/codingAgents/mockCodingAgent';
+import { FileBackedCodingAgentSessionStore } from '../../server/codingAgents/sessionStore';
+import { GitHubManager } from '../../server/github/githubManager';
+import { GitHubClient } from '../../server/github/githubClient';
+import { ProviderManager } from '../../server/providerManager';
+import { VirtualWorkspace } from '../../server/virtualWorkspace';
+import { ICodingAgent, CodingAgentSession, ICodingAgentSessionStore } from '../../server/codingAgents/types';
+
+export async function runWorkflowOrchestratorIntegrationTests() {
+  console.log('\n====================================================');
+  console.log('🔗 WORKFLOW ORCHESTRATOR INTEGRATION TESTS (Hermetic)');
+  console.log('====================================================\n');
+
+  const testDataDir = path.join(process.cwd(), 'data', 'test_workflow_integration');
+  if (fs.existsSync(testDataDir)) {
+    fs.rmSync(testDataDir, { recursive: true, force: true });
+  }
+
+  // -------------------------------------------------------------
+  // TEST 1: Full Asynchronous Lifecycle via Background Poller
+  // -------------------------------------------------------------
+  {
+    console.log('Integration Test 1: Background Poller autonomously advances RUNNING -> COMPLETED with full Git delivery');
+    const testSessionFile = path.join(testDataDir, 'test_poller_async.json');
+    const sessionStore = new FileBackedCodingAgentSessionStore(testSessionFile);
+    
+    class StubJulesAgent implements ICodingAgent {
+      readonly id = 'jules';
+      readonly name = 'Google Jules';
+      private sessionStore: ICodingAgentSessionStore;
+      private mockSessionState: any = null;
+
+      constructor(sessionStore: ICodingAgentSessionStore) {
+        this.sessionStore = sessionStore;
+      }
+      setMockSession(state: any) {
+        this.mockSessionState = state;
+      }
+      async startSession(request: any): Promise<CodingAgentSession> {
+        const id = 'jules_sess_' + Math.random().toString(36).substring(2, 9);
+        const session: CodingAgentSession = {
+          id,
+          agentId: 'jules',
+          repository: request.repository,
+          branch: request.branch,
+          task: request.task,
+          state: 'QUEUED',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        await this.sessionStore.saveSession(session);
+        return session;
+      }
+      async getSession(id: string): Promise<CodingAgentSession> {
+        const stored = await this.sessionStore.getSession(id);
+        if (this.mockSessionState) {
+          return {
+            ...stored!,
+            ...this.mockSessionState,
+          };
+        }
+        return stored!;
+      }
+      async cancelSession(id: string): Promise<CodingAgentSession> {
+        const stored = await this.sessionStore.getSession(id);
+        const updated = { ...stored!, state: 'CANCELLED' as const };
+        await this.sessionStore.saveSession(updated);
+        return updated;
+      }
+      async sendPrompt(): Promise<CodingAgentSession> {
+        throw new Error('Not implemented');
+      }
+      async listActivities(): Promise<any[]> {
+        return [];
+      }
+    }
+
+    const julesAgent = new StubJulesAgent(sessionStore);
+    const mockAgent = new MockCodingAgent(sessionStore);
+
+    const codingAgentManager = new CodingAgentManager({
+      sessionStore,
+      julesAgent: julesAgent as any,
+      mockAgent,
+    });
+
+    const tempGitDir = path.join(testDataDir, `repo_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`);
+    fs.mkdirSync(tempGitDir, { recursive: true });
+    fs.writeFileSync(path.join(tempGitDir, 'package.json'), JSON.stringify({ name: 'agent-team', scripts: { test: 'node -e "process.exit(0)"' } }));
+
+    let gitProcessed = false;
+    const mockGithubClient = new GitHubClient({
+      token: 'mock-gh-token',
+      fetchFn: async (url: string) => ({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          id: 55,
+          html_url: 'https://github.com/MohamedGH/agentTeam/pull/55',
+          number: 55,
+          sha: 'git_commit_sha_55',
+          ref: 'refs/heads/jules/task-55',
+        }),
+        text: async () => 'ok',
+      }),
+    });
+
+    const githubManager = new GitHubManager(mockGithubClient);
+    const gitOps = githubManager.getGitOps();
+    gitOps.verifyGitRepository = async () => ({
+      isValid: true,
+      isClean: true,
+      currentBranch: 'main',
+      isInsideWorkTree: true,
+      repoUrl: 'https://github.com/MohamedGH/agentTeam.git',
+    });
+    gitOps.runVerificationTests = async () => ({
+      passed: true,
+      output: 'All tests passed',
+      exitCode: 0,
+    });
+    gitOps.getStatus = async () => ({
+      hasChanges: false,
+      modifiedFiles: [],
+      addedFiles: [],
+      deletedFiles: [],
+      untrackedFiles: [],
+      currentBranch: 'main',
+    });
+    gitOps.getDiff = async () => '';
+    githubManager.processTaskResult = async (opts: any) => {
+      gitProcessed = true;
+      return {
+        success: true,
+        commitSha: 'git_commit_sha_55',
+        commitUrl: 'https://github.com/MohamedGH/agentTeam/commit/git_commit_sha_55',
+        pullRequestUrl: 'https://github.com/MohamedGH/agentTeam/pull/55',
+        testsPassed: true,
+        git: {
+          committed: true,
+          pushed: true,
+          branch: opts.branch,
+          commitSha: 'git_commit_sha_55',
+          commitUrl: 'https://github.com/MohamedGH/agentTeam/commit/git_commit_sha_55',
+          pullRequestUrl: 'https://github.com/MohamedGH/agentTeam/pull/55',
+        },
+      };
+    };
+
+    const orchestrator = new WorkflowOrchestrator({
+      codingAgentManager,
+      sessionStore,
+      githubManager,
+      providerManager: new ProviderManager({ registerDefaults: false }),
+      workspace: new VirtualWorkspace(),
+      pollIntervalMs: 50, // fast polling for tests
+    });
+
+    const workflow = await orchestrator.startWorkflow({
+      agent: 'jules',
+      workingDirectory: tempGitDir,
+      repository: 'MohamedGH/agentTeam',
+      branch: 'main',
+      taskPrompt: 'Async background orchestrator integration test',
+      commitPushAndCreatePR: true,
+    });
+
+    assert.strictEqual(workflow.stage, 'JULES_RUNNING');
+    assert.strictEqual(workflow.executionStatus, 'RUNNING');
+    assert.strictEqual(gitProcessed, false, 'Git must not be processed yet');
+
+    // Simulate Jules making progressive activities and then completing in cloud
+    setTimeout(() => {
+      julesAgent.setMockSession({
+        state: 'IN_PROGRESS',
+        resultSummary: 'Implementing code changes',
+      });
+    }, 80);
+
+    setTimeout(() => {
+      julesAgent.setMockSession({
+        state: 'COMPLETED',
+        resultSummary: 'All code generated and verified in cloud',
+        prUrl: 'https://github.com/MohamedGH/agentTeam/pull/55',
+        gitBranch: 'jules/task-55',
+      });
+    }, 160);
+
+    // Wait for poller to automatically detect completion and execute downstream pipeline
+    let resolved = false;
+    for (let i = 0; i < 60; i++) {
+      await new Promise((r) => setTimeout(r, 50));
+      const current = await orchestrator.getWorkflow(workflow.sessionId);
+      if (current?.stage === 'COMPLETED') {
+        resolved = true;
+        assert.strictEqual(current.executionStatus, 'COMPLETED');
+        assert.strictEqual(current.status, 'COMPLETED');
+        assert.strictEqual(gitProcessed, true, 'Git processing must be completed');
+        assert.strictEqual(current.pullRequestUrl, 'https://github.com/MohamedGH/agentTeam/pull/55');
+        assert.strictEqual(current.testsPassed, true);
+        assert.ok(current.finalReport, 'Final report must exist');
+        break;
+      }
+    }
+
+    orchestrator.stopBackgroundPoller();
+    assert.ok(resolved, 'Background poller must advance workflow to COMPLETED without manual intervention');
+    console.log('✅ PASS: Background poller successfully advanced workflow asynchronously');
+  }
+
+  // -------------------------------------------------------------
+  // TEST 2: Server Reboot Recovery in Integration Setting
+  // -------------------------------------------------------------
+  {
+    console.log('\nIntegration Test 2: Multi-session reboot recovery');
+    const testSessionFile = path.join(testDataDir, 'test_multi_reboot.json');
+    const store = new FileBackedCodingAgentSessionStore(testSessionFile);
+    const mockAgent = new MockCodingAgent(store);
+    const codingAgentManager = new CodingAgentManager({ sessionStore: store, mockAgent });
+
+    const orch1 = new WorkflowOrchestrator({ codingAgentManager, sessionStore: store });
+
+    // Start 2 concurrent workflows
+    const wf1 = await orch1.startWorkflow({
+      agent: 'mock',
+      repository: 'MohamedGH/agentTeam',
+      branch: 'main',
+      taskPrompt: 'Task A pending',
+    });
+
+    const wf2 = await orch1.startWorkflow({
+      agent: 'mock',
+      repository: 'MohamedGH/agentTeam',
+      branch: 'main',
+      taskPrompt: 'Task B pending',
+    });
+
+    orch1.stopBackgroundPoller();
+
+    // Reboot: create new instance from same persisted store
+    const storeRebooted = new FileBackedCodingAgentSessionStore(testSessionFile);
+    const mockAgentRebooted = new MockCodingAgent(storeRebooted);
+    const camRebooted = new CodingAgentManager({ sessionStore: storeRebooted, mockAgent: mockAgentRebooted });
+    const orchRebooted = new WorkflowOrchestrator({
+      codingAgentManager: camRebooted,
+      sessionStore: storeRebooted,
+      pollIntervalMs: 50,
+    });
+
+    const resumed = await orchRebooted.resumeAllActiveWorkflows();
+    assert.strictEqual(resumed.length, 2, 'Both pending workflows must be resumed on reboot');
+
+    orchRebooted.stopBackgroundPoller();
+    console.log('✅ PASS: Multi-session recovery across reboot verified');
+  }
+
+  // -------------------------------------------------------------
+  // TEST 3: Async Endpoint Unified Orchestrator Integration
+  // -------------------------------------------------------------
+  {
+    console.log('\nIntegration Test 3: Endpoint parameters route through WorkflowOrchestrator with dual ID resolution');
+    const testSessionFile = path.join(testDataDir, 'test_endpoints_route.json');
+    const store = new FileBackedCodingAgentSessionStore(testSessionFile);
+    const mockAgent = new MockCodingAgent(store);
+    const codingAgentManager = new CodingAgentManager({ sessionStore: store, mockAgent });
+    const orchestrator = new WorkflowOrchestrator({
+      codingAgentManager,
+      sessionStore: store,
+      pollIntervalMs: 50,
+    });
+
+    // 1. Emulate POST /api/coding-agents/execute asynchronous dispatch
+    const executePayload = {
+      workflowId: 'wf_exec_route_123',
+      agent: 'mock',
+      repository: 'MohamedGH/agentTeam',
+      branch: 'main',
+      taskPrompt: 'Async execute routing test',
+      automationMode: 'AUTO_CREATE_PR' as const,
+    };
+    const wfExec = await orchestrator.startWorkflow(executePayload);
+    assert.strictEqual(wfExec.workflowId, 'wf_exec_route_123');
+    assert.strictEqual(wfExec.executionStatus, 'RUNNING');
+    assert.strictEqual(wfExec.stage, 'JULES_RUNNING');
+
+    // 2. Emulate POST /api/coding-agents/jules/sessions routing
+    const julesPayload = {
+      agent: 'mock',
+      repository: 'MohamedGH/agentTeam',
+      branch: 'main',
+      taskPrompt: 'Jules session routing test',
+    };
+    const wfJules = await orchestrator.startWorkflow(julesPayload);
+    assert.ok(wfJules.workflowId.startsWith('wf_'));
+    assert.ok(wfJules.sessionId.startsWith('mock_sess_') || wfJules.sessionId.length > 0);
+
+    // 3. Verify dual-ID query resolution
+    const retrievedByWfId = await orchestrator.getWorkflow(wfExec.workflowId);
+    assert.ok(retrievedByWfId);
+    assert.strictEqual(retrievedByWfId.sessionId, wfExec.sessionId);
+
+    const retrievedBySessId = await orchestrator.getWorkflow(wfExec.sessionId);
+    assert.ok(retrievedBySessId);
+    assert.strictEqual(retrievedBySessId.workflowId, wfExec.workflowId);
+
+    orchestrator.stopBackgroundPoller();
+    console.log('✅ PASS: Async endpoint routing and dual ID resolution verified');
+  }
+
+  // Cleanup
+  if (fs.existsSync(testDataDir)) {
+    fs.rmSync(testDataDir, { recursive: true, force: true });
+  }
+
+  console.log('\n====================================================');
+  console.log('🎉 ALL WORKFLOW ORCHESTRATOR INTEGRATION TESTS PASSED (100%)');
+  console.log('====================================================\n');
+}
+
+if (import.meta.url.endsWith(process.argv[1]) || process.argv[1]?.includes('workflowOrchestratorIntegration')) {
+  runWorkflowOrchestratorIntegrationTests().catch((err) => {
+    console.error('WorkflowOrchestrator integration test failed:', err);
+    process.exit(1);
+  });
+}

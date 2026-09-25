@@ -1,0 +1,84 @@
+import { IAIProvider, AIProviderId, ProviderModelConfig, GenerateOptions, GenerationUsageResult, TokenCountResult } from './types';
+
+export class AnthropicProvider implements IAIProvider {
+  public readonly id: AIProviderId = 'anthropic';
+  public readonly name = 'Anthropic Claude';
+  public readonly defaultModel = 'claude-3-5-sonnet-20241022';
+  public readonly sourceType = 'Anthropic Messages API (input_tokens & output_tokens)';
+  public readonly tokenCounterSupported = true;
+
+  public readonly models: ProviderModelConfig[] = [
+    { name: 'claude-3-7-sonnet-20250219', displayName: 'Claude 3.7 Sonnet', contextWindow: 200000, supportsTools: true, costTier: 'pro', providerId: 'anthropic' },
+    { name: 'claude-3-5-sonnet-20241022', displayName: 'Claude 3.5 Sonnet', contextWindow: 200000, supportsTools: true, costTier: 'pro', providerId: 'anthropic' },
+    { name: 'claude-3-5-haiku-20241022', displayName: 'Claude 3.5 Haiku', contextWindow: 200000, supportsTools: true, costTier: 'flash', providerId: 'anthropic' },
+  ];
+
+  public isConfigured(): boolean {
+    return Boolean(process.env.ANTHROPIC_API_KEY);
+  }
+
+  public async generateContent(options: GenerateOptions): Promise<GenerationUsageResult> {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    const baseUrl = process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com/v1';
+
+    if (!apiKey) {
+      throw new Error('Anthropic API key is not configured');
+    }
+
+    const { model, prompt, fallbackText } = options;
+    const res = await fetch(`${baseUrl}/messages`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: 4096,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Anthropic API error (${res.status}): ${errText}`);
+    }
+
+    const data = await res.json();
+    const rawText = data.content?.[0]?.text;
+    const text = rawText?.trim() || fallbackText;
+    const usage = data.usage;
+
+    const promptTokens = usage?.input_tokens ?? Math.max(1, Math.ceil(prompt.length / 4));
+    const completionTokens = usage?.output_tokens ?? Math.max(1, Math.ceil(text.length / 4));
+    const totalTokens = promptTokens + completionTokens;
+
+    const hasRealText = Boolean(rawText?.trim());
+    const isRealProviderUsage = Boolean(usage) && hasRealText;
+
+    const actualModelId = typeof data.model === 'string' && data.model.length > 0 ? data.model : undefined;
+    const identityVerified = Boolean(actualModelId);
+    const identitySource = identityVerified ? 'PROVIDER_RESPONSE_PAYLOAD' : 'UNVERIFIED_DEFAULT';
+
+    return {
+      text,
+      promptTokens,
+      completionTokens,
+      totalTokens,
+      provider: 'anthropic',
+      model,
+      isRealProviderUsage,
+      tokenAccountingType: 'real_provider',
+      generationOutcome: hasRealText ? 'REAL_PROVIDER_SUCCESS' : 'DEGRADED_FALLBACK',
+      actualModelId: identityVerified ? actualModelId : undefined,
+      actualProviderId: identityVerified ? 'anthropic' : undefined,
+      identityVerified,
+      identitySource,
+    };
+  }
+
+  public async countTokens(model: string, text: string): Promise<TokenCountResult> {
+    return { tokenCount: Math.max(1, Math.ceil(text.length / 4)), isRealProvider: false };
+  }
+}

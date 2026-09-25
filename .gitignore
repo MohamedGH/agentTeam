@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+
+# Production build output
+dist/
+
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+oauth_client.json
+
+# Runtime and test generated data
+data/
+data/*
+data/coding_agent_sessions.json
+data/test_workflow_store/
+quota_state.json
+*.log
+*.tmp
+
+# System files
+.DS_Store
+Thumbs.db
