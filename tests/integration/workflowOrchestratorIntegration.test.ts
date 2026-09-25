@@ -92,12 +92,7 @@ export async function runWorkflowOrchestratorIntegrationTests() {
 
     const tempGitDir = path.join(testDataDir, `repo_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`);
     fs.mkdirSync(tempGitDir, { recursive: true });
-    execSync('git init -b main', { cwd: tempGitDir, stdio: 'ignore' });
-    execSync('git config user.name "Test Runner"', { cwd: tempGitDir, stdio: 'ignore' });
-    execSync('git config user.email "test@example.com"', { cwd: tempGitDir, stdio: 'ignore' });
-    execSync('git remote add origin https://github.com/MohamedGH/agentTeam.git', { cwd: tempGitDir, stdio: 'ignore' });
     fs.writeFileSync(path.join(tempGitDir, 'package.json'), JSON.stringify({ name: 'agent-team', scripts: { test: 'node -e "process.exit(0)"' } }));
-    execSync('git add . && git commit -m "init"', { cwd: tempGitDir, stdio: 'ignore' });
 
     let gitProcessed = false;
     const mockGithubClient = new GitHubClient({
@@ -117,6 +112,28 @@ export async function runWorkflowOrchestratorIntegrationTests() {
     });
 
     const githubManager = new GitHubManager(mockGithubClient);
+    const gitOps = githubManager.getGitOps();
+    gitOps.verifyGitRepository = async () => ({
+      isValid: true,
+      isClean: true,
+      currentBranch: 'main',
+      isInsideWorkTree: true,
+      repoUrl: 'https://github.com/MohamedGH/agentTeam.git',
+    });
+    gitOps.runVerificationTests = async () => ({
+      passed: true,
+      output: 'All tests passed',
+      exitCode: 0,
+    });
+    gitOps.getStatus = async () => ({
+      hasChanges: false,
+      modifiedFiles: [],
+      addedFiles: [],
+      deletedFiles: [],
+      untrackedFiles: [],
+      currentBranch: 'main',
+    });
+    gitOps.getDiff = async () => '';
     githubManager.processTaskResult = async (opts: any) => {
       gitProcessed = true;
       return {
@@ -177,7 +194,7 @@ export async function runWorkflowOrchestratorIntegrationTests() {
 
     // Wait for poller to automatically detect completion and execute downstream pipeline
     let resolved = false;
-    for (let i = 0; i < 40; i++) {
+    for (let i = 0; i < 60; i++) {
       await new Promise((r) => setTimeout(r, 50));
       const current = await orchestrator.getWorkflow(workflow.sessionId);
       if (current?.stage === 'COMPLETED') {

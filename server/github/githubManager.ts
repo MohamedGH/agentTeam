@@ -45,6 +45,10 @@ export class GitHubManager {
     return this.client.isConfigured();
   }
 
+  public configureToken(token: string, owner?: string): void {
+    this.client.setToken(token, owner);
+  }
+
   /**
    * Set custom git executor for hermetic testing or isolated environments
    */

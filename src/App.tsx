@@ -9,6 +9,7 @@ import { RolesGuide } from './components/RolesGuide';
 import { JulesDashboard } from './components/JulesDashboard';
 import { SelfImprovementDashboard } from './components/SelfImprovementDashboard';
 import { AdaptiveLLMDashboard } from './components/AdaptiveLLMDashboard';
+import { GitHubSettingsModal } from './components/GitHubSettingsModal';
 import { AgentStep, FinalReport, AgentRole, ModelQuotaStatus, AIProviderId, ProviderInfo } from './types';
 import { routeManager, AppRoute } from './managers/routeManager';
 import {
@@ -647,6 +648,9 @@ export default function App() {
 
         {/* VIEW 7: ADAPTIVE MULTI-LLM EMPIRICAL ROUTING */}
         {activeTab === 'adaptive-llm' && <AdaptiveLLMDashboard />}
+
+        {/* VIEW 8: GITHUB & CI SETTINGS */}
+        {activeTab === 'github-settings' && <GitHubSettingsModal />}
       </main>
 
       {/* Footer */}

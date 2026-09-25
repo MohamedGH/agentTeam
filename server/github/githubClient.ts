@@ -32,6 +32,14 @@ export class GitHubClient {
     return Boolean(this.token && this.token.length > 0);
   }
 
+  public setToken(token: string, owner?: string): void {
+    this.token = (token || '').trim();
+    if (owner !== undefined) {
+      this.owner = owner.trim() || undefined;
+    }
+    this.cachedUser = null;
+  }
+
   public getToken(): string {
     return this.token;
   }

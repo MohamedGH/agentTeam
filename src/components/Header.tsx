@@ -1,10 +1,10 @@
 import React from 'react';
-import { Users, Gauge, FolderTree, Sparkles, Activity, ShieldCheck, Zap, Globe, GitPullRequest, Cpu, Brain } from 'lucide-react';
+import { Users, Gauge, FolderTree, Sparkles, Activity, ShieldCheck, Zap, Globe, GitPullRequest, Cpu, Brain, GitBranch } from 'lucide-react';
 import { AIProviderId, ProviderInfo } from '../types';
 
 interface HeaderProps {
-  activeTab: 'studio' | 'workspace' | 'quota' | 'roles' | 'jules' | 'auto-improve' | 'adaptive-llm';
-  setActiveTab: (tab: 'studio' | 'workspace' | 'quota' | 'roles' | 'jules' | 'auto-improve' | 'adaptive-llm') => void;
+  activeTab: 'studio' | 'workspace' | 'quota' | 'roles' | 'jules' | 'auto-improve' | 'adaptive-llm' | 'github-settings';
+  setActiveTab: (tab: 'studio' | 'workspace' | 'quota' | 'roles' | 'jules' | 'auto-improve' | 'adaptive-llm' | 'github-settings') => void;
   selectedTier: string;
   setSelectedTier: (tier: string) => void;
   isRunning: boolean;
@@ -153,6 +153,22 @@ export const Header: React.FC<HeaderProps> = ({
             Adaptive LLM
             <span className="text-[10px] px-1.5 py-0.2 rounded bg-violet-500/20 text-violet-300 font-mono border border-violet-500/30">
               Auto-Route
+            </span>
+          </button>
+
+          <button
+            id="tab-github-settings"
+            onClick={() => setActiveTab('github-settings')}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap cursor-pointer ${
+              activeTab === 'github-settings'
+                ? 'bg-emerald-600 text-white shadow-sm'
+                : 'text-emerald-400/90 hover:text-emerald-300 hover:bg-slate-900'
+            }`}
+          >
+            <GitBranch className="w-3.5 h-3.5" />
+            GitHub & CI
+            <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-mono border border-emerald-500/30">
+              Paramètres
             </span>
           </button>
         </div>

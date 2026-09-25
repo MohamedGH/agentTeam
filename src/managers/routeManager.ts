@@ -3,7 +3,7 @@
  * Manages active application views, query parameters, deep links, and browser hash navigation.
  */
 
-export type AppRoute = 'studio' | 'workspace' | 'quota' | 'roles' | 'jules' | 'auto-improve' | 'adaptive-llm';
+export type AppRoute = 'studio' | 'workspace' | 'quota' | 'roles' | 'jules' | 'auto-improve' | 'adaptive-llm' | 'github-settings';
 
 export interface RouteState {
   currentRoute: AppRoute;
@@ -42,7 +42,7 @@ class RouteManager {
       });
     }
 
-    const validRoutes: AppRoute[] = ['studio', 'workspace', 'quota', 'roles', 'jules', 'auto-improve'];
+    const validRoutes: AppRoute[] = ['studio', 'workspace', 'quota', 'roles', 'jules', 'auto-improve', 'adaptive-llm', 'github-settings'];
     const currentRoute = validRoutes.includes(path as AppRoute) ? (path as AppRoute) : 'studio';
 
     return { currentRoute, params };

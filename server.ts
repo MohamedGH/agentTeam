@@ -967,6 +967,127 @@ async function startServer() {
     }
   });
 
+  app.post('/api/github/config', async (req, res) => {
+    try {
+      const { token, owner } = req.body;
+      if (!token || typeof token !== 'string' || token.trim().length === 0) {
+        return res.status(400).json({ success: false, error: 'Token is required' });
+      }
+
+      githubManager.configureToken(token.trim(), owner ? String(owner).trim() : undefined);
+      process.env.GITHUB_TOKEN = token.trim();
+      if (owner) {
+        process.env.GITHUB_OWNER = String(owner).trim();
+      }
+
+      // Verify token with GitHub API
+      try {
+        const user = await githubManager.getClient().getAuthenticatedUser();
+        return res.json({
+          success: true,
+          user: {
+            login: user.login,
+            id: user.id,
+            avatar_url: user.avatar_url,
+            html_url: user.html_url,
+          },
+        });
+      } catch (authErr: any) {
+        return res.status(401).json({
+          success: false,
+          error: `GitHub authentication failed: ${authErr.message}`,
+        });
+      }
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.post('/api/github/push-main', async (req, res) => {
+    try {
+      const token = (req.body.token || process.env.GITHUB_TOKEN || githubManager.getClient().getToken() || '').trim();
+      const repository = (req.body.repository || 'MohamedGH/agentTeam').trim();
+      const branch = (req.body.branch || 'main').trim();
+      const [owner, repo] = repository.split('/');
+
+      if (!token) {
+        return res.status(400).json({ success: false, error: 'GitHub Token required for push' });
+      }
+      if (!owner || !repo) {
+        return res.status(400).json({ success: false, error: 'Invalid repository format (expected owner/repo)' });
+      }
+
+      // Ensure token configured
+      githubManager.configureToken(token, owner);
+      process.env.GITHUB_TOKEN = token;
+
+      const gitOps = githubManager.getGitOps();
+      const pushResult = await gitOps.pushBranch({
+        branch,
+        owner,
+        repo,
+        token,
+        cwd: process.cwd(),
+      });
+
+      // Query latest CI run if available
+      let ciRun: any = null;
+      try {
+        const client = githubManager.getClient();
+        const runsRes = await client.request<any>(`/repos/${owner}/${repo}/actions/runs?per_page=3`);
+        if (runsRes && runsRes.workflow_runs && runsRes.workflow_runs.length > 0) {
+          ciRun = runsRes.workflow_runs[0];
+        }
+      } catch (ciErr) {
+        console.warn('[Server] Could not immediately fetch workflow runs:', ciErr);
+      }
+
+      return res.json({
+        success: true,
+        push: pushResult,
+        ciRun,
+      });
+    } catch (err: any) {
+      console.error('[Server] Push failed:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.get('/api/github/ci-runs', async (req, res) => {
+    try {
+      const repository = ((req.query.repository as string) || 'MohamedGH/agentTeam').trim();
+      const [owner, repo] = repository.split('/');
+      const client = githubManager.getClient();
+      if (!client.isConfigured()) {
+        return res.status(401).json({ success: false, error: 'GitHub client not configured' });
+      }
+
+      const runsRes = await client.request<any>(`/repos/${owner}/${repo}/actions/runs?per_page=5`);
+      const runs = runsRes?.workflow_runs || [];
+
+      // If specific run ID requested, get its jobs too
+      let jobs: any[] = [];
+      const runId = req.query.runId ? String(req.query.runId) : (runs[0]?.id ? String(runs[0].id) : null);
+      if (runId) {
+        try {
+          const jobsRes = await client.request<any>(`/repos/${owner}/${repo}/actions/runs/${runId}/jobs`);
+          jobs = jobsRes?.jobs || [];
+        } catch (jobErr) {
+          console.warn('[Server] Could not fetch run jobs:', jobErr);
+        }
+      }
+
+      return res.json({
+        success: true,
+        runs,
+        selectedRunId: runId,
+        jobs,
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
   app.post('/api/github/workflow', requireApiKey, async (req, res) => {
     try {
       if (!githubManager.isConfigured()) {
