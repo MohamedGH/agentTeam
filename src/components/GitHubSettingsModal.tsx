@@ -95,10 +95,11 @@ export const GitHubSettingsModal: React.FC = () => {
       }
 
       setLastPushResult(data);
+      const actualSha = data.push?.commitSha || 'N/A';
       setFeedback({
         type: 'success',
         message: `Push exécuté avec succès vers ${repoInput} sur la branche ${branchInput} !`,
-        details: `Commit SHA: ${data.push?.commitSha || '6aaea51'}`,
+        details: actualSha !== 'N/A' ? `Commit SHA: ${actualSha}` : undefined,
       });
       fetchStatus();
     } catch (err: any) {
@@ -253,7 +254,7 @@ export const GitHubSettingsModal: React.FC = () => {
             className="flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:opacity-50 text-white text-xs sm:text-sm font-bold shadow-lg shadow-emerald-500/20 transition-all cursor-pointer disabled:cursor-not-allowed"
           >
             <Send className={`w-4 h-4 ${isPushing ? 'animate-pulse' : ''}`} />
-            {isPushing ? 'Push en cours vers GitHub...' : 'Pousser le commit 6aaea51 vers main'}
+            {isPushing ? 'Push en cours vers GitHub...' : `Pousser vers ${branchInput}`}
           </button>
         </div>
       </div>

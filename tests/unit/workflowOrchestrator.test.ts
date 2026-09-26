@@ -809,9 +809,13 @@ export async function runWorkflowOrchestratorUnitTests() {
     console.log('✅ PASS: Real agent with valid real workspace successfully executed real QA and Git delivery');
   }
 
-  // Cleanup test directory
+  // Cleanup test directory safely with retries
   if (fs.existsSync(testDataDir)) {
-    fs.rmSync(testDataDir, { recursive: true, force: true });
+    try {
+      fs.rmSync(testDataDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    } catch {
+      // Ignore transient file lock on temp test directory
+    }
   }
 
   console.log('\n====================================================');

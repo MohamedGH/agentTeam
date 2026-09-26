@@ -239,4 +239,5 @@ export interface LLMAdaptiveConfig {
   ensembleEnabled: boolean;
   ensembleMinComplexity: ProblemComplexity;
   uncertaintyDecayFactor: number;
+  includeHermetic?: boolean;
 }

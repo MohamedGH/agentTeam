@@ -303,25 +303,23 @@ export class LLMSelector {
     }
 
     if (eligible.length === 0) {
-      // Fallback to any active provider default model
-      const all = this.registry
-        .discoverModels()
-        .filter((m) => m.availability && !quotaManager.isModelInCooldown(m.modelId));
-      const fallback = all[0] || { modelId: 'mock-agent-v1', providerId: 'mock' };
       return {
-        selectedModelId: fallback.modelId,
-        selectedProviderId: fallback.providerId as any,
-        decisionType: 'FALLBACK',
+        selectedModelId: '',
+        selectedProviderId: (constraints.preferredProviders?.[0] || 'mock') as AIProviderId,
+        decisionType: 'NO_FEASIBLE_MODEL',
         candidateEvaluatedCount: 0,
-        reason: 'No eligible candidates matching required capabilities and quota/cooldown status.',
-        confidence: 0.1,
-        predictedScore: 0.5,
+        reason: `No eligible candidates matching required capabilities (${classified.requiredCapabilities.join(', ')}) and quota/cooldown status.`,
+        confidence: 0,
+        predictedScore: 0,
         classifiedProblem: classified,
       };
     }
 
     // 3. Obtain ranking for this category and complexity (preferring operational data)
-    const ranking = this.rankingEngine.getRankings(classified.category, classified.complexity);
+    const ranking = this.rankingEngine.getRankings(classified.category, {
+      complexity: classified.complexity,
+      includeHermetic: this.config.includeHermetic ?? false,
+    });
 
     // 4. Decide Exploration vs Exploitation
     const randomVal = random.next();

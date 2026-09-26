@@ -30,13 +30,27 @@ export interface RankingQueryOptions {
  * - Supports difficulty-based ranking by (category + complexity) slice.
  * - Incorporates sample size, variance, latency, and uncertainty penalties.
  */
+export interface RankingEngineOptions {
+  includeHermetic?: boolean;
+}
+
 export class LLMRankingEngine {
   private memory: LLMPerformanceMemory;
   private registry: LLMRegistry;
+  private defaultIncludeHermetic: boolean = false;
 
-  constructor(memory: LLMPerformanceMemory = defaultMemory, registry: LLMRegistry = defaultRegistry) {
+  constructor(
+    memory: LLMPerformanceMemory = defaultMemory,
+    registry: LLMRegistry = defaultRegistry,
+    options?: RankingEngineOptions
+  ) {
     this.memory = memory;
     this.registry = registry;
+    this.defaultIncludeHermetic = options?.includeHermetic ?? false;
+  }
+
+  public setDefaultIncludeHermetic(include: boolean): void {
+    this.defaultIncludeHermetic = include;
   }
 
   /**
@@ -52,11 +66,12 @@ export class LLMRankingEngine {
         : complexityOrOptions || {};
 
     const complexity = options.complexity;
+    const includeHermetic = options.includeHermetic ?? this.defaultIncludeHermetic;
     const targetSources: EvaluationSource[] = options.sources
       ? options.sources
-      : options.includeHermetic
+      : includeHermetic
       ? ALL_SOURCES
-      : ALL_SOURCES;
+      : OPERATIONAL_SOURCES;
 
     const allRegistered = this.registry.discoverModels();
     const modelSet = new Map<string, { modelId: string; version?: string }>();

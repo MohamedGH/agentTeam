@@ -454,6 +454,216 @@ export async function runAdaptiveRoutingHardeningTests() {
   const countAfterDedup = isolationMemory.getModelEvaluationCount('mock-operational-regressor');
   assert(countAfterDedup === countBeforeDedup, 'Updating existing evaluation does NOT increase sample count');
 
+  // --------------------------------------------------------------------------
+  // TEST 14: Strict Live Provider Proof & Identity Verification Invariants
+  // --------------------------------------------------------------------------
+  console.log('\n--- Test 14: Strict Live Provider Proof & Identity Verification Invariants ---');
+  const strictEvaluator = new LLMPerformanceEvaluator();
+  const testBenchDef = {
+    id: 'prob_test_1',
+    category: 'CODE_GENERATION',
+    difficulty: 'EASY',
+    prompt: 'test prompt',
+    criteria: {},
+  } as any;
+
+  // Case A: LIVE_PROVIDER without proof => REJECT (score 0, regressionDetected true)
+  const noProofResult = strictEvaluator.evaluateBenchmarkOutput(
+    testBenchDef,
+    'mock-fast-model',
+    'mock',
+    'function test() { return 1; }',
+    100,
+    0,
+    true, // isLiveBenchmark
+    undefined // proof missing
+  );
+  assert(noProofResult.score === 0, 'LIVE_PROVIDER without proof must fail with score 0');
+  assert(noProofResult.success === false, 'LIVE_PROVIDER without proof must not succeed');
+  assert(noProofResult.details?.failoverBlocked === true, 'LIVE_PROVIDER without proof must flag failoverBlocked');
+
+  // Case B: Falsified/tampered proof (identity not verified) => REJECT
+  const unverifiedProofResult = strictEvaluator.evaluateBenchmarkOutput(
+    testBenchDef,
+    'mock-fast-model',
+    'mock',
+    'function test() { return 1; }',
+    100,
+    0,
+    true,
+    {
+      requestedModelId: 'mock-fast-model',
+      requestedProviderId: 'mock',
+      actualModelId: 'mock-fast-model',
+      actualProviderId: 'mock',
+      failoverUsed: false,
+      isIdentityVerified: false, // FALSIFIED
+      isCompliantWithSelection: false,
+      identitySource: 'PROVIDER_RESPONSE_PAYLOAD',
+    } as any
+  );
+  assert(unverifiedProofResult.score === 0, 'Unverified proof must fail with score 0');
+  assert(unverifiedProofResult.success === false, 'Unverified proof must not succeed');
+
+  // Case C: Model Mismatch => REJECT
+  const modelMismatchResult = strictEvaluator.evaluateBenchmarkOutput(
+    testBenchDef,
+    'mock-pro-model',
+    'mock',
+    'function test() { return 1; }',
+    100,
+    0,
+    true,
+    {
+      requestedModelId: 'mock-pro-model',
+      requestedProviderId: 'mock',
+      actualModelId: 'mock-fast-model', // MISMATCH
+      actualProviderId: 'mock',
+      failoverUsed: false,
+      isIdentityVerified: true,
+      isCompliantWithSelection: true,
+      identitySource: 'PROVIDER_RESPONSE_PAYLOAD',
+    } as any
+  );
+  assert(modelMismatchResult.score === 0, 'Model mismatch in proof must fail with score 0');
+
+  // Case D: Provider Mismatch => REJECT
+  const providerMismatchResult = strictEvaluator.evaluateBenchmarkOutput(
+    testBenchDef,
+    'mock-fast-model',
+    'mock',
+    'function test() { return 1; }',
+    100,
+    0,
+    true,
+    {
+      requestedModelId: 'mock-fast-model',
+      requestedProviderId: 'mock',
+      actualModelId: 'mock-fast-model',
+      actualProviderId: 'other' as any, // MISMATCH
+      failoverUsed: false,
+      isIdentityVerified: true,
+      isCompliantWithSelection: true,
+      identitySource: 'PROVIDER_RESPONSE_PAYLOAD',
+    } as any
+  );
+  assert(providerMismatchResult.score === 0, 'Provider mismatch in proof must fail with score 0');
+
+  // Case E: Failover used => REJECT
+  const failoverResult = strictEvaluator.evaluateBenchmarkOutput(
+    testBenchDef,
+    'mock-fast-model',
+    'mock',
+    'function test() { return 1; }',
+    100,
+    0,
+    true,
+    {
+      requestedModelId: 'mock-fast-model',
+      requestedProviderId: 'mock',
+      actualModelId: 'mock-fast-model',
+      actualProviderId: 'mock',
+      failoverUsed: true, // FAILOVER
+      isIdentityVerified: true,
+      isCompliantWithSelection: true,
+      identitySource: 'PROVIDER_RESPONSE_PAYLOAD',
+    } as any
+  );
+  assert(failoverResult.score === 0, 'Failover in proof must fail with score 0');
+
+  // --------------------------------------------------------------------------
+  // TEST 15: Selector Constraint Hardening & NO_FEASIBLE_MODEL
+  // --------------------------------------------------------------------------
+  console.log('\n--- Test 15: Selector Constraint Hardening & NO_FEASIBLE_MODEL ---');
+  // Sub-case 1: Incompatible capability requirement
+  const impossibleCapDecision = selector.selectModelForClassifiedProblem(
+    {
+      category: 'CODE_GENERATION',
+      complexity: 'HIGH',
+      requiredCapabilities: ['VISION_REASONING', 'AUDIO_PROCESSING'] as any, // Unsupported
+      estimatedTokens: 1000,
+      deterministicScore: 0.9,
+    },
+    { forceProviderId: 'mock' }
+  );
+  assert(impossibleCapDecision.decisionType === 'NO_FEASIBLE_MODEL', 'Missing required capabilities yields NO_FEASIBLE_MODEL');
+  assert(impossibleCapDecision.selectedModelId === '', 'NO_FEASIBLE_MODEL has empty selectedModelId');
+
+  // Sub-case 2: Unreachable cost constraint
+  const tightCostDecision = selector.selectModelForClassifiedProblem(
+    {
+      category: 'CODE_GENERATION',
+      complexity: 'MEDIUM',
+      requiredCapabilities: ['CODE_GENERATION'],
+      estimatedTokens: 5000,
+      deterministicScore: 0.8,
+    },
+    { maxCost: 0.0000000000001, forceProviderId: 'mock' }
+  );
+  assert(tightCostDecision.decisionType === 'NO_FEASIBLE_MODEL', 'Unreachable cost constraint yields NO_FEASIBLE_MODEL');
+
+  // Sub-case 3: Unreachable latency constraint
+  const tightLatencyDecision = selector.selectModelForClassifiedProblem(
+    {
+      category: 'CODE_GENERATION',
+      complexity: 'MEDIUM',
+      requiredCapabilities: ['CODE_GENERATION'],
+      estimatedTokens: 1000,
+      deterministicScore: 0.8,
+    },
+    { maxLatencyMs: 0.0001, forceProviderId: 'mock' }
+  );
+  assert(tightLatencyDecision.decisionType === 'NO_FEASIBLE_MODEL', 'Unreachable latency constraint yields NO_FEASIBLE_MODEL');
+
+  // --------------------------------------------------------------------------
+  // TEST 16: HERMETIC_FIXTURE Does NOT Influence Operational Ranking by Default
+  // --------------------------------------------------------------------------
+  console.log('\n--- Test 16: HERMETIC_FIXTURE Operational Isolation ---');
+  const hermeticTestMemFile = path.join(testDir, `mem_hermetic_test_${Date.now()}.json`);
+  const hermeticTestMemory = new LLMPerformanceMemory(hermeticTestMemFile);
+  const hermeticRankingEngine = new LLMRankingEngine(hermeticTestMemory, registry); // default includeHermetic = false
+
+  // Seed ONLY HERMETIC_FIXTURE evaluation for a test model
+  hermeticTestMemory.addEvaluation({
+    id: 'eval_herm_only',
+    modelId: 'mock-fast-model',
+    providerId: 'mock',
+    problemId: 'prob_herm_1',
+    category: 'MATHEMATICS',
+    complexity: 'LOW',
+    evaluationSource: 'HERMETIC_FIXTURE',
+    success: true,
+    score: 0.99,
+    latencyMs: 50,
+    testsPassed: 5,
+    totalTests: 5,
+    regressionDetected: false,
+    evaluatorVersion: '2.0.0',
+    timestamp: Date.now(),
+  });
+
+  // Operational ranking query (default) must EXCLUDE hermetic fixtures
+  const operationalRankings = hermeticRankingEngine.getRankings('MATHEMATICS');
+  assert(
+    !operationalRankings.rankedModels.some((m) => m.modelId === 'mock-fast-model'),
+    'HERMETIC_FIXTURE must NOT appear in default operational rankedModels'
+  );
+  assert(
+    operationalRankings.unmeasuredModels.includes('mock-fast-model'),
+    'Model with only HERMETIC_FIXTURE must remain unmeasured in operational ranking'
+  );
+
+  // Explicit hermetic query includes it
+  const explicitHermeticRankings = hermeticRankingEngine.getRankings('MATHEMATICS', { includeHermetic: true });
+  assert(
+    explicitHermeticRankings.rankedModels.some((m) => m.modelId === 'mock-fast-model'),
+    'HERMETIC_FIXTURE appears when includeHermetic is explicitly true'
+  );
+
+  if (fs.existsSync(hermeticTestMemFile)) {
+    fs.unlinkSync(hermeticTestMemFile);
+  }
+
   if (fs.existsSync(isolationMemFile)) {
     fs.unlinkSync(isolationMemFile);
   }

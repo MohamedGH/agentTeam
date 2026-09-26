@@ -967,7 +967,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/github/config', async (req, res) => {
+  app.post('/api/github/config', requireApiKey, async (req, res) => {
     try {
       const { token, owner } = req.body;
       if (!token || typeof token !== 'string' || token.trim().length === 0) {
@@ -1003,11 +1003,21 @@ async function startServer() {
     }
   });
 
-  app.post('/api/github/push-main', async (req, res) => {
+  app.post('/api/github/push-main', requireApiKey, async (req, res) => {
     try {
       const token = (req.body.token || process.env.GITHUB_TOKEN || githubManager.getClient().getToken() || '').trim();
       const repository = (req.body.repository || 'MohamedGH/agentTeam').trim();
       const branch = (req.body.branch || 'main').trim();
+
+      // Security check: restrict target repository to authorized repositories only to prevent arbitrary token exfiltration
+      const ALLOWED_REPOSITORIES = ['MohamedGH/agentTeam'];
+      if (!ALLOWED_REPOSITORIES.includes(repository)) {
+        return res.status(403).json({
+          success: false,
+          error: `Push unauthorized: repository "${repository}" is not in the allowed repositories list (${ALLOWED_REPOSITORIES.join(', ')})`,
+        });
+      }
+
       const [owner, repo] = repository.split('/');
 
       if (!token) {
@@ -1043,7 +1053,7 @@ async function startServer() {
       }
 
       return res.json({
-        success: true,
+        success: pushResult.pushed,
         push: pushResult,
         ciRun,
       });

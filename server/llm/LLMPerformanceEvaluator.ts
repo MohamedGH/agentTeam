@@ -65,8 +65,33 @@ export class LLMPerformanceEvaluator {
     const cleanOutput = (output || '').trim();
     const extractedCode = this.extractCodeBlock(cleanOutput);
 
-    // If live benchmark and proof indicates failover occurred, identity unverified, or mismatch, fail immediately with 0 score
-    if (proof && (proof.failoverUsed || proof.isIdentityVerified === false || proof.isCompliantWithSelection === false || proof.actualModelId !== proof.requestedModelId || proof.actualProviderId !== proof.requestedProviderId)) {
+    // Invariant: LIVE_PROVIDER evaluation MUST have valid, compliant proof and exact matching model/provider.
+    // If isLiveBenchmark is true, proof is strictly required with valid identitySource and verified identity.
+    const isLiveWithoutValidProof = isLiveBenchmark && (
+      !proof ||
+      proof.failoverUsed ||
+      proof.isIdentityVerified !== true ||
+      proof.isCompliantWithSelection !== true ||
+      proof.actualModelId !== modelId ||
+      proof.actualProviderId !== providerId ||
+      proof.actualModelId !== proof.requestedModelId ||
+      proof.actualProviderId !== proof.requestedProviderId ||
+      (proof.identitySource !== 'PROVIDER_RESPONSE_PAYLOAD' && proof.identitySource !== 'MOCK_DETERMINISTIC_PROOF')
+    );
+
+    const isProofMismatchOrFailover = Boolean(
+      proof && (
+        proof.failoverUsed ||
+        proof.isIdentityVerified === false ||
+        proof.isCompliantWithSelection === false ||
+        proof.actualModelId !== proof.requestedModelId ||
+        proof.actualProviderId !== proof.requestedProviderId ||
+        proof.actualModelId !== modelId ||
+        proof.actualProviderId !== providerId
+      )
+    );
+
+    if (isLiveWithoutValidProof || isProofMismatchOrFailover) {
       return {
         id: `eval_failover_blocked_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
         modelId,
@@ -85,10 +110,12 @@ export class LLMPerformanceEvaluator {
         regressionDetected: true,
         evaluatorVersion: this.version,
         timestamp: startTime,
-        failureClass: proof.failureClass || 'PROVIDER_FAILURE',
+        failureClass: proof?.failureClass || 'PROVIDER_FAILURE',
         details: {
           failoverBlocked: true,
-          error: `Execution proof rejected in benchmark: requested ${proof.requestedProviderId}/${proof.requestedModelId} but executed ${proof.actualProviderId}/${proof.actualModelId} (verified=${proof.isIdentityVerified}, compliant=${proof.isCompliantWithSelection})`,
+          error: proof
+            ? `Execution proof rejected in benchmark: requested ${proof.requestedProviderId}/${proof.requestedModelId} but executed ${proof.actualProviderId}/${proof.actualModelId} (verified=${proof.isIdentityVerified}, compliant=${proof.isCompliantWithSelection}, source=${proof.identitySource})`
+            : `Missing mandatory execution proof for LIVE_PROVIDER benchmark on ${providerId}/${modelId}`,
         },
         isLiveBenchmark,
         outputSample: cleanOutput.slice(0, 180),

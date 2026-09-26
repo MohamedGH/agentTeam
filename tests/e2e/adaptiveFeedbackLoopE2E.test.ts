@@ -52,7 +52,7 @@ export async function runAdaptiveFeedbackLoopE2ETests(): Promise<void> {
   const isolatedQuotaManager = new QuotaManager();
   const memory = new LLMPerformanceMemory(testStoragePath);
   const registry = new LLMRegistry(isolatedProviderManager, memory);
-  const rankingEngine = new LLMRankingEngine(memory);
+  const rankingEngine = new LLMRankingEngine(memory, registry, { includeHermetic: true });
   const classifier = new ProblemClassifier();
   const evaluator = new LLMPerformanceEvaluator();
   const workspace = new VirtualWorkspace();
@@ -60,6 +60,7 @@ export async function runAdaptiveFeedbackLoopE2ETests(): Promise<void> {
   const selector = new LLMSelector(classifier, registry, rankingEngine, memory, {
     explorationRate: 0, // Strict exploitation for deterministic test assertions
     minSamplesForConfidentRank: 1,
+    includeHermetic: true,
   });
 
   const engine = new AgentTeamEngine({

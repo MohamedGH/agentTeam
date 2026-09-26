@@ -238,7 +238,7 @@ export class LLMPerformanceMemory {
     version?: string,
     sources?: EvaluationSource[]
   ): void {
-    const targetSources = sources || ALL_SOURCES;
+    const targetSources = sources !== undefined ? sources : OPERATIONAL_SOURCES;
     const filtered = this.getEvaluations({
       modelId,
       category,

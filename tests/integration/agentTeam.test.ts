@@ -56,8 +56,32 @@ export async function runAgentTeamIntegrationTests() {
   assert(runResult.finalReport?.review === 'APPROVED', 'Review status is APPROVED');
   assert(runResult.finalReport?.metrics.totalTokens !== undefined && runResult.finalReport.metrics.totalTokens > 0, 'Total tokens tracked');
 
+  // Test Gate Failure Invariant: If reviewer flags blocking issues or tester fails, runWorkflow MUST return success=false
+  console.log('\n--- [Integration Test] Gate Failure Enforcement ---');
+  mockProvider.mockTextOverride = 'CRITICAL ISSUE: changes requested, security regression detected.';
+  const failedReviewResult = await agentTeamEngine.runWorkflow(
+    'Refactor auth with insecure patterns',
+    'tier_3',
+    undefined,
+    { provider: 'mock', model: 'mock-fast-model' }
+  );
+  assert(failedReviewResult.success === false, 'Workflow with reviewer rejection returns success=false');
+  assert(failedReviewResult.executionStatus === 'FAILED', 'Workflow with reviewer rejection sets executionStatus=FAILED');
+  assert(failedReviewResult.finalReport?.implementation === 'FAIL', 'Implementation is marked FAIL on gate failure');
+  assert(failedReviewResult.finalReport?.review === 'CHANGES_REQUIRED', 'Review report reflects CHANGES_REQUIRED');
+
   // Reset provider back to Gemini
+  mockProvider.mockTextOverride = undefined;
   providerManager.setActiveProvider('gemini');
 
   console.log('✅ Agent Team Hermetic Integration Tests Passed');
+}
+
+if (import.meta.url.endsWith(process.argv[1]) || process.argv[1]?.includes('agentTeam.test')) {
+  runAgentTeamIntegrationTests()
+    .then(() => process.exit(0))
+    .catch((err) => {
+      console.error('Agent Team integration test failed:', err);
+      process.exit(1);
+    });
 }

@@ -167,6 +167,7 @@ export class AgentTeamEngine {
     const initialFiles = { ...this.workspace.getFiles() };
     const changedFileList = new Set<string>();
     const allFailoverHistory: FailoverRecord[] = [];
+    const allExactResults: any[] = [];
     let lastExactResult: any = null;
 
     let julesResult: CodingAgentResult | null = null;
@@ -195,6 +196,7 @@ Provide your architectural breakdown and delegation plan.`;
         allFailoverHistory.push(...phase1Res.failoverHistory);
       }
       lastExactResult = phase1Res;
+      allExactResults.push(phase1Res);
 
       totalTokens += phase1Res.totalTokens;
       totalPromptTokens += phase1Res.promptTokens;
@@ -510,6 +512,7 @@ Describe how you are patching the code.`;
             allFailoverHistory.push(...devRes.failoverHistory);
           }
           lastExactResult = devRes;
+          allExactResults.push(devRes);
 
           // Perform actual virtual file operations according to the task
           const toolCalls = this.executeDeveloperActions(taskPrompt, developerCycle, changedFileList);
@@ -565,6 +568,7 @@ Provide QA evaluation and regression analysis.`;
           allFailoverHistory.push(...testerRes.failoverHistory);
         }
         lastExactResult = testerRes;
+        allExactResults.push(testerRes);
 
         const testToolCalls = [
           {
@@ -662,6 +666,7 @@ Evaluate code quality, security implications, maintainability, and clean archite
           allFailoverHistory.push(...revRes.failoverHistory);
         }
         lastExactResult = revRes;
+        allExactResults.push(revRes);
 
         const reviewToolCalls = [
           {
@@ -840,6 +845,7 @@ Evaluate code quality, security implications, maintainability, and clean archite
         allFailoverHistory.push(...delivRes.failoverHistory);
       }
       lastExactResult = delivRes;
+      allExactResults.push(delivRes);
 
       totalTokens += delivRes.totalTokens;
       totalPromptTokens += delivRes.promptTokens;
@@ -861,29 +867,46 @@ Evaluate code quality, security implications, maintainability, and clean archite
 
       const workflowSuccess = Boolean(testerPassed && reviewerApproved);
 
+      // Holistic verification: check across ALL exact results executed during this workflow
+      // A previous divergent call or failover MUST NOT be masked by a clean final call.
+      const anyResultFailedVerification = allExactResults.some(
+        (r) =>
+          r.failoverUsed ||
+          r.isIdentityVerified !== true ||
+          r.isCompliantWithSelection !== true ||
+          r.actualModelId !== chosenModel ||
+          r.actualProviderId !== activeProvider
+      );
+
       // Extract verified execution identity directly from provider execution
-      const failoverUsed = Boolean(lastExactResult?.failoverUsed || allFailoverHistory.length > 0);
+      const failoverUsed = Boolean(
+        anyResultFailedVerification ||
+        lastExactResult?.failoverUsed ||
+        allFailoverHistory.length > 0
+      );
       const rawActualModelId = typeof lastExactResult?.actualModelId === 'string' && lastExactResult.actualModelId.trim().length > 0 ? lastExactResult.actualModelId.trim() : undefined;
       const rawActualProviderId = typeof lastExactResult?.actualProviderId === 'string' && lastExactResult.actualProviderId.trim().length > 0 ? lastExactResult.actualProviderId : undefined;
 
       const isIdentityVerified = Boolean(
+        !anyResultFailedVerification &&
+        !failoverUsed &&
         lastExactResult?.isIdentityVerified === true &&
         rawActualModelId !== undefined &&
         rawActualProviderId !== undefined &&
         rawActualModelId === chosenModel &&
-        rawActualProviderId === activeProvider &&
-        !failoverUsed
+        rawActualProviderId === activeProvider
       );
-      const actualModelId = rawActualModelId;
-      const actualProviderId = rawActualProviderId;
+      const actualModelId = isIdentityVerified ? rawActualModelId : (rawActualModelId || chosenModel);
+      const actualProviderId = isIdentityVerified ? rawActualProviderId : (rawActualProviderId || activeProvider);
       const isCompliantWithSelection = Boolean(
-        lastExactResult?.isCompliantWithSelection &&
-        isIdentityVerified &&
+        !anyResultFailedVerification &&
         !failoverUsed &&
+        isIdentityVerified &&
+        lastExactResult?.isCompliantWithSelection &&
         actualProviderId === activeProvider &&
         actualModelId === chosenModel
       );
-      const identitySource = lastExactResult?.identitySource || (isIdentityVerified ? 'PROVIDER_RESPONSE_PAYLOAD' : 'NONE');
+      const identitySource = isIdentityVerified ? (lastExactResult?.identitySource || 'PROVIDER_RESPONSE_PAYLOAD') : 'NONE';
 
       // OBLIGATOIRE: REAL_TASK evaluation post-execution with strict identity and execution proof
       let realTaskEvalRecord: any = null;
@@ -925,13 +948,17 @@ Evaluate code quality, security implications, maintainability, and clean archite
       }
 
       const finalReport: FinalReport = {
-        implementation: 'PASS',
+        implementation: (testerPassed && reviewerApproved) ? 'PASS' : 'FAIL',
         tests: testerPassed ? 'PASS' : 'FAIL',
         review: reviewerApproved ? 'APPROVED' : 'CHANGES_REQUIRED',
         filesChanged: Array.from(changedFileList),
-        testSummary: `Test suite passed 100% across all unit and edge-case suites.`,
-        reviewSummary: `Architectural and security standards verified. Zero critical vulnerabilities found.`,
-        remainingIssues: [],
+        testSummary: testerPassed
+          ? `Test suite passed 100% across all unit and edge-case suites.`
+          : `Test suite encountered failures or regressions.`,
+        reviewSummary: reviewerApproved
+          ? `Architectural and security standards verified. Zero critical vulnerabilities found.`
+          : `Reviewer identified blocking architectural or quality issues: ${reviewIssues.join('; ')}`,
+        remainingIssues: reviewerApproved ? [] : reviewIssues,
         totalCycles: {
           testerCorrections: Math.max(0, testerCycles - 1),
           reviewerCorrections: Math.max(0, reviewCycles - 1),
@@ -964,13 +991,17 @@ Evaluate code quality, security implications, maintainability, and clean archite
         },
       };
 
+      const finalWorkflowSuccess = Boolean(workflowSuccess && isCompliantWithSelection);
+
       addStep({
         phase: 7,
         phaseName: 'Final Delivery',
         agent: 'manager',
         thought: delivRes.text,
-        status: 'COMPLETED',
-        output: `Workflow completed successfully with ${finalReport.filesChanged.length} files changed and all verification gates passed.${julesResult?.prUrl ? ` PR: ${julesResult.prUrl}` : ''}`,
+        status: finalWorkflowSuccess ? 'COMPLETED' : 'FAILED',
+        output: finalWorkflowSuccess
+          ? `Workflow completed successfully with ${finalReport.filesChanged.length} files changed and all verification gates passed.${julesResult?.prUrl ? ` PR: ${julesResult.prUrl}` : ''}`
+          : `Workflow finished with failing quality/security gates (tests=${finalReport.tests}, review=${finalReport.review}, verified=${isCompliantWithSelection}).`,
         provider: delivRes.provider,
         model: delivRes.model,
         failoverHistory: delivRes.failoverHistory,
@@ -984,8 +1015,8 @@ Evaluate code quality, security implications, maintainability, and clean archite
       return {
         taskId,
         taskPrompt,
-        success: true,
-        executionStatus: 'COMPLETED',
+        success: finalWorkflowSuccess,
+        executionStatus: finalWorkflowSuccess ? 'COMPLETED' : 'FAILED',
         modelUsed: chosenModel,
         codingAgentUsed: codingAgentToUse || undefined,
         selectionDecision,
