@@ -12,6 +12,7 @@ import { runSelfImprovementUnitTests } from './selfImprovement.test';
 import { runAdaptiveLLMUnitTests } from './adaptiveLLM.test';
 import { runEmpiricalAuditedBenchmarkTests } from './empiricalAuditedBenchmark.test';
 import { runAdaptiveRoutingHardeningTests } from './adaptiveRoutingHardening.test';
+import { runWorkflowStateManagerUnitTests } from './workflowStateManager.test';
 
 export async function runAllUnitTests() {
   console.log('====================================================');
@@ -32,6 +33,7 @@ export async function runAllUnitTests() {
   await runAdaptiveLLMUnitTests();
   await runEmpiricalAuditedBenchmarkTests();
   await runAdaptiveRoutingHardeningTests();
+  await runWorkflowStateManagerUnitTests();
 
   console.log('\n🎉 ALL UNIT TESTS PASSED (100%)\n');
 }

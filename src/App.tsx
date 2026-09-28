@@ -10,10 +10,12 @@ import { JulesDashboard } from './components/JulesDashboard';
 import { SelfImprovementDashboard } from './components/SelfImprovementDashboard';
 import { AdaptiveLLMDashboard } from './components/AdaptiveLLMDashboard';
 import { GitHubSettingsModal } from './components/GitHubSettingsModal';
-import { ExecutionStatusBanner, ExecutionState } from './components/ExecutionStatusBanner';
+import { ExecutionStatusBanner } from './components/ExecutionStatusBanner';
 import { ActionableErrorCard } from './components/ActionableErrorCard';
 import { AgentStep, FinalReport, AgentRole, ModelQuotaStatus, AIProviderId, ProviderInfo } from './types';
 import { routeManager, AppRoute } from './managers/routeManager';
+import { workflowStateManager } from './managers/workflowStateManager';
+import { useWorkflowState } from './managers/useWorkflowState';
 import {
   Play,
   Sparkles,
@@ -69,6 +71,20 @@ export default function App() {
   const [selectedTier, setSelectedTier] = useState<string>('tier_3');
   const [taskPrompt, setTaskPrompt] = useState<string>(PRESET_TASKS[0].prompt);
 
+  // Centralized Workflow Execution State via Manager
+  const workflowState = useWorkflowState();
+  const {
+    executionState,
+    activeAgent,
+    currentPhase,
+    chosenModel,
+    activeProvider,
+    elapsedSeconds,
+    steps,
+    finalReport,
+    errorMessage,
+  } = workflowState;
+
   // Synchronize routeManager navigation
   useEffect(() => {
     const unsubscribe = routeManager.subscribe((state) => {
@@ -83,10 +99,9 @@ export default function App() {
   };
 
   // Multi-Provider state
-  const [activeProvider, setActiveProvider] = useState<AIProviderId>('gemini');
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
 
-  // Advanced Options Drawer toggle
+  // Advanced Options Drawer toggle (collapsed by default)
   const [showAdvancedOptions, setShowAdvancedOptions] = useState<boolean>(false);
 
   // Coding Agent Routing state (Google Jules)
@@ -94,16 +109,6 @@ export default function App() {
   const [githubRepo, setGithubRepo] = useState<string>('MohamedGH/agentTeam');
   const [githubBranch, setGithubBranch] = useState<string>('main');
   const [automationMode, setAutomationMode] = useState<'AUTO_CREATE_PR' | 'MANUAL'>('AUTO_CREATE_PR');
-
-  // Multi-Agent Execution State
-  const [isRunning, setIsRunning] = useState<boolean>(false);
-  const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
-  const [currentPhase, setCurrentPhase] = useState<number>(1);
-  const [activeAgent, setActiveAgent] = useState<AgentRole | null>(null);
-  const [steps, setSteps] = useState<AgentStep[]>([]);
-  const [finalReport, setFinalReport] = useState<FinalReport | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [wasCancelled, setWasCancelled] = useState<boolean>(false);
 
   // Abort controller ref for in-flight cancellation
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -115,20 +120,6 @@ export default function App() {
 
   // Quota Manager State
   const [quotaModels, setQuotaModels] = useState<Record<string, ModelQuotaStatus>>({});
-  const [chosenModel, setChosenModel] = useState<string>('gemini-3.7-flash');
-
-  // Elapsed timer effect
-  useEffect(() => {
-    let interval: NodeJS.Timeout | null = null;
-    if (isRunning) {
-      interval = setInterval(() => {
-        setElapsedSeconds((prev) => prev + 0.1);
-      }, 100);
-    }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [isRunning]);
 
   // Load initial workspace files, quota stats, and provider catalog
   const fetchWorkspace = async () => {
@@ -151,9 +142,6 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         setProviders(data.providers || []);
-        if (data.activeProvider) {
-          setActiveProvider(data.activeProvider);
-        }
       }
     } catch (e) {
       console.warn('Failed to load providers list:', e);
@@ -161,7 +149,6 @@ export default function App() {
   };
 
   const handleSelectProvider = async (providerId: AIProviderId, model?: string) => {
-    setActiveProvider(providerId);
     try {
       const res = await fetch('/api/providers/select', {
         method: 'POST',
@@ -171,7 +158,7 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         if (data.activeModel) {
-          setChosenModel(data.activeModel);
+          // Model updated
         }
       }
       await fetchQuotaStatus(selectedTier);
@@ -204,22 +191,15 @@ export default function App() {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
-    setWasCancelled(true);
-    setIsRunning(false);
+    workflowStateManager.cancelExecution();
   };
 
   // Run the Multi-Agent autonomous development workflow with Live SSE streaming
   const handleRunWorkflow = async () => {
-    if (!taskPrompt.trim() || isRunning) return;
+    if (!taskPrompt.trim() || executionState === 'RUNNING') return;
 
-    setIsRunning(true);
-    setWasCancelled(false);
-    setElapsedSeconds(0);
-    setErrorMessage(null);
-    setFinalReport(null);
-    setSteps([]);
-    setCurrentPhase(1);
-    setActiveAgent('manager');
+    // Start execution via state manager
+    workflowStateManager.startExecution(chosenModel, activeProvider);
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
@@ -235,6 +215,8 @@ export default function App() {
       automationMode: codingAgentOption !== 'none' ? automationMode : undefined,
       title: codingAgentOption !== 'none' ? `agentTeam: ${taskPrompt.slice(0, 45)}` : undefined,
     };
+
+    let explicitCompletionReceived = false;
 
     try {
       // Attempt Server-Sent Events (SSE) streaming execution
@@ -265,27 +247,30 @@ export default function App() {
               try {
                 const event = JSON.parse(jsonStr);
                 if (event.type === 'step' && event.step) {
-                  setSteps((prev) => [...prev, event.step]);
-                  if (event.step.phase) setCurrentPhase(event.step.phase);
-                  if (event.step.agent) setActiveAgent(event.step.agent);
+                  workflowStateManager.addStep(event.step);
                 } else if (event.type === 'complete' && event.result) {
                   if (event.result.finalReport) {
-                    setFinalReport(event.result.finalReport);
-                  }
-                  if (event.result.modelUsed) {
-                    setChosenModel(event.result.modelUsed);
+                    explicitCompletionReceived = true;
+                    workflowStateManager.completeExecution(event.result.finalReport);
                   }
                   if (event.result.virtualFiles) {
                     setFiles(event.result.virtualFiles);
                   }
                 } else if (event.type === 'error') {
-                  setErrorMessage(event.error || 'Execution encountered an error');
+                  workflowStateManager.failExecution(
+                    event.error || 'Une erreur est survenue pendant l’exécution de l’équipe d’agents.'
+                  );
                 }
               } catch (e) {
                 console.warn('Failed to parse SSE line:', line);
               }
             }
           }
+        }
+
+        // PRIORITÉ 1: If stream closed without explicit complete event
+        if (!explicitCompletionReceived && workflowStateManager.getState().executionState === 'RUNNING') {
+          workflowStateManager.handleStreamAborted();
         }
       } else {
         // Fallback to standard batch POST /api/team/run
@@ -297,27 +282,24 @@ export default function App() {
         });
 
         if (!res.ok) {
-          throw new Error(`HTTP error ${res.status}: ${await res.text()}`);
+          throw new Error(`Erreur HTTP ${res.status}: ${await res.text()}`);
         }
 
         const data = await res.json();
         if (data.steps && data.steps.length > 0) {
-          setSteps(data.steps);
-          const lastStep = data.steps[data.steps.length - 1];
-          setCurrentPhase(lastStep.phase || 7);
-          setActiveAgent(lastStep.agent || 'manager');
-        }
-
-        if (data.finalReport) {
-          setFinalReport(data.finalReport);
-        }
-
-        if (data.modelUsed) {
-          setChosenModel(data.modelUsed);
+          data.steps.forEach((st: AgentStep) => workflowStateManager.addStep(st));
         }
 
         if (data.virtualFiles) {
           setFiles(data.virtualFiles);
+        }
+
+        if (data.finalReport && typeof data.finalReport === 'object') {
+          workflowStateManager.completeExecution(data.finalReport);
+        } else {
+          workflowStateManager.failExecution(
+            data.error || 'Workflow terminé sans résultat ni rapport final valide.'
+          );
         }
       }
 
@@ -325,11 +307,12 @@ export default function App() {
       await fetchWorkspace();
       await fetchQuotaStatus(selectedTier);
     } catch (err: any) {
-      if (err.name !== 'AbortError') {
-        setErrorMessage(err.message || 'Error executing agent team workflow');
+      if (err.name === 'AbortError') {
+        workflowStateManager.cancelExecution();
+      } else {
+        workflowStateManager.failExecution(err.message || 'Erreur lors de l’exécution du workflow agentTeam');
       }
     } finally {
-      setIsRunning(false);
       abortControllerRef.current = null;
     }
   };
@@ -358,7 +341,7 @@ export default function App() {
   };
 
   const handleResetQuota = async (model?: string) => {
-    await fetch('/api/quota/reset-state', {
+    await fetch('/api/quota/reset', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model }),
@@ -366,26 +349,11 @@ export default function App() {
     await fetchQuotaStatus(selectedTier);
   };
 
-  const handleClearMission = () => {
-    setSteps([]);
-    setFinalReport(null);
-    setErrorMessage(null);
-    setWasCancelled(false);
-    setCurrentPhase(1);
-    setActiveAgent('manager');
+  const handleResetMission = () => {
+    workflowStateManager.reset();
   };
 
-  // Derive execution state
-  let executionState: ExecutionState = 'IDLE';
-  if (isRunning) {
-    executionState = 'RUNNING';
-  } else if (wasCancelled) {
-    executionState = 'CANCELLED';
-  } else if (errorMessage) {
-    executionState = 'FAILED';
-  } else if (finalReport || steps.length > 0) {
-    executionState = 'COMPLETED';
-  }
+  const isRunning = executionState === 'RUNNING';
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-blue-600/30 selection:text-blue-200">
@@ -402,6 +370,25 @@ export default function App() {
         providers={providers}
         onSelectProvider={handleSelectProvider}
       />
+
+      {/* PRIORITÉ 3: PERSISTENT STATUS BAR ACROSS OTHER SCREENS */}
+      {activeTab !== 'studio' && executionState !== 'IDLE' && (
+        <div className="max-w-7xl w-full mx-auto px-4 lg:px-6 pt-4">
+          <ExecutionStatusBanner
+            executionState={executionState}
+            activeAgent={activeAgent}
+            currentPhase={currentPhase}
+            chosenModel={chosenModel}
+            activeProvider={activeProvider}
+            elapsedSeconds={elapsedSeconds}
+            finalReport={finalReport}
+            errorMessage={errorMessage}
+            stepsCount={steps.length}
+            onStop={isRunning ? handleAbortWorkflow : undefined}
+            onReset={handleResetMission}
+          />
+        </div>
+      )}
 
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 lg:p-6 space-y-6">
@@ -425,7 +412,7 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Live Model / Provider Pill */}
+                {/* Model / Provider Pill */}
                 <div className="flex items-center gap-2 text-xs text-slate-400 font-mono self-start md:self-auto">
                   <span className="bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800 flex items-center gap-1.5">
                     <Globe className="w-3 h-3 text-blue-400" />
@@ -519,7 +506,7 @@ export default function App() {
                   {steps.length > 0 && !isRunning && (
                     <button
                       type="button"
-                      onClick={handleClearMission}
+                      onClick={handleResetMission}
                       className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-slate-200 px-2.5 py-1 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 transition-all cursor-pointer"
                     >
                       <RotateCcw className="w-3 h-3" />
@@ -657,6 +644,8 @@ export default function App() {
               finalReport={finalReport}
               errorMessage={errorMessage}
               stepsCount={steps.length}
+              onStop={isRunning ? handleAbortWorkflow : undefined}
+              onReset={handleResetMission}
             />
 
             {/* ACTIONABLE ERROR CARD (When Error Occurs) */}
@@ -675,7 +664,7 @@ export default function App() {
               currentPhase={currentPhase}
               activeAgent={activeAgent}
               isRunning={isRunning}
-              steps={steps}
+              steps={steps as AgentStep[]}
             />
 
             {/* Final Report Card when complete */}
@@ -687,7 +676,7 @@ export default function App() {
             )}
 
             {/* Step-by-Step Activity & Reasoning Timeline */}
-            <ExecutionTimeline steps={steps} isRunning={isRunning} />
+            <ExecutionTimeline steps={steps as AgentStep[]} isRunning={isRunning} />
           </div>
         )}
 
