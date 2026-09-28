@@ -3,7 +3,6 @@ import {
   Brain,
   Sparkles,
   Gauge,
-  ShieldAlert,
   Play,
   CheckCircle2,
   XCircle,
@@ -16,8 +15,12 @@ import {
   Cpu,
   Workflow,
   HelpCircle,
+  Loader2,
+  RefreshCw,
+  Check,
 } from 'lucide-react';
 import { errorManager } from '../managers/errorManager';
+import { ActionableErrorCard } from './ActionableErrorCard';
 
 export interface ModelMetadata {
   modelId: string;
@@ -52,11 +55,14 @@ export interface ModelRankingStats {
 
 export function AdaptiveLLMDashboard() {
   const [models, setModels] = useState<ModelMetadata[]>([]);
-  const [rankings, setRankings] = useState<Record<string, { rankedModels: ModelRankingStats[]; unmeasuredModels: string[]; totalSamples: number }>>({});
+  const [rankings, setRankings] = useState<
+    Record<string, { rankedModels: ModelRankingStats[]; unmeasuredModels: string[]; totalSamples: number }>
+  >({});
   const [selectedCategory, setSelectedCategory] = useState<string>('CODE_GENERATION');
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRunningBenchmark, setIsRunningBenchmark] = useState<boolean>(false);
   const [benchmarkResult, setBenchmarkResult] = useState<any | null>(null);
+  const [benchmarkError, setBenchmarkError] = useState<string | null>(null);
 
   // Selector Inspection State
   const [inspectorPrompt, setInspectorPrompt] = useState<string>(
@@ -64,9 +70,11 @@ export function AdaptiveLLMDashboard() {
   );
   const [isSelecting, setIsSelecting] = useState<boolean>(false);
   const [selectionDecision, setSelectionDecision] = useState<any | null>(null);
+  const [selectionError, setSelectionError] = useState<string | null>(null);
 
   const fetchAdaptiveData = async () => {
     setIsLoading(true);
+    setBenchmarkError(null);
     try {
       const [modelsRes, rankingsRes] = await Promise.all([
         fetch('/api/llm/models').then((r) => r.json()),
@@ -93,6 +101,7 @@ export function AdaptiveLLMDashboard() {
   const handleRunHermeticBenchmark = async () => {
     setIsRunningBenchmark(true);
     setBenchmarkResult(null);
+    setBenchmarkError(null);
     try {
       const res = await fetch('/api/llm/benchmark/run', {
         method: 'POST',
@@ -100,9 +109,13 @@ export function AdaptiveLLMDashboard() {
         body: JSON.stringify({ category: selectedCategory, isLive: false }),
       });
       const data = await res.json();
+      if (!res.ok || data.error) {
+        throw new Error(data.error || 'Erreur lors du benchmark empirique');
+      }
       setBenchmarkResult(data);
       await fetchAdaptiveData();
     } catch (err: any) {
+      setBenchmarkError(err.message || 'Benchmark run error');
       errorManager.parseError(err, 'Benchmark run error');
     } finally {
       setIsRunningBenchmark(false);
@@ -112,6 +125,7 @@ export function AdaptiveLLMDashboard() {
   const handleInspectRouting = async () => {
     if (!inspectorPrompt.trim()) return;
     setIsSelecting(true);
+    setSelectionError(null);
     try {
       const res = await fetch('/api/llm/select', {
         method: 'POST',
@@ -119,8 +133,12 @@ export function AdaptiveLLMDashboard() {
         body: JSON.stringify({ prompt: inspectorPrompt }),
       });
       const data = await res.json();
+      if (!res.ok || data.error) {
+        throw new Error(data.error || 'Erreur lors de l’analyse de routing');
+      }
       setSelectionDecision(data);
     } catch (err: any) {
+      setSelectionError(err.message || 'Problem routing inspection error');
       errorManager.parseError(err, 'Problem routing inspection error');
     } finally {
       setIsSelecting(false);
@@ -142,96 +160,153 @@ export function AdaptiveLLMDashboard() {
 
   return (
     <div id="adaptive-llm-dashboard" className="space-y-6">
-      {/* Header Banner */}
-      <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+      {/* Header Banner - Unified Dark Panel */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xl space-y-3">
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2">
-              <Brain className="w-6 h-6 text-indigo-600" />
-              <h2 className="text-xl font-bold text-slate-800">Adaptive Multi-LLM Empirical Routing</h2>
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
-                Self-Learning Engine
-              </span>
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-violet-500/10 border border-violet-500/30 flex items-center justify-center text-violet-400">
+                <Brain className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base sm:text-lg font-bold text-slate-100 tracking-tight">
+                    Adaptive Multi-LLM Empirical Routing
+                  </h2>
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-300 border border-violet-500/30 font-mono">
+                    Self-Learning Engine
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 mt-0.5 max-w-3xl">
+                  Routage autonome et dynamique basé sur les performances réelles mesurées par catégorie de problème,
+                  complexité et contraintes strictes.
+                </p>
+              </div>
             </div>
-            <p className="text-sm text-slate-600 mt-1 max-w-3xl">
-              Learns empirically which LLM produces measured, verified results per problem category, complexity, and constraints.
-              Eliminates subjective hardcoding using objective evaluations and Bayesian uncertainty bounds.
-            </p>
           </div>
-          <div className="flex items-center gap-2">
+
+          {/* Action Buttons */}
+          <div className="flex items-center gap-2.5 flex-wrap self-end md:self-auto">
             <button
               id="refresh-adaptive-data-btn"
+              type="button"
               onClick={fetchAdaptiveData}
               disabled={isLoading}
-              className="px-3.5 py-2 text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors flex items-center gap-1.5"
+              className="px-3 py-2 text-xs font-semibold bg-slate-950 hover:bg-slate-800 text-slate-300 border border-slate-800 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
             >
-              <TrendingUp className="w-3.5 h-3.5" />
-              Refresh Registry
+              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-blue-400' : ''}`} />
+              Actualiser
             </button>
+
             <button
               id="run-hermetic-bench-btn"
+              type="button"
               onClick={handleRunHermeticBenchmark}
               disabled={isRunningBenchmark}
-              className="px-4 py-2 text-xs font-medium bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
+              className="px-4 py-2 text-xs font-bold bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white rounded-xl shadow-lg shadow-violet-500/20 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
             >
-              <Play className="w-3.5 h-3.5" />
-              {isRunningBenchmark ? 'Running Hermetic Benchmark...' : 'Run Objective Benchmark'}
+              {isRunningBenchmark ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Benchmark en cours...
+                </>
+              ) : (
+                <>
+                  <Play className="w-3.5 h-3.5 fill-white" />
+                  Lancer Benchmark Objectif
+                </>
+              )}
             </button>
           </div>
         </div>
       </div>
 
-      {/* Model Registry Status Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-          <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Discovered Models</div>
-          <div className="text-2xl font-bold text-slate-900 mt-1">{models.length}</div>
-          <div className="text-xs text-slate-500 mt-1">Across all registered providers</div>
+      {/* Benchmark Error or Success Notification */}
+      {benchmarkError && (
+        <ActionableErrorCard
+          title="Erreur lors de l'exécution du benchmark objectif"
+          error={benchmarkError}
+          onRetry={handleRunHermeticBenchmark}
+        />
+      )}
+
+      {benchmarkResult && (
+        <div className="p-4 bg-emerald-950/30 border border-emerald-500/30 rounded-xl text-xs text-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md">
+          <div className="flex items-center gap-2.5">
+            <CheckCircle2 className="w-5 h-5 text-emerald-400 flex-shrink-0" />
+            <div>
+              <strong className="block text-emerald-300 font-bold">Benchmark hermétique complété avec succès</strong>
+              <span className="text-slate-400">
+                Run ID: <code className="font-mono text-slate-300">{benchmarkResult.runId}</code> ·{' '}
+                {benchmarkResult.evaluations?.length || 0} évaluations intégrées en mémoire empirique.
+              </span>
+            </div>
+          </div>
+          <span className="text-[11px] font-mono text-emerald-400/90 bg-slate-950 px-2.5 py-1 rounded border border-emerald-500/20">
+            Coût : ${(benchmarkResult.totalCost || 0).toFixed(6)}
+          </span>
         </div>
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-          <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Measured & Proven</div>
-          <div className="text-2xl font-bold text-emerald-600 mt-1">
+      )}
+
+      {/* 4 Stat Overview Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Modèles découverts</span>
+          <div className="text-2xl font-bold text-slate-100 mt-1 font-mono">{models.length}</div>
+          <span className="text-[11px] text-slate-400 block mt-0.5">Catalogués multi-providers</span>
+        </div>
+
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Mesurés & Prouvés</span>
+          <div className="text-2xl font-bold text-emerald-400 mt-1 font-mono">
             {models.filter((m) => m.status === 'MEASURED').length}
           </div>
-          <div className="text-xs text-slate-500 mt-1">High statistical confidence</div>
+          <span className="text-[11px] text-slate-400 block mt-0.5">Haute confiance statistique</span>
         </div>
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-          <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Unmeasured / Learning</div>
-          <div className="text-2xl font-bold text-amber-600 mt-1">
+
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">En apprentissage</span>
+          <div className="text-2xl font-bold text-amber-400 mt-1 font-mono">
             {models.filter((m) => m.status === 'UNMEASURED' || m.status === 'LOW_CONFIDENCE').length}
           </div>
-          <div className="text-xs text-slate-500 mt-1">Subject to exploration quota</div>
+          <span className="text-[11px] text-slate-400 block mt-0.5">Exploration adaptative</span>
         </div>
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-          <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Evaluations</div>
-          <div className="text-2xl font-bold text-indigo-600 mt-1">
+
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Évaluations</span>
+          <div className="text-2xl font-bold text-violet-400 mt-1 font-mono">
             {Object.values(rankings).reduce((acc, curr) => acc + curr.totalSamples, 0)}
           </div>
-          <div className="text-xs text-slate-500 mt-1">Objective verifiable runs</div>
+          <span className="text-[11px] text-slate-400 block mt-0.5">Observations vérifiées</span>
         </div>
       </div>
 
-      {/* Main Grid: Category Empirical Rankings & Model Registry */}
+      {/* Main Grid: Category Rankings & Models Registry */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left 2 Cols: Category Empirical Ranking Table */}
-        <div className="lg:col-span-2 bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+        <div className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3.5">
             <div>
-              <h3 className="text-base font-semibold text-slate-800 flex items-center gap-2">
-                <Gauge className="w-4 h-4 text-indigo-600" />
-                Empirical Performance Rankings
+              <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2 uppercase tracking-wider">
+                <Gauge className="w-4 h-4 text-violet-400" />
+                Classement empirique par catégorie
               </h3>
-              <p className="text-xs text-slate-500">Sorted by Bayesian Upper-Confidence Bound (Score - Uncertainty)</p>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Calculé selon la borne d'incertitude bayésienne (Score moyen pondéré)
+              </p>
             </div>
+
+            {/* Filter Category Tabs */}
             <div className="flex items-center gap-1.5 flex-wrap">
               {CATEGORIES.map((cat) => (
                 <button
                   key={cat.id}
+                  type="button"
                   onClick={() => setSelectedCategory(cat.id)}
-                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                  className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
                     selectedCategory === cat.id
-                      ? 'bg-indigo-600 text-white shadow-xs'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      ? 'bg-violet-600 text-white shadow-xs'
+                      : 'bg-slate-950 text-slate-400 hover:text-slate-200 hover:bg-slate-800 border border-slate-800/80'
                   }`}
                 >
                   {cat.label}
@@ -244,47 +319,47 @@ export function AdaptiveLLMDashboard() {
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="border-b border-slate-200 text-slate-500 font-semibold bg-slate-50/50">
-                  <th className="py-2.5 px-3">Rank</th>
-                  <th className="py-2.5 px-3">Model</th>
+                <tr className="border-b border-slate-800 text-slate-400 font-bold bg-slate-950/70 uppercase text-[10px] tracking-wider">
+                  <th className="py-2.5 px-3">Rang</th>
+                  <th className="py-2.5 px-3">Modèle</th>
                   <th className="py-2.5 px-3">Provider</th>
-                  <th className="py-2.5 px-3 text-right">Composite Score</th>
-                  <th className="py-2.5 px-3 text-right">Success Rate</th>
-                  <th className="py-2.5 px-3 text-right">Confidence</th>
-                  <th className="py-2.5 px-3 text-right">Mean Latency</th>
-                  <th className="py-2.5 px-3 text-center">Status</th>
+                  <th className="py-2.5 px-3 text-right">Composite Rank</th>
+                  <th className="py-2.5 px-3 text-right">Succès</th>
+                  <th className="py-2.5 px-3 text-right">Confiance</th>
+                  <th className="py-2.5 px-3 text-right">Latence moy.</th>
+                  <th className="py-2.5 px-3 text-center">Statut</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-800/60">
                 {currentCategoryData.rankedModels.length > 0 ? (
                   currentCategoryData.rankedModels.map((stat, idx) => (
-                    <tr key={stat.modelId} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="py-2.5 px-3 font-bold text-slate-700">#{idx + 1}</td>
-                      <td className="py-2.5 px-3 font-medium text-slate-900">
+                    <tr key={stat.modelId} className="hover:bg-slate-950/40 transition-colors">
+                      <td className="py-2.5 px-3 font-bold text-slate-300 font-mono">#{idx + 1}</td>
+                      <td className="py-2.5 px-3 font-semibold text-slate-100">
                         {stat.modelId}
                         {stat.modelVersion && (
-                          <span className="ml-1 text-[10px] text-slate-400">({stat.modelVersion})</span>
+                          <span className="ml-1 text-[10px] text-slate-500 font-mono">({stat.modelVersion})</span>
                         )}
                       </td>
-                      <td className="py-2.5 px-3 text-slate-600 uppercase font-mono text-[11px]">{stat.providerId}</td>
-                      <td className="py-2.5 px-3 text-right font-bold text-indigo-700">
+                      <td className="py-2.5 px-3 text-slate-400 uppercase font-mono text-[11px]">{stat.providerId}</td>
+                      <td className="py-2.5 px-3 text-right font-bold font-mono text-violet-400">
                         {(stat.compositeRankScore * 100).toFixed(1)}%
                       </td>
-                      <td className="py-2.5 px-3 text-right text-emerald-600 font-semibold">
-                        {(stat.successRate * 100).toFixed(0)}% ({stat.sampleCount} runs)
+                      <td className="py-2.5 px-3 text-right text-emerald-400 font-semibold font-mono">
+                        {(stat.successRate * 100).toFixed(0)}% <span className="text-slate-500 text-[10px]">({stat.sampleCount} runs)</span>
                       </td>
-                      <td className="py-2.5 px-3 text-right text-slate-600">
+                      <td className="py-2.5 px-3 text-right text-slate-300 font-mono">
                         {(stat.confidence * 100).toFixed(0)}%
                       </td>
-                      <td className="py-2.5 px-3 text-right text-slate-600">{stat.meanLatencyMs.toFixed(0)}ms</td>
+                      <td className="py-2.5 px-3 text-right text-slate-400 font-mono">{stat.meanLatencyMs.toFixed(0)}ms</td>
                       <td className="py-2.5 px-3 text-center">
                         <span
-                          className={`inline-block px-2 py-0.5 text-[10px] font-semibold rounded-full ${
+                          className={`inline-block px-2 py-0.5 text-[10px] font-semibold rounded-md border font-mono ${
                             stat.status === 'MEASURED'
-                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
                               : stat.status === 'LOW_CONFIDENCE'
-                              ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                              : 'bg-slate-100 text-slate-600'
+                              ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                              : 'bg-slate-800 text-slate-400 border-slate-700'
                           }`}
                         >
                           {stat.status}
@@ -294,8 +369,8 @@ export function AdaptiveLLMDashboard() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={8} className="py-8 text-center text-slate-400">
-                      No verified benchmark evaluations recorded for category {selectedCategory} yet.
+                    <td colSpan={8} className="py-8 text-center text-slate-500">
+                      Aucune évaluation vérifiée enregistrée pour la catégorie {selectedCategory} pour l'instant.
                     </td>
                   </tr>
                 )}
@@ -304,56 +379,56 @@ export function AdaptiveLLMDashboard() {
           </div>
 
           {currentCategoryData.unmeasuredModels.length > 0 && (
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-600 flex items-center justify-between">
-              <span className="flex items-center gap-1.5">
-                <HelpCircle className="w-3.5 h-3.5 text-slate-400" />
-                Unmeasured Models ({currentCategoryData.unmeasuredModels.length}):{' '}
-                <span className="font-mono text-slate-700">{currentCategoryData.unmeasuredModels.join(', ')}</span>
+            <div className="p-3 bg-slate-950/80 border border-slate-800 rounded-xl text-xs text-slate-400 flex items-center justify-between">
+              <span className="flex items-center gap-1.5 truncate">
+                <HelpCircle className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
+                Modèles non mesurés ({currentCategoryData.unmeasuredModels.length}) :{' '}
+                <span className="font-mono text-slate-300 truncate">{currentCategoryData.unmeasuredModels.join(', ')}</span>
               </span>
             </div>
           )}
         </div>
 
         {/* Right 1 Col: Dynamic Models in Registry */}
-        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-4">
-          <div className="border-b border-slate-100 pb-3">
-            <h3 className="text-base font-semibold text-slate-800 flex items-center gap-2">
-              <Cpu className="w-4 h-4 text-indigo-600" />
-              Dynamic Model Registry
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+          <div className="border-b border-slate-800 pb-3.5">
+            <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2 uppercase tracking-wider">
+              <Cpu className="w-4 h-4 text-violet-400" />
+              Registre dynamique des modèles
             </h3>
-            <p className="text-xs text-slate-500">Auto-discovered models & availability status</p>
+            <p className="text-xs text-slate-400 mt-0.5">Disponibilité et métadonnées en temps réel</p>
           </div>
 
-          <div className="space-y-2.5 max-h-[360px] overflow-y-auto pr-1">
+          <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1">
             {models.map((m) => (
               <div
                 key={m.modelId}
-                className="p-3 bg-slate-50 hover:bg-slate-100/80 border border-slate-200 rounded-lg transition-colors flex items-center justify-between gap-2"
+                className="p-3 bg-slate-950/80 hover:bg-slate-950 border border-slate-800 hover:border-slate-700 rounded-xl transition-all flex items-center justify-between gap-2"
               >
-                <div>
-                  <div className="font-semibold text-xs text-slate-800">{m.displayName || m.modelId}</div>
-                  <div className="text-[11px] text-slate-500 flex items-center gap-2 mt-0.5">
-                    <span className="uppercase font-mono">{m.providerId}</span>
-                    <span>•</span>
-                    <span className="capitalize">{m.costTier || 'flash'} tier</span>
+                <div className="truncate">
+                  <div className="font-semibold text-xs text-slate-200 truncate">{m.displayName || m.modelId}</div>
+                  <div className="text-[11px] text-slate-400 flex items-center gap-2 mt-0.5">
+                    <span className="uppercase font-mono text-[10px] text-blue-400">{m.providerId}</span>
+                    <span>·</span>
+                    <span className="capitalize">{m.costTier || 'flash'}</span>
                     {m.evaluationHistoryCount > 0 && (
                       <>
-                        <span>•</span>
+                        <span>·</span>
                         <span>{m.evaluationHistoryCount} evals</span>
                       </>
                     )}
                   </div>
                 </div>
-                <div>
+                <div className="flex-shrink-0">
                   <span
-                    className={`inline-block px-2 py-0.5 text-[10px] font-semibold rounded-full ${
+                    className={`inline-block px-2 py-0.5 text-[10px] font-semibold rounded-md border font-mono ${
                       m.status === 'MEASURED'
-                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
                         : m.status === 'UNMEASURED'
-                        ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                        ? 'bg-blue-500/10 text-blue-400 border-blue-500/30'
                         : m.status === 'LOW_CONFIDENCE'
-                        ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                        : 'bg-red-50 text-red-700 border border-red-200'
+                        ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                        : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
                     }`}
                   >
                     {m.status}
@@ -366,18 +441,24 @@ export function AdaptiveLLMDashboard() {
       </div>
 
       {/* Bottom Section: Intelligent Task Decomposition & Routing Inspector */}
-      <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-4">
-        <div className="border-b border-slate-100 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <div>
-            <h3 className="text-base font-semibold text-slate-800 flex items-center gap-2">
-              <Workflow className="w-4 h-4 text-indigo-600" />
-              Adaptive Problem Classifier & Routing Inspector
-            </h3>
-            <p className="text-xs text-slate-500">
-              Decomposes complex problems into specialized sub-phases and selects empirically best models.
-            </p>
-          </div>
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+        <div className="border-b border-slate-800 pb-3">
+          <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2 uppercase tracking-wider">
+            <Workflow className="w-4 h-4 text-violet-400" />
+            Classifieur & Inspecteur de Routage Adaptatif
+          </h3>
+          <p className="text-xs text-slate-400 mt-0.5">
+            Testez l'analyse du classifieur et observez la décision de routage sélectionnée pour n'importe quel besoin logiciel.
+          </p>
         </div>
+
+        {selectionError && (
+          <ActionableErrorCard
+            title="Erreur lors de l'inspection de routage"
+            error={selectionError}
+            onRetry={handleInspectRouting}
+          />
+        )}
 
         <div className="flex flex-col sm:flex-row items-stretch gap-3">
           <input
@@ -385,61 +466,84 @@ export function AdaptiveLLMDashboard() {
             type="text"
             value={inspectorPrompt}
             onChange={(e) => setInspectorPrompt(e.target.value)}
-            placeholder="Enter any task prompt or requirements to analyze..."
-            className="flex-1 px-3.5 py-2 text-xs border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !isSelecting) {
+                handleInspectRouting();
+              }
+            }}
+            placeholder="Saisissez une consigne ou un problème logiciel à analyser..."
+            className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-violet-500 transition-all font-sans"
           />
           <button
             id="inspect-routing-btn"
+            type="button"
             onClick={handleInspectRouting}
             disabled={isSelecting || !inspectorPrompt.trim()}
-            className="px-4 py-2 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors flex items-center justify-center gap-1.5 shadow-xs"
+            className="px-5 py-2.5 text-xs font-bold bg-violet-600 hover:bg-violet-500 text-white rounded-xl shadow-lg shadow-violet-500/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 whitespace-nowrap"
           >
-            <Sparkles className="w-3.5 h-3.5" />
-            {isSelecting ? 'Analyzing...' : 'Analyze & Route'}
+            {isSelecting ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                Analyse en cours...
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-3.5 h-3.5" />
+                Analyser & Router
+              </>
+            )}
           </button>
         </div>
 
         {/* Inspection Result Display */}
         {selectionDecision && (
-          <div className="mt-4 p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="p-3 bg-white border border-slate-200 rounded-lg">
-                <div className="text-[11px] font-semibold text-slate-500 uppercase">Primary Category</div>
-                <div className="text-sm font-bold text-slate-800 mt-0.5">
+          <div className="mt-4 p-4 bg-slate-950/80 border border-slate-800 rounded-xl space-y-3.5">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">
+                  Catégorie Détectée
+                </span>
+                <div className="text-sm font-bold text-slate-100">
                   {selectionDecision.classifiedProblem?.category}
                 </div>
-                <div className="text-xs text-slate-500 mt-1">
-                  Subcategory: {selectionDecision.classifiedProblem?.subcategory || 'General'}
+                <div className="text-xs text-slate-400 mt-1">
+                  Sous-catégorie : {selectionDecision.classifiedProblem?.subcategory || 'General'}
                 </div>
               </div>
-              <div className="p-3 bg-white border border-slate-200 rounded-lg">
-                <div className="text-[11px] font-semibold text-slate-500 uppercase">Complexity & Strategy</div>
-                <div className="text-sm font-bold text-indigo-700 mt-0.5">
+
+              <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">
+                  Complexité & Décision
+                </span>
+                <div className="text-sm font-bold text-violet-400">
                   {selectionDecision.classifiedProblem?.complexity} • {selectionDecision.decisionType}
                 </div>
-                <div className="text-xs text-slate-500 mt-1">
-                  Confidence: {(selectionDecision.confidence * 100).toFixed(0)}%
+                <div className="text-xs text-slate-400 mt-1">
+                  Confiance : {(selectionDecision.confidence * 100).toFixed(0)}%
                 </div>
               </div>
-              <div className="p-3 bg-white border border-slate-200 rounded-lg">
-                <div className="text-[11px] font-semibold text-slate-500 uppercase">Selected Primary Model</div>
-                <div className="text-sm font-bold text-emerald-700 mt-0.5">
+
+              <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">
+                  Modèle Sélectionné
+                </span>
+                <div className="text-sm font-bold text-emerald-400 font-mono">
                   {selectionDecision.selectedModelId}
                 </div>
-                <div className="text-xs text-slate-500 mt-1 uppercase font-mono">
-                  Provider: {selectionDecision.selectedProviderId}
+                <div className="text-xs text-slate-400 mt-1 uppercase font-mono">
+                  Provider : {selectionDecision.selectedProviderId}
                 </div>
               </div>
             </div>
 
             {/* Extracted Constraints */}
             {selectionDecision.classifiedProblem?.constraints?.length > 0 && (
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs font-semibold text-slate-600">Extracted Constraints:</span>
+              <div className="flex items-center gap-2 flex-wrap text-xs text-slate-300">
+                <span className="font-semibold text-slate-400">Contraintes extraites :</span>
                 {selectionDecision.classifiedProblem.constraints.map((c: string) => (
                   <span
                     key={c}
-                    className="px-2 py-0.5 text-[11px] font-medium bg-slate-200 text-slate-700 rounded-md"
+                    className="px-2 py-0.5 text-[11px] font-medium bg-slate-900 border border-slate-800 text-slate-300 rounded-md font-mono"
                   >
                     {c}
                   </span>
@@ -448,9 +552,8 @@ export function AdaptiveLLMDashboard() {
             )}
 
             {/* Selection Reasoning */}
-            <div className="text-xs text-slate-700 bg-indigo-50/50 border border-indigo-100 p-3 rounded-lg">
-              <span className="font-semibold text-indigo-900">Selection Decision Reason:</span>{' '}
-              {selectionDecision.reason}
+            <div className="text-xs text-slate-300 bg-violet-500/10 border border-violet-500/20 p-3 rounded-lg leading-relaxed">
+              <strong className="text-violet-300">Raisonnement de sélection :</strong> {selectionDecision.reason}
             </div>
           </div>
         )}

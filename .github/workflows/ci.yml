@@ -29,3 +29,6 @@ jobs:
 
       - name: Run Hermetic Unit, Integration and E2E Tests
         run: npm test
+
+      - name: Production Build
+        run: npm run build
