@@ -15,6 +15,7 @@ import {
   Settings,
   Menu,
   X,
+  Activity,
 } from 'lucide-react';
 import { AIProviderId, ProviderInfo } from '../types';
 
@@ -39,6 +40,8 @@ interface HeaderProps {
   activeProvider?: AIProviderId;
   providers?: ProviderInfo[];
   onSelectProvider?: (provider: AIProviderId, model?: string) => Promise<void>;
+  onOpenActivityCenter?: () => void;
+  activeActivitiesCount?: number;
 }
 
 interface NavCategory {
@@ -50,7 +53,6 @@ interface NavCategory {
     label: string;
     icon: React.ComponentType<{ className?: string }>;
     badge?: string;
-    pulse?: boolean;
     color?: string;
   }[];
 }
@@ -141,12 +143,14 @@ export const Header: React.FC<HeaderProps> = ({
   activeProvider = 'gemini',
   providers = [],
   onSelectProvider,
+  onOpenActivityCenter,
+  activeActivitiesCount = 0,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
-    <header className="border-b border-slate-800/80 bg-slate-950/90 backdrop-blur-md sticky top-0 z-40 transition-all">
-      {/* Top Bar: Brand + System Status Controls */}
+    <header className="border-b border-slate-800 bg-slate-950/95 backdrop-blur-md sticky top-0 z-40 transition-all">
+      {/* Top Bar: Brand + Essential System Controls */}
       <div className="max-w-7xl mx-auto px-4 lg:px-6 py-2.5 flex items-center justify-between gap-3 border-b border-slate-900">
         {/* Brand */}
         <div className="flex items-center gap-3">
@@ -163,11 +167,11 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
 
-        {/* Global Controls & Status Pill */}
+        {/* Global Controls & Status */}
         <div className="flex items-center gap-2 sm:gap-3">
           {/* Active Model Indicator */}
-          <div className="hidden md:flex items-center gap-2 bg-slate-900/80 px-2.5 py-1 rounded-lg border border-slate-800 text-xs">
-            <span className="flex h-2 w-2 relative">
+          <div className="hidden md:flex items-center gap-2 bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-800 text-xs">
+            <span className="flex h-2 w-2 relative" aria-hidden="true">
               <span
                 className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
                   isRunning ? 'bg-emerald-400' : 'bg-blue-400'
@@ -220,6 +224,22 @@ export const Header: React.FC<HeaderProps> = ({
             ))}
           </div>
 
+          {/* Activity Center Button */}
+          {onOpenActivityCenter && (
+            <button
+              type="button"
+              onClick={onOpenActivityCenter}
+              aria-label="Ouvrir le centre d'activités"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs text-slate-300 hover:text-white transition cursor-pointer"
+            >
+              <Activity className="w-3.5 h-3.5 text-violet-400" />
+              <span className="hidden sm:inline">Activités</span>
+              {activeActivitiesCount > 0 && (
+                <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
+              )}
+            </button>
+          )}
+
           {/* Mobile Menu Toggle */}
           <button
             type="button"
@@ -268,7 +288,7 @@ export const Header: React.FC<HeaderProps> = ({
                         <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse ml-0.5" />
                       )}
 
-                      {/* Optional micro badge */}
+                      {/* Micro badge */}
                       {tab.badge && !isActive && (
                         <span className="text-[9px] px-1 py-0.2 rounded bg-slate-800 text-slate-300 font-mono">
                           {tab.badge}
@@ -283,7 +303,7 @@ export const Header: React.FC<HeaderProps> = ({
         </nav>
       </div>
 
-      {/* Mobile Accordion Navigation Menu */}
+      {/* Mobile Navigation Menu */}
       {mobileMenuOpen && (
         <div className="md:hidden border-t border-slate-800 bg-slate-950 px-4 py-3 space-y-4">
           {NAV_CATEGORIES.map((category) => (
