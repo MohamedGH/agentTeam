@@ -39,6 +39,7 @@ export function workflowReducer(
   state: WorkflowState,
   action:
     | { type: 'START'; chosenModel: string; activeProvider: AIProviderId }
+    | { type: 'UPDATE_MODEL_AND_PROVIDER'; chosenModel: string; activeProvider: AIProviderId }
     | { type: 'TICK'; delta: number }
     | { type: 'ADD_STEP'; step: AgentStep }
     | { type: 'COMPLETE'; finalReport: FinalReport }
@@ -62,6 +63,14 @@ export function workflowReducer(
         errorMessage: null,
         errorDetails: null,
         hasExplicitCompletion: false,
+      };
+
+    case 'UPDATE_MODEL_AND_PROVIDER':
+      if (state.executionState === 'RUNNING') return state;
+      return {
+        ...state,
+        chosenModel: action.chosenModel,
+        activeProvider: action.activeProvider,
       };
 
     case 'TICK':
@@ -199,6 +208,10 @@ export class WorkflowStateManager {
     this.timerId = setInterval(() => {
       this.dispatch({ type: 'TICK', delta: 0.1 });
     }, 100);
+  }
+
+  public setModelAndProvider(chosenModel: string, activeProvider: AIProviderId): void {
+    this.dispatch({ type: 'UPDATE_MODEL_AND_PROVIDER', chosenModel, activeProvider });
   }
 
   public addStep(step: AgentStep): void {

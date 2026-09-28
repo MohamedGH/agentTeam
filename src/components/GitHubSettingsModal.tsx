@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   GitPullRequest,
   Key,
@@ -42,7 +42,9 @@ export const GitHubSettingsModal: React.FC = () => {
   const [isLoadingCi, setIsLoadingCi] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string; details?: string } | null>(null);
   const [lastPushResult, setLastPushResult] = useState<any>(null);
+  const [trackedSha, setTrackedSha] = useState<string | null>(null);
   const [showAdvancedConfig, setShowAdvancedConfig] = useState(false);
+  const ciPollIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const fetchStatusAndCi = async () => {
     setIsLoading(true);
@@ -52,7 +54,7 @@ export const GitHubSettingsModal: React.FC = () => {
       setStatus(data);
 
       if (data.configured) {
-        await fetchCiRuns();
+        await fetchCiForSha(trackedSha);
       }
     } catch (err: any) {
       setStatus({ configured: false, error: err.message });
@@ -61,17 +63,31 @@ export const GitHubSettingsModal: React.FC = () => {
     }
   };
 
-  const fetchCiRuns = async () => {
+  const fetchCiForSha = async (targetSha?: string | null) => {
     setIsLoadingCi(true);
     try {
-      const res = await fetch(`/api/github/ci-runs?repository=${encodeURIComponent(repoInput)}`);
+      const shaQuery = targetSha ? `&head_sha=${encodeURIComponent(targetSha)}` : '';
+      const res = await fetch(`/api/github/ci-runs?repository=${encodeURIComponent(repoInput)}${shaQuery}`);
       const data = await res.json();
-      if (data.success && data.runs && data.runs.length > 0) {
+      if (data.success) {
+        const selected = data.selectedRun || (data.runs && data.runs[0]) || null;
         setLastPushResult((prev: any) => ({
           ...prev,
-          ciRun: data.runs[0],
+          ciRun: selected,
           jobs: data.jobs || [],
         }));
+
+        // Poll continuously if workflow is queued or running
+        if (selected && (selected.status === 'in_progress' || selected.status === 'queued')) {
+          if (!ciPollIntervalRef.current) {
+            ciPollIntervalRef.current = setInterval(() => {
+              fetchCiForSha(targetSha);
+            }, 3000);
+          }
+        } else if (ciPollIntervalRef.current) {
+          clearInterval(ciPollIntervalRef.current);
+          ciPollIntervalRef.current = null;
+        }
       }
     } catch (e) {
       console.warn('Could not fetch CI runs:', e);
@@ -82,6 +98,12 @@ export const GitHubSettingsModal: React.FC = () => {
 
   useEffect(() => {
     fetchStatusAndCi();
+    return () => {
+      if (ciPollIntervalRef.current) {
+        clearInterval(ciPollIntervalRef.current);
+        ciPollIntervalRef.current = null;
+      }
+    };
   }, []);
 
   const handleSaveToken = async (e: React.FormEvent) => {
@@ -107,7 +129,7 @@ export const GitHubSettingsModal: React.FC = () => {
       });
       setStatus({ configured: true, user: data.user });
       setTokenInput('');
-      await fetchCiRuns();
+      await fetchCiForSha(trackedSha);
     } catch (err: any) {
       setFeedback({
         type: 'error',
@@ -138,16 +160,30 @@ export const GitHubSettingsModal: React.FC = () => {
         throw new Error(data.error || 'Push failed');
       }
 
-      setLastPushResult(data);
       const actualSha = data.push?.commitSha || 'N/A';
+      if (actualSha !== 'N/A') {
+        setTrackedSha(actualSha);
+      }
+      setLastPushResult({
+        push: data.push,
+        ciRun: data.ciRun,
+        jobs: data.jobs || [],
+      });
+
       setFeedback({
         type: 'success',
         message: `Push exécuté avec succès vers ${repoInput} sur la branche ${branchInput} !`,
         details: actualSha !== 'N/A' ? `Commit SHA vérifié : ${actualSha}` : undefined,
       });
 
-      // Poll CI runs after push
-      await fetchStatusAndCi();
+      // Poll CI runs specifically for the pushed SHA
+      if (actualSha !== 'N/A') {
+        setTimeout(() => {
+          fetchCiForSha(actualSha);
+        }, 1500);
+      } else {
+        await fetchStatusAndCi();
+      }
     } catch (err: any) {
       setFeedback({
         type: 'error',
@@ -287,7 +323,7 @@ export const GitHubSettingsModal: React.FC = () => {
 
           <button
             type="button"
-            onClick={fetchCiRuns}
+            onClick={() => fetchCiForSha(trackedSha)}
             disabled={isLoadingCi || !status.configured}
             className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 cursor-pointer disabled:opacity-40"
           >
@@ -298,38 +334,52 @@ export const GitHubSettingsModal: React.FC = () => {
 
         {lastPushResult?.ciRun ? (
           <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 sm:p-5 space-y-3 font-mono text-xs">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <span className="text-slate-400">
-                Workflow : <strong className="text-white">{lastPushResult.ciRun.name || 'CI Workflow'}</strong>
-              </span>
-              <span
-                className={`px-2.5 py-0.5 rounded text-[11px] font-bold ${
-                  lastPushResult.ciRun.conclusion === 'success'
-                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                    : lastPushResult.ciRun.status === 'completed'
-                    ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
-                    : 'bg-amber-500/20 text-amber-300 border border-amber-500/30 animate-pulse'
-                }`}
-              >
-                {lastPushResult.ciRun.status}{' '}
-                {lastPushResult.ciRun.conclusion ? `(${lastPushResult.ciRun.conclusion})` : '• en cours'}
-              </span>
+            {/* Visual Traceability Chain */}
+            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 pb-2 border-b border-slate-800">
+              <GitBranch className="w-3.5 h-3.5 text-blue-400" />
+              Chaîne de Traçabilité : Commit SHA → Run ID → Workflow → Statut → Conclusion
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-slate-300 bg-slate-900/60 p-3 rounded-lg border border-slate-800">
-              <div>
-                <span className="text-slate-500 block text-[10px] uppercase font-bold">Run ID GitHub :</span>
-                <span className="text-amber-400 font-bold">{lastPushResult.ciRun.id}</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5 text-slate-300">
+              <div className="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
+                <span className="text-slate-500 block text-[10px] uppercase font-bold">1. Commit SHA</span>
+                <span className="text-emerald-400 font-bold truncate block">
+                  {lastPushResult.ciRun.head_sha || lastPushResult.push?.commitSha || trackedSha || 'N/A'}
+                </span>
               </div>
-              <div>
-                <span className="text-slate-500 block text-[10px] uppercase font-bold">Commit SHA Réel :</span>
-                <span className="text-emerald-400 font-bold truncate block">{lastPushResult.ciRun.head_sha}</span>
+
+              <div className="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
+                <span className="text-slate-500 block text-[10px] uppercase font-bold">2. Run ID GitHub</span>
+                <span className="text-amber-400 font-bold">#{lastPushResult.ciRun.id}</span>
               </div>
-              <div className="sm:col-span-2">
-                <span className="text-slate-500 block text-[10px] uppercase font-bold">Message du commit :</span>
-                <span className="text-slate-200">{lastPushResult.ciRun.head_commit?.message || 'N/A'}</span>
+
+              <div className="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
+                <span className="text-slate-500 block text-[10px] uppercase font-bold">3. Workflow</span>
+                <span className="text-white font-bold truncate block">{lastPushResult.ciRun.name || 'CI Pipeline'}</span>
+              </div>
+
+              <div className="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
+                <span className="text-slate-500 block text-[10px] uppercase font-bold">4. Statut & Conclusion</span>
+                <span
+                  className={`font-bold block truncate ${
+                    lastPushResult.ciRun.conclusion === 'success'
+                      ? 'text-emerald-400'
+                      : lastPushResult.ciRun.status === 'completed'
+                      ? 'text-rose-400'
+                      : 'text-amber-400 animate-pulse'
+                  }`}
+                >
+                  {lastPushResult.ciRun.status} {lastPushResult.ciRun.conclusion ? `(${lastPushResult.ciRun.conclusion})` : '• en cours'}
+                </span>
               </div>
             </div>
+
+            {lastPushResult.ciRun.head_commit?.message && (
+              <div className="text-[11px] text-slate-400 bg-slate-900/40 p-2.5 rounded-lg border border-slate-800/60">
+                <span className="text-slate-500 font-bold uppercase text-[10px] block mb-0.5">Message du commit réel :</span>
+                <span className="text-slate-200">{lastPushResult.ciRun.head_commit.message}</span>
+              </div>
+            )}
 
             {/* Étapes du job CI */}
             {lastPushResult.jobs && lastPushResult.jobs.length > 0 && (

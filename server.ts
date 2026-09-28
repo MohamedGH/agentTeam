@@ -255,10 +255,14 @@ async function startServer() {
         return res.status(400).json({ error: 'Provider is required' });
       }
       providerManager.setActiveProvider(provider, model);
+      const effectiveProvider = providerManager.getActiveProvider();
+      const p = providerManager.getProvider(effectiveProvider);
+      const effectiveModel = model || providerManager.getModelOverride(effectiveProvider) || p.defaultModel;
       res.json({
         success: true,
-        activeProvider: providerManager.getActiveProvider(),
-        model: model || 'default',
+        activeProvider: effectiveProvider,
+        provider: effectiveProvider,
+        model: effectiveModel,
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -1014,12 +1018,11 @@ async function startServer() {
       if (!ALLOWED_REPOSITORIES.includes(repository)) {
         return res.status(403).json({
           success: false,
-          error: `Push unauthorized: repository "${repository}" is not in the allowed repositories list (${ALLOWED_REPOSITORIES.join(', ')})`,
+          error: `Push non autorisé : le dépôt "${repository}" n'est pas dans la liste des dépôts autorisés (${ALLOWED_REPOSITORIES.join(', ')})`,
         });
       }
 
       const [owner, repo] = repository.split('/');
-
       if (!token) {
         return res.status(400).json({ success: false, error: 'GitHub Token required for push' });
       }
@@ -1040,22 +1043,29 @@ async function startServer() {
         cwd: process.cwd(),
       });
 
-      // Query latest CI run if available
+      // Query CI run specifically corresponding to the pushed commitSha
       let ciRun: any = null;
+      let jobs: any[] = [];
       try {
         const client = githubManager.getClient();
-        const runsRes = await client.request<any>(`/repos/${owner}/${repo}/actions/runs?per_page=3`);
-        if (runsRes && runsRes.workflow_runs && runsRes.workflow_runs.length > 0) {
-          ciRun = runsRes.workflow_runs[0];
+        if (pushResult.commitSha) {
+          const runsRes = await client.request<any>(`/repos/${owner}/${repo}/actions/runs?per_page=15`);
+          const matched = runsRes?.workflow_runs?.find((r: any) => r.head_sha === pushResult.commitSha);
+          if (matched) {
+            ciRun = matched;
+            const jobsRes = await client.request<any>(`/repos/${owner}/${repo}/actions/runs/${matched.id}/jobs`);
+            jobs = jobsRes?.jobs || [];
+          }
         }
       } catch (ciErr) {
-        console.warn('[Server] Could not immediately fetch workflow runs:', ciErr);
+        console.warn('[Server] Could not immediately fetch workflow runs for commit:', ciErr);
       }
 
       return res.json({
         success: pushResult.pushed,
         push: pushResult,
         ciRun,
+        jobs,
       });
     } catch (err: any) {
       console.error('[Server] Push failed:', err);
@@ -1066,21 +1076,40 @@ async function startServer() {
   app.get('/api/github/ci-runs', async (req, res) => {
     try {
       const repository = ((req.query.repository as string) || 'MohamedGH/agentTeam').trim();
+
+      // Security check: restrict target repository to authorized repositories only
+      const ALLOWED_REPOSITORIES = ['MohamedGH/agentTeam'];
+      if (!ALLOWED_REPOSITORIES.includes(repository)) {
+        return res.status(403).json({
+          success: false,
+          error: `Accès non autorisé : le dépôt "${repository}" n'est pas dans la liste des dépôts autorisés (${ALLOWED_REPOSITORIES.join(', ')})`,
+        });
+      }
+
       const [owner, repo] = repository.split('/');
       const client = githubManager.getClient();
       if (!client.isConfigured()) {
         return res.status(401).json({ success: false, error: 'GitHub client not configured' });
       }
 
-      const runsRes = await client.request<any>(`/repos/${owner}/${repo}/actions/runs?per_page=5`);
-      const runs = runsRes?.workflow_runs || [];
+      const headSha = ((req.query.head_sha as string) || (req.query.sha as string) || '').trim();
+      const runsRes = await client.request<any>(`/repos/${owner}/${repo}/actions/runs?per_page=20`);
+      const allRuns = runsRes?.workflow_runs || [];
 
-      // If specific run ID requested, get its jobs too
+      // Look up specific run matching head_sha if supplied
+      let selectedRun: any = null;
+      if (headSha) {
+        selectedRun = allRuns.find((r: any) => r.head_sha === headSha) || null;
+      } else if (req.query.runId) {
+        selectedRun = allRuns.find((r: any) => String(r.id) === String(req.query.runId)) || null;
+      } else if (allRuns.length > 0) {
+        selectedRun = allRuns[0];
+      }
+
       let jobs: any[] = [];
-      const runId = req.query.runId ? String(req.query.runId) : (runs[0]?.id ? String(runs[0].id) : null);
-      if (runId) {
+      if (selectedRun?.id) {
         try {
-          const jobsRes = await client.request<any>(`/repos/${owner}/${repo}/actions/runs/${runId}/jobs`);
+          const jobsRes = await client.request<any>(`/repos/${owner}/${repo}/actions/runs/${selectedRun.id}/jobs`);
           jobs = jobsRes?.jobs || [];
         } catch (jobErr) {
           console.warn('[Server] Could not fetch run jobs:', jobErr);
@@ -1089,8 +1118,10 @@ async function startServer() {
 
       return res.json({
         success: true,
-        runs,
-        selectedRunId: runId,
+        runs: allRuns,
+        selectedRun,
+        selectedRunId: selectedRun?.id || null,
+        headShaMatched: Boolean(headSha && selectedRun),
         jobs,
       });
     } catch (err: any) {

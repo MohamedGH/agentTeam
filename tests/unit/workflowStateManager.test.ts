@@ -210,6 +210,30 @@ export async function runWorkflowStateManagerUnitTests(): Promise<void> {
     unsubscribe();
     console.log('✅ PASS: WorkflowStateManager subscriber and lifecycle work reliably');
   }
+
+  // 10. Test Model & Provider synchronization when IDLE vs RUNNING
+  {
+    const manager = new WorkflowStateManager();
+    assert.strictEqual(manager.getState().chosenModel, 'gemini-3.7-flash');
+    assert.strictEqual(manager.getState().activeProvider, 'gemini');
+
+    // Update model and provider when IDLE
+    manager.setModelAndProvider('claude-3-5-sonnet', 'anthropic');
+    assert.strictEqual(manager.getState().chosenModel, 'claude-3-5-sonnet');
+    assert.strictEqual(manager.getState().activeProvider, 'anthropic');
+
+    // Start running with this provider/model
+    manager.startExecution(manager.getState().chosenModel, manager.getState().activeProvider);
+    assert.strictEqual(manager.getState().executionState, 'RUNNING');
+
+    // Attempt to update while running should be ignored
+    manager.setModelAndProvider('deepseek-coder', 'deepseek');
+    assert.strictEqual(manager.getState().chosenModel, 'claude-3-5-sonnet');
+    assert.strictEqual(manager.getState().activeProvider, 'anthropic');
+
+    manager.cancelExecution();
+    console.log('✅ PASS: setModelAndProvider synchronizes state when IDLE and guards against mid-run changes');
+  }
 }
 
 if (import.meta.url.endsWith(process.argv[1]) || process.argv[1]?.includes('workflowStateManager')) {

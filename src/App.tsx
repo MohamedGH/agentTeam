@@ -12,9 +12,11 @@ import { AdaptiveLLMDashboard } from './components/AdaptiveLLMDashboard';
 import { GitHubSettingsModal } from './components/GitHubSettingsModal';
 import { ExecutionStatusBanner } from './components/ExecutionStatusBanner';
 import { ActionableErrorCard } from './components/ActionableErrorCard';
+import { GlobalActivityCenter } from './components/GlobalActivityCenter';
 import { AgentStep, FinalReport, AgentRole, ModelQuotaStatus, AIProviderId, ProviderInfo } from './types';
 import { routeManager, AppRoute } from './managers/routeManager';
 import { workflowStateManager } from './managers/workflowStateManager';
+import { errorManager } from './managers/errorManager';
 import { useWorkflowState } from './managers/useWorkflowState';
 import {
   Play,
@@ -120,6 +122,13 @@ export default function App() {
 
   // Quota Manager State
   const [quotaModels, setQuotaModels] = useState<Record<string, ModelQuotaStatus>>({});
+  const [isResettingQuota, setIsResettingQuota] = useState<boolean>(false);
+  const [quotaResetError, setQuotaResetError] = useState<string | null>(null);
+
+  // Global Activity Center & CI Real-Time Tracking State
+  const [isActivityCenterOpen, setIsActivityCenterOpen] = useState<boolean>(false);
+  const [latestPush, setLatestPush] = useState<{ commitSha?: string; branch?: string; timestamp?: string } | null>(null);
+  const [ciStatus, setCiStatus] = useState<{ id?: number; head_sha?: string; status?: string; conclusion?: string } | null>(null);
 
   // Load initial workspace files, quota stats, and provider catalog
   const fetchWorkspace = async () => {
@@ -148,6 +157,26 @@ export default function App() {
     }
   };
 
+  const fetchCiStatus = async () => {
+    try {
+      const res = await fetch('/api/github/ci-runs?repository=MohamedGH/agentTeam');
+      if (res.ok) {
+        const data = await res.json();
+        const activeRun = data.selectedRun || (data.runs && data.runs[0]);
+        if (activeRun) {
+          setCiStatus({
+            id: typeof activeRun.id === 'number' ? activeRun.id : Number(activeRun.id) || undefined,
+            head_sha: activeRun.head_sha,
+            status: activeRun.status,
+            conclusion: activeRun.conclusion,
+          });
+        }
+      }
+    } catch (e) {
+      // background fetch silent error
+    }
+  };
+
   const handleSelectProvider = async (providerId: AIProviderId, model?: string) => {
     try {
       const res = await fetch('/api/providers/select', {
@@ -157,13 +186,15 @@ export default function App() {
       });
       if (res.ok) {
         const data = await res.json();
-        if (data.activeModel) {
-          // Model updated
-        }
+        const effectiveProvider = (data.activeProvider || data.provider || providerId) as AIProviderId;
+        const effectiveModel = data.model || model || chosenModel;
+        workflowStateManager.setModelAndProvider(effectiveModel, effectiveProvider);
       }
+      await fetchProviders();
       await fetchQuotaStatus(selectedTier);
-    } catch (e) {
+    } catch (e: any) {
       console.warn('Failed to select provider:', e);
+      errorManager.parseError(e, 'Provider selection failure');
     }
   };
 
@@ -183,6 +214,7 @@ export default function App() {
     fetchWorkspace();
     fetchProviders();
     fetchQuotaStatus(selectedTier);
+    fetchCiStatus();
   }, [selectedTier]);
 
   // Handle aborting in-flight workflow run
@@ -341,12 +373,27 @@ export default function App() {
   };
 
   const handleResetQuota = async (model?: string) => {
-    await fetch('/api/quota/reset', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model }),
-    });
-    await fetchQuotaStatus(selectedTier);
+    setIsResettingQuota(true);
+    setQuotaResetError(null);
+    try {
+      const res = await fetch('/api/quota/reset-state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        throw new Error(data.error || 'Erreur lors de la réinitialisation du quota');
+      }
+      await fetchQuotaStatus(selectedTier, true);
+    } catch (err: any) {
+      console.error('Reset quota failed:', err);
+      setQuotaResetError(err.message || 'Échec de réinitialisation');
+      errorManager.parseError(err, 'Quota reset failure');
+      throw err;
+    } finally {
+      setIsResettingQuota(false);
+    }
   };
 
   const handleResetMission = () => {
@@ -369,6 +416,11 @@ export default function App() {
         activeProvider={activeProvider}
         providers={providers}
         onSelectProvider={handleSelectProvider}
+        onOpenActivityCenter={() => setIsActivityCenterOpen(true)}
+        activeActivitiesCount={
+          (executionState === 'RUNNING' ? 1 : 0) +
+          (ciStatus?.status === 'in_progress' || ciStatus?.status === 'queued' ? 1 : 0)
+        }
       />
 
       {/* PRIORITÉ 3: PERSISTENT STATUS BAR ACROSS OTHER SCREENS */}
@@ -722,6 +774,16 @@ export default function App() {
         {/* VIEW 8: GITHUB & CI SETTINGS */}
         {activeTab === 'github-settings' && <GitHubSettingsModal />}
       </main>
+
+      {/* Global Activity Center Modal */}
+      <GlobalActivityCenter
+        isOpen={isActivityCenterOpen}
+        onClose={() => setIsActivityCenterOpen(false)}
+        onNavigate={(tab) => handleTabChange(tab as any)}
+        workflowState={workflowState}
+        latestPush={latestPush}
+        ciStatus={ciStatus}
+      />
 
       {/* Footer */}
       <footer className="border-t border-slate-900 bg-slate-950/80 py-4 px-6 text-center text-xs text-slate-500">

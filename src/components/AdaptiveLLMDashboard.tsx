@@ -112,7 +112,7 @@ export function AdaptiveLLMDashboard() {
       if (!res.ok || data.error) {
         throw new Error(data.error || 'Erreur lors de l’analyse de routing');
       }
-      setSelectionDecision(data);
+      setSelectionDecision(data.decision || data);
     } catch (err: any) {
       setSelectionError(err.message || 'Problem routing inspection error');
       errorManager.parseError(err, 'Problem routing inspection error');
@@ -213,7 +213,7 @@ export function AdaptiveLLMDashboard() {
             </div>
             <div>
               <h3 id="current-routing-heading" className="text-sm font-bold text-white uppercase tracking-wider">
-                Routing Opérationnel Actuel (Décision Active)
+                Routage Prédictif & Décision Algorithmique
               </h3>
               <p className="text-xs text-slate-400">
                 Choix dynamique du modèle calculé en temps réel selon la consigne, les données mesurées et les contraintes.
@@ -221,12 +221,31 @@ export function AdaptiveLLMDashboard() {
             </div>
           </div>
 
-          {selectionDecision && (
-            <span className="self-start sm:self-auto px-2.5 py-1 rounded-md bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 text-[11px] font-mono font-semibold flex items-center gap-1.5">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-              Identité Vérifiée (Fail-Closed)
-            </span>
-          )}
+          {selectionDecision && (() => {
+            const verified = selectionDecision.isIdentityVerified ?? selectionDecision.proof?.isIdentityVerified;
+            if (verified === true || selectionDecision.identityStatus === 'VERIFIED') {
+              return (
+                <span className="self-start sm:self-auto px-2.5 py-1 rounded-md bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 text-[11px] font-mono font-semibold flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                  Identité : VERIFIED
+                </span>
+              );
+            }
+            if (verified === false || selectionDecision.identityStatus === 'NOT_VERIFIED') {
+              return (
+                <span className="self-start sm:self-auto px-2.5 py-1 rounded-md bg-rose-500/10 text-rose-300 border border-rose-500/30 text-[11px] font-mono font-semibold flex items-center gap-1.5">
+                  <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
+                  Identité : NOT VERIFIED
+                </span>
+              );
+            }
+            return (
+              <span className="self-start sm:self-auto px-2.5 py-1 rounded-md bg-slate-800 text-slate-400 border border-slate-700 text-[11px] font-mono font-semibold flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-slate-500" />
+                Identité : UNKNOWN (Pré-exécution)
+              </span>
+            );
+          })()}
         </div>
 
         {/* Input box for test prompt */}
@@ -322,8 +341,20 @@ export function AdaptiveLLMDashboard() {
                 <div className="text-sm font-bold text-emerald-400 font-mono">
                   {(selectionDecision.confidence * 100).toFixed(0)}%
                 </div>
-                <div className="text-[11px] text-emerald-300 mt-1 font-mono flex items-center gap-1">
-                  <ShieldCheck className="w-3 h-3 text-emerald-400 inline" /> Identité vérifiée
+                <div className="text-[11px] mt-1 font-mono flex items-center gap-1">
+                  {(selectionDecision.isIdentityVerified ?? selectionDecision.proof?.isIdentityVerified) === true ? (
+                    <span className="text-emerald-300 flex items-center gap-1">
+                      <ShieldCheck className="w-3 h-3 text-emerald-400 inline" /> Identité : VERIFIED
+                    </span>
+                  ) : (selectionDecision.isIdentityVerified ?? selectionDecision.proof?.isIdentityVerified) === false ? (
+                    <span className="text-rose-300 flex items-center gap-1">
+                      <AlertTriangle className="w-3 h-3 text-rose-400 inline" /> Identité : NOT VERIFIED
+                    </span>
+                  ) : (
+                    <span className="text-slate-400 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-slate-500 shrink-0" /> Identité : UNKNOWN
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
