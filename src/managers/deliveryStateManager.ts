@@ -39,11 +39,13 @@ export interface DeliveryState {
   ciRunId: number | null;
   ciStatus: CiStatus;
   ciConclusion: string | null;
+  ciHeadSha: string | null;
   ciRun: CiRunData | null;
   jobs: CiJob[];
   trackedSha: string | null;
   pollAttempts: number;
   isPolling: boolean;
+  updatedAt: string | null;
   lastUpdated: string | null;
 }
 
@@ -64,11 +66,13 @@ export class DeliveryStateManager {
     ciRunId: null,
     ciStatus: 'IDLE',
     ciConclusion: null,
+    ciHeadSha: null,
     ciRun: null,
     jobs: [],
     trackedSha: null,
     pollAttempts: 0,
     isPolling: false,
+    updatedAt: null,
     lastUpdated: null,
   };
 
@@ -83,9 +87,12 @@ export class DeliveryStateManager {
   }
 
   private notify(): void {
+    const now = new Date().toISOString();
     this.state = {
       ...this.state,
-      lastUpdated: new Date().toISOString(),
+      ciHeadSha: this.state.ciRun?.head_sha || null,
+      updatedAt: now,
+      lastUpdated: now,
     };
     for (const listener of this.listeners) {
       listener(this.state);

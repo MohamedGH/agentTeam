@@ -75,6 +75,16 @@ export function createLLMRoutes(authMiddleware?: RequestHandler): Router {
     }
   });
 
+  // 4b. Get latest real operational routing decision
+  router.get('/last-operational-decision', (_req: Request, res: Response) => {
+    try {
+      const decision = llmSelector.getLastOperationalDecision();
+      res.json({ success: true, decision });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to get operational decision' });
+    }
+  });
+
   // =========================================================================
   // PROTECTED MUTATION & HEAVY ORCHESTRATION ENDPOINTS (requireAuth)
   // Endpoints that execute live test suites, mutate memory, or execute system adaptations.

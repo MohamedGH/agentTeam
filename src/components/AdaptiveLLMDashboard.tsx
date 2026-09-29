@@ -72,8 +72,10 @@ export function AdaptiveLLMDashboard() {
     'Optimize the PostgreSQL connection pool in src/db.ts, prevent SQL injection vulnerabilities, and implement pure functions without external libraries.'
   );
   const [isSelecting, setIsSelecting] = useState<boolean>(false);
-  const [selectionDecision, setSelectionDecision] = useState<any | null>(null);
+  const [inspectionDecision, setInspectionDecision] = useState<any | null>(null);
   const [selectionError, setSelectionError] = useState<string | null>(null);
+  const [operationalDecision, setOperationalDecision] = useState<any | null>(null);
+  const [isLoadingOperational, setIsLoadingOperational] = useState<boolean>(true);
 
   const fetchAdaptiveData = async () => {
     setIsLoading(true);
@@ -97,6 +99,23 @@ export function AdaptiveLLMDashboard() {
     }
   };
 
+  const fetchOperationalDecision = async () => {
+    setIsLoadingOperational(true);
+    try {
+      const res = await fetch('/api/llm/last-operational-decision');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.decision) {
+          setOperationalDecision(data.decision);
+        }
+      }
+    } catch (err) {
+      console.warn('[AdaptiveLLMDashboard] Could not fetch operational decision:', err);
+    } finally {
+      setIsLoadingOperational(false);
+    }
+  };
+
   const handleInspectRouting = async (promptToRoute?: string) => {
     const targetPrompt = (promptToRoute || inspectorPrompt).trim();
     if (!targetPrompt) return;
@@ -112,7 +131,7 @@ export function AdaptiveLLMDashboard() {
       if (!res.ok || data.error) {
         throw new Error(data.error || 'Erreur lors de l’analyse de routing');
       }
-      setSelectionDecision(data.decision || data);
+      setInspectionDecision(data.decision || data);
     } catch (err: any) {
       setSelectionError(err.message || 'Problem routing inspection error');
       errorManager.parseError(err, 'Problem routing inspection error');
@@ -123,8 +142,7 @@ export function AdaptiveLLMDashboard() {
 
   useEffect(() => {
     fetchAdaptiveData();
-    // Pre-populate with current operational routing decision
-    handleInspectRouting();
+    fetchOperationalDecision();
   }, []);
 
   const handleRunHermeticBenchmark = async () => {
@@ -204,26 +222,26 @@ export function AdaptiveLLMDashboard() {
         </div>
       </div>
 
-      {/* 2. PRIORITÉ 5 — PREMIÈRE INFORMATION VISIBLE : RÉSUMÉ "ROUTING ACTUEL" */}
-      <section aria-labelledby="current-routing-heading" className="bg-slate-900 border border-violet-500/30 rounded-2xl p-5 sm:p-6 shadow-xl space-y-4 relative overflow-hidden">
+      {/* 2. SECTION 1 : DERNIÈRE DÉCISION OPÉRATIONNELLE */}
+      <section aria-labelledby="operational-routing-heading" className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xl space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
           <div className="flex items-center gap-2.5">
-            <div className="p-1.5 rounded-lg bg-violet-500/20 text-violet-300 border border-violet-500/30">
+            <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
               <Workflow className="w-4 h-4" />
             </div>
             <div>
-              <h3 id="current-routing-heading" className="text-sm font-bold text-white uppercase tracking-wider">
-                Routage Prédictif & Décision Algorithmique
+              <h3 id="operational-routing-heading" className="text-sm font-bold text-white uppercase tracking-wider">
+                Dernière Décision Opérationnelle
               </h3>
               <p className="text-xs text-slate-400">
-                Choix dynamique du modèle calculé en temps réel selon la consigne, les données mesurées et les contraintes.
+                Décision réelle issue de l'exécution en conditions réelles par l'orchestrateur de workflow.
               </p>
             </div>
           </div>
 
-          {selectionDecision && (() => {
-            const verified = selectionDecision.isIdentityVerified ?? selectionDecision.proof?.isIdentityVerified;
-            if (verified === true || selectionDecision.identityStatus === 'VERIFIED') {
+          {operationalDecision && (() => {
+            const verified = operationalDecision.isIdentityVerified ?? operationalDecision.proof?.isIdentityVerified;
+            if (verified === true || operationalDecision.identityStatus === 'VERIFIED') {
               return (
                 <span className="self-start sm:self-auto px-2.5 py-1 rounded-md bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 text-[11px] font-mono font-semibold flex items-center gap-1.5">
                   <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
@@ -231,7 +249,7 @@ export function AdaptiveLLMDashboard() {
                 </span>
               );
             }
-            if (verified === false || selectionDecision.identityStatus === 'NOT_VERIFIED') {
+            if (verified === false || operationalDecision.identityStatus === 'NOT_VERIFIED') {
               return (
                 <span className="self-start sm:self-auto px-2.5 py-1 rounded-md bg-rose-500/10 text-rose-300 border border-rose-500/30 text-[11px] font-mono font-semibold flex items-center gap-1.5">
                   <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
@@ -242,7 +260,126 @@ export function AdaptiveLLMDashboard() {
             return (
               <span className="self-start sm:self-auto px-2.5 py-1 rounded-md bg-slate-800 text-slate-400 border border-slate-700 text-[11px] font-mono font-semibold flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-slate-500" />
-                Identité : UNKNOWN (Pré-exécution)
+                Identité : UNKNOWN
+              </span>
+            );
+          })()}
+        </div>
+
+        {operationalDecision ? (
+          <div className="space-y-3.5">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+              <div className="p-3 bg-slate-950/80 border border-slate-800 rounded-xl">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                  Modèle Sélectionné
+                </span>
+                <div className="text-sm font-bold text-emerald-400 font-mono truncate">
+                  {operationalDecision.selectedModelId}
+                </div>
+                <div className="text-[11px] text-slate-400 mt-1 uppercase font-mono">
+                  {operationalDecision.decisionType}
+                </div>
+              </div>
+
+              <div className="p-3 bg-slate-950/80 border border-slate-800 rounded-xl">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                  Provider
+                </span>
+                <div className="text-sm font-bold text-blue-400 uppercase font-mono">
+                  {operationalDecision.selectedProviderId}
+                </div>
+                <div className="text-[11px] text-slate-400 mt-1">Multi-fournisseurs actif</div>
+              </div>
+
+              <div className="p-3 bg-slate-950/80 border border-slate-800 rounded-xl">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                  Catégorie & Complexité
+                </span>
+                <div className="text-xs font-bold text-slate-100 truncate">
+                  {operationalDecision.classifiedProblem?.category}
+                </div>
+                <div className="text-[11px] text-violet-400 mt-1 font-mono font-semibold">
+                  Complexité : {operationalDecision.classifiedProblem?.complexity || 'MEDIUM'}
+                </div>
+              </div>
+
+              <div className="p-3 bg-slate-950/80 border border-slate-800 rounded-xl">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                  Confiance & Sécurité
+                </span>
+                <div className="text-sm font-bold text-emerald-400 font-mono">
+                  {typeof operationalDecision.confidence === 'number'
+                    ? `${(operationalDecision.confidence * 100).toFixed(0)}%`
+                    : '100%'}
+                </div>
+                <div className="text-[11px] text-slate-400 mt-1 font-mono">
+                  Invariants vérifiés
+                </div>
+              </div>
+            </div>
+
+            {operationalDecision.reason && (
+              <div className="p-3.5 bg-slate-950/60 border border-slate-800 rounded-xl text-xs text-slate-300 leading-relaxed">
+                <strong className="text-slate-400 font-semibold block mb-1">Justification opérationnelle :</strong>
+                <span>{operationalDecision.reason}</span>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="p-5 text-center text-xs text-slate-400 bg-slate-950/40 rounded-xl border border-slate-800/80">
+            {isLoadingOperational ? (
+              <div className="flex items-center justify-center gap-2 text-slate-400">
+                <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
+                <span>Recherche de la dernière décision opérationnelle...</span>
+              </div>
+            ) : (
+              <p>
+                Aucune décision opérationnelle enregistrée pour le moment. Exécutez un workflow AgentTeam pour observer une sélection réelle de modèle.
+              </p>
+            )}
+          </div>
+        )}
+      </section>
+
+      {/* 3. SECTION 2 : INSPECTION DE ROUTAGE (TEST & SIMULATION) */}
+      <section aria-labelledby="inspection-routing-heading" className="bg-slate-900 border border-violet-500/30 rounded-2xl p-5 sm:p-6 shadow-xl space-y-4 relative overflow-hidden">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="p-1.5 rounded-lg bg-violet-500/20 text-violet-300 border border-violet-500/30">
+              <Search className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 id="inspection-routing-heading" className="text-sm font-bold text-white uppercase tracking-wider">
+                Inspection de Routage
+              </h3>
+              <p className="text-xs text-slate-400">
+                Évaluez interactivement la décision algorithmique projetée selon la consigne, les données mesurées et les contraintes.
+              </p>
+            </div>
+          </div>
+
+          {inspectionDecision && (() => {
+            const verified = inspectionDecision.isIdentityVerified ?? inspectionDecision.proof?.isIdentityVerified;
+            if (verified === true || inspectionDecision.identityStatus === 'VERIFIED') {
+              return (
+                <span className="self-start sm:self-auto px-2.5 py-1 rounded-md bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 text-[11px] font-mono font-semibold flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                  Identité : VERIFIED
+                </span>
+              );
+            }
+            if (verified === false || inspectionDecision.identityStatus === 'NOT_VERIFIED') {
+              return (
+                <span className="self-start sm:self-auto px-2.5 py-1 rounded-md bg-rose-500/10 text-rose-300 border border-rose-500/30 text-[11px] font-mono font-semibold flex items-center gap-1.5">
+                  <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
+                  Identité : NOT VERIFIED
+                </span>
+              );
+            }
+            return (
+              <span className="self-start sm:self-auto px-2.5 py-1 rounded-md bg-slate-800 text-slate-400 border border-slate-700 text-[11px] font-mono font-semibold flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-slate-500" />
+                Identité : UNKNOWN
               </span>
             );
           })()}
@@ -293,7 +430,7 @@ export function AdaptiveLLMDashboard() {
         )}
 
         {/* Structured Current Routing Cards */}
-        {selectionDecision ? (
+        {inspectionDecision ? (
           <div className="space-y-3.5 pt-2">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
               {/* Modèle sélectionné */}
@@ -302,10 +439,10 @@ export function AdaptiveLLMDashboard() {
                   Modèle Sélectionné
                 </span>
                 <div className="text-sm font-bold text-emerald-400 font-mono truncate">
-                  {selectionDecision.selectedModelId}
+                  {inspectionDecision.selectedModelId}
                 </div>
                 <div className="text-[11px] text-slate-400 mt-1 uppercase font-mono">
-                  {selectionDecision.decisionType}
+                  {inspectionDecision.decisionType}
                 </div>
               </div>
 
@@ -315,7 +452,7 @@ export function AdaptiveLLMDashboard() {
                   Provider
                 </span>
                 <div className="text-sm font-bold text-blue-400 uppercase font-mono">
-                  {selectionDecision.selectedProviderId}
+                  {inspectionDecision.selectedProviderId}
                 </div>
                 <div className="text-[11px] text-slate-400 mt-1">Multi-fournisseurs actif</div>
               </div>
@@ -326,10 +463,10 @@ export function AdaptiveLLMDashboard() {
                   Catégorie & Complexité
                 </span>
                 <div className="text-xs font-bold text-slate-100 truncate">
-                  {selectionDecision.classifiedProblem?.category}
+                  {inspectionDecision.classifiedProblem?.category}
                 </div>
                 <div className="text-[11px] text-violet-400 mt-1 font-mono font-semibold">
-                  Complexité : {selectionDecision.classifiedProblem?.complexity || 'MEDIUM'}
+                  Complexité : {inspectionDecision.classifiedProblem?.complexity || 'MEDIUM'}
                 </div>
               </div>
 
@@ -339,14 +476,14 @@ export function AdaptiveLLMDashboard() {
                   Confiance & Sécurité
                 </span>
                 <div className="text-sm font-bold text-emerald-400 font-mono">
-                  {(selectionDecision.confidence * 100).toFixed(0)}%
+                  {(inspectionDecision.confidence * 100).toFixed(0)}%
                 </div>
                 <div className="text-[11px] mt-1 font-mono flex items-center gap-1">
-                  {(selectionDecision.isIdentityVerified ?? selectionDecision.proof?.isIdentityVerified) === true ? (
+                  {(inspectionDecision.isIdentityVerified ?? inspectionDecision.proof?.isIdentityVerified) === true ? (
                     <span className="text-emerald-300 flex items-center gap-1">
                       <ShieldCheck className="w-3 h-3 text-emerald-400 inline" /> Identité : VERIFIED
                     </span>
-                  ) : (selectionDecision.isIdentityVerified ?? selectionDecision.proof?.isIdentityVerified) === false ? (
+                  ) : (inspectionDecision.isIdentityVerified ?? inspectionDecision.proof?.isIdentityVerified) === false ? (
                     <span className="text-rose-300 flex items-center gap-1">
                       <AlertTriangle className="w-3 h-3 text-rose-400 inline" /> Identité : NOT VERIFIED
                     </span>
@@ -360,13 +497,13 @@ export function AdaptiveLLMDashboard() {
             </div>
 
             {/* Contraintes respectées */}
-            {selectionDecision.classifiedProblem?.constraints?.length > 0 && (
+            {inspectionDecision.classifiedProblem?.constraints?.length > 0 && (
               <div className="p-3 bg-slate-950/80 border border-slate-800 rounded-xl flex items-center gap-2 flex-wrap text-xs">
                 <span className="font-semibold text-slate-400 flex items-center gap-1">
                   <CheckSquare className="w-3.5 h-3.5 text-blue-400" />
                   Contraintes respectées :
                 </span>
-                {selectionDecision.classifiedProblem.constraints.map((c: string) => (
+                {inspectionDecision.classifiedProblem.constraints.map((c: string) => (
                   <span
                     key={c}
                     className="px-2 py-0.5 text-[11px] font-medium bg-slate-900 border border-slate-800 text-slate-200 rounded font-mono"
@@ -379,14 +516,13 @@ export function AdaptiveLLMDashboard() {
 
             {/* Raison de sélection */}
             <div className="p-3.5 bg-violet-950/20 border border-violet-500/30 rounded-xl text-xs text-slate-200 leading-relaxed">
-              <strong className="text-violet-300 font-semibold block mb-1">Raison de sélection :</strong>
-              <span>{selectionDecision.reason}</span>
+              <strong className="text-violet-300 font-semibold block mb-1">Raison de sélection simulée :</strong>
+              <span>{inspectionDecision.reason}</span>
             </div>
           </div>
         ) : (
-          <div className="p-6 text-center text-xs text-slate-400 bg-slate-950/60 rounded-xl border border-slate-800">
-            <Loader2 className="w-4 h-4 animate-spin mx-auto mb-2 text-violet-400" />
-            Chargement de la décision de routage opérationnelle...
+          <div className="p-5 text-center text-xs text-slate-500 bg-slate-950/30 rounded-xl border border-slate-800/60">
+            Saisissez une consigne ou utilisez l'exemple ci-dessus, puis cliquez sur « Évaluer décision » pour tester la sélection algorithmique.
           </div>
         )}
       </section>

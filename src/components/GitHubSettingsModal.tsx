@@ -267,13 +267,68 @@ export const GitHubSettingsModal: React.FC = () => {
           </button>
         </div>
 
-        {/* SHA fourni + run trouvé */}
-        {delivery.ciRun ? (
+        {/* Visual Progress Stepper after Push */}
+        {delivery.commitSha && (
+          <div className="bg-slate-950/90 border border-slate-800 rounded-xl p-3 flex items-center gap-2 overflow-x-auto text-[11px] font-mono">
+            <span className="text-slate-400 shrink-0 font-sans font-semibold">Chaîne livraison :</span>
+            <span className="px-2 py-0.5 rounded bg-slate-900 text-blue-300 border border-slate-800 font-bold shrink-0">
+              Commit {delivery.commitSha.slice(0, 7)}
+            </span>
+            <span className="text-slate-600 shrink-0">→</span>
+            <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold shrink-0">
+              Push terminé
+            </span>
+            <span className="text-slate-600 shrink-0">→</span>
+            {delivery.ciRunId && delivery.ciHeadSha === delivery.commitSha ? (
+              <>
+                <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20 font-bold shrink-0">
+                  CI #{delivery.ciRunId}
+                </span>
+                <span className="text-slate-600 shrink-0">→</span>
+                <span
+                  className={`px-2 py-0.5 rounded font-bold shrink-0 ${
+                    delivery.ciStatus === 'COMPLETED'
+                      ? delivery.ciConclusion === 'success'
+                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                        : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                      : 'bg-blue-500/10 text-blue-300 border border-blue-500/20 animate-pulse'
+                  }`}
+                >
+                  {delivery.ciStatus === 'COMPLETED'
+                    ? delivery.ciConclusion === 'success'
+                      ? 'CI réussi'
+                      : 'CI échoué'
+                    : delivery.ciStatus === 'RUNNING'
+                    ? 'Tests en cours'
+                    : 'CI en attente'}
+                </span>
+              </>
+            ) : delivery.ciStatus === 'NOT_FOUND' ? (
+              <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700 shrink-0">
+                CI non détectée pour ce commit
+              </span>
+            ) : (
+              <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20 animate-pulse font-bold shrink-0">
+                CI en attente de création du workflow
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* SHA fourni + run trouvé avec vérification head_sha === trackedSha */}
+        {delivery.ciRun && (!delivery.trackedSha || delivery.ciRun.head_sha === delivery.trackedSha) ? (
           <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 sm:p-5 space-y-3 font-mono text-xs">
             {/* Visual Traceability Chain */}
-            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 pb-2 border-b border-slate-800">
-              <GitBranch className="w-3.5 h-3.5 text-blue-400" />
-              Chaîne de Traçabilité : Commit SHA → Run ID → Workflow → Statut → Conclusion
+            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between pb-2 border-b border-slate-800">
+              <div className="flex items-center gap-1.5">
+                <GitBranch className="w-3.5 h-3.5 text-blue-400" />
+                Chaîne de Traçabilité : Commit SHA → Run ID → Workflow → Statut → Conclusion
+              </div>
+              {!delivery.trackedSha && (
+                <span className="text-[10px] text-slate-500 font-sans">
+                  (Dernier run global du dépôt)
+                </span>
+              )}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5 text-slate-300">
@@ -362,32 +417,32 @@ export const GitHubSettingsModal: React.FC = () => {
               </div>
             )}
           </div>
-        ) : delivery.trackedSha && delivery.ciStatus === 'QUEUED' ? (
-          /* SHA fourni + run non encore créé */
-          <div className="bg-slate-950/80 border border-amber-500/30 rounded-xl p-5 text-center text-xs space-y-2">
-            <div className="flex items-center justify-center gap-2 text-amber-300 font-bold font-mono">
-              <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
-              <span>CI en attente de création</span>
-            </div>
-            <p className="text-slate-400 font-mono text-[11px]">
-              Commit ciblé : <span className="text-emerald-400 font-semibold">{delivery.trackedSha}</span>
-            </p>
-            <p className="text-slate-500 text-[11px]">
-              Vérification automatique en cours (tentative {delivery.pollAttempts}/20)...
-            </p>
-          </div>
         ) : delivery.trackedSha && delivery.ciStatus === 'NOT_FOUND' ? (
           /* SHA fourni + aucun run après les tentatives */
           <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-5 text-center text-xs space-y-2">
             <div className="flex items-center justify-center gap-2 text-slate-300 font-semibold">
               <AlertTriangle className="w-4 h-4 text-amber-400" />
-              <span>Aucune CI associée détectée pour ce commit</span>
+              <span>CI non détectée pour ce commit</span>
             </div>
             <p className="text-slate-500 font-mono text-[11px]">
               SHA recherché : <span className="text-slate-400">{delivery.trackedSha}</span>
             </p>
             <p className="text-slate-500 text-[11px]">
-              Aucun workflow GitHub Actions n'a été déclenché pour ce commit précis.
+              Aucun workflow GitHub Actions n'a été déclenché pour ce commit précis après {delivery.pollAttempts} vérifications (arrêt automatique).
+            </p>
+          </div>
+        ) : delivery.trackedSha ? (
+          /* SHA fourni + run non encore créé */
+          <div className="bg-slate-950/80 border border-amber-500/30 rounded-xl p-5 text-center text-xs space-y-2">
+            <div className="flex items-center justify-center gap-2 text-amber-300 font-bold font-mono">
+              <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
+              <span>CI en attente de création du workflow</span>
+            </div>
+            <p className="text-slate-400 font-mono text-[11px]">
+              Commit ciblé : <span className="text-emerald-400 font-semibold">{delivery.trackedSha}</span>
+            </p>
+            <p className="text-slate-500 text-[11px]">
+              Vérification automatique en cours (tentative {delivery.pollAttempts}/20 · polling 3s)...
             </p>
           </div>
         ) : (

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Activity,
   X,
@@ -16,6 +16,7 @@ import {
   AlertTriangle,
   HelpCircle,
   Loader2,
+  Square,
 } from 'lucide-react';
 import { AppRoute } from '../managers/routeManager';
 import { useWorkflowState } from '../managers/useWorkflowState';
@@ -27,7 +28,7 @@ export interface ActivityItem {
   id: string;
   category: string;
   name: string;
-  status: 'RUNNING' | 'QUEUED' | 'COMPLETED' | 'FAILED' | 'ROLLED_BACK' | 'HALTED_GATE' | 'NOT_FOUND' | 'IDLE' | 'UNKNOWN';
+  status: 'RUNNING' | 'QUEUED' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'ROLLED_BACK' | 'HALTED_GATE' | 'NOT_FOUND' | 'IDLE' | 'UNKNOWN';
   progressText?: string;
   detailText?: string;
   duration?: string;
@@ -54,6 +55,29 @@ export const GlobalActivityCenter: React.FC<GlobalActivityCenterProps> = ({
   const delivery = useDeliveryState();
   const jules = useJulesState();
 
+  const [operationalDecision, setOperationalDecision] = useState<any | null>(null);
+  const [secondsAgo, setSecondsAgo] = useState<number>(0);
+
+  useEffect(() => {
+    fetch('/api/llm/last-operational-decision')
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.success && d.decision) {
+          setOperationalDecision(d.decision);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Update sync elapsed time every second
+  useEffect(() => {
+    const start = Date.now();
+    const timer = setInterval(() => {
+      setSecondsAgo(Math.floor((Date.now() - start) / 1000));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [delivery.updatedAt]);
+
   // 1. Workflow AgentTeam Activity Item
   const workflowItem: ActivityItem = {
     id: 'agent-workflow',
@@ -66,6 +90,8 @@ export const GlobalActivityCenter: React.FC<GlobalActivityCenterProps> = ({
         ? 'COMPLETED'
         : workflow.executionState === 'FAILED'
         ? 'FAILED'
+        : workflow.executionState === 'CANCELLED'
+        ? 'CANCELLED'
         : 'IDLE',
     progressText:
       workflow.executionState === 'RUNNING'
@@ -82,6 +108,8 @@ export const GlobalActivityCenter: React.FC<GlobalActivityCenterProps> = ({
         ? `Tests : ${workflow.finalReport?.tests || 'PASS'} · Review : ${workflow.finalReport?.review || 'APPROVED'}`
         : workflow.executionState === 'FAILED'
         ? workflow.errorMessage || 'Erreur d’exécution'
+        : workflow.executionState === 'CANCELLED'
+        ? 'Exécution arrêtée par l’utilisateur'
         : `Modèle : ${workflow.chosenModel} (${workflow.activeProvider.toUpperCase()})`,
     route: 'studio',
     icon: Sparkles,
@@ -96,14 +124,14 @@ export const GlobalActivityCenter: React.FC<GlobalActivityCenterProps> = ({
         name: 'Self-Improvement Autonomous Loop',
         status: 'RUNNING',
         progressText: `Phase ${selfImprovement.currentCycle?.currentPhase || selfImprovement.activePhase || 'OBSERVE'}`,
-        detailText: `Cycle #${selfImprovement.currentCycle?.id ? selfImprovement.currentCycle.id.slice(0, 8) : '1'}`,
+        detailText: `Cycle #${selfImprovement.currentCycle?.id ? selfImprovement.currentCycle.id.slice(0, 8) : '1'} en cours`,
         route: 'auto-improve',
         icon: Cpu,
       };
     }
     if (selfImprovement.currentCycle) {
       const cycle = selfImprovement.currentCycle;
-      const status =
+      const status: ActivityItem['status'] =
         cycle.status === 'COMPLETED'
           ? 'COMPLETED'
           : cycle.status === 'ROLLED_BACK'
@@ -146,6 +174,7 @@ export const GlobalActivityCenter: React.FC<GlobalActivityCenterProps> = ({
         category: 'DELIVERY',
         name: 'Git Delivery (Push)',
         status: 'RUNNING',
+        progressText: 'Push en cours',
         detailText: `Envoi vers ${delivery.repository} sur ${delivery.branch}...`,
         route: 'github-settings',
         icon: GitBranch,
@@ -157,8 +186,10 @@ export const GlobalActivityCenter: React.FC<GlobalActivityCenterProps> = ({
         category: 'DELIVERY',
         name: 'Git Delivery (Push)',
         status: 'COMPLETED',
-        progressText: delivery.commitSha ? delivery.commitSha.slice(0, 7) : undefined,
-        detailText: `Commit ${delivery.commitSha ? delivery.commitSha.slice(0, 7) : 'récent'} sur ${delivery.branch}`,
+        progressText: delivery.commitSha ? `Commit ${delivery.commitSha.slice(0, 7)}` : 'Validé',
+        detailText: delivery.commitSha
+          ? `Push terminé · Commit ${delivery.commitSha.slice(0, 7)} sur ${delivery.branch}`
+          : `Push terminé sur ${delivery.branch}`,
         route: 'github-settings',
         icon: GitBranch,
       };
@@ -179,7 +210,7 @@ export const GlobalActivityCenter: React.FC<GlobalActivityCenterProps> = ({
       category: 'DELIVERY',
       name: 'Git Delivery (Push)',
       status: 'IDLE',
-      detailText: `Prêt pour push vers branche ${delivery.branch}`,
+      detailText: `Prêt pour push vers ${delivery.repository} (${delivery.branch})`,
       route: 'github-settings',
       icon: GitBranch,
     };
@@ -187,73 +218,96 @@ export const GlobalActivityCenter: React.FC<GlobalActivityCenterProps> = ({
 
   // 4. GitHub Actions (CI) Activity Item
   const ciWorkflowItem: ActivityItem = (() => {
-    if (delivery.ciStatus === 'RUNNING') {
-      return {
-        id: 'ci-workflow',
-        category: 'DELIVERY',
-        name: 'GitHub CI Actions',
-        status: 'RUNNING',
-        progressText: delivery.ciRunId ? `Run #${delivery.ciRunId}` : undefined,
-        detailText: delivery.trackedSha
-          ? `Commit ${delivery.trackedSha.slice(0, 7)} · En cours`
-          : 'Tests & build CI en cours',
-        route: 'github-settings',
-        icon: Layers,
-      };
-    }
-    if (delivery.ciStatus === 'QUEUED') {
+    if (delivery.trackedSha) {
+      const isMatched = delivery.ciRun && delivery.ciRun.head_sha === delivery.trackedSha;
+
+      if (isMatched && delivery.ciRun) {
+        if (delivery.ciStatus === 'COMPLETED') {
+          const isSuccess = delivery.ciConclusion === 'success';
+          return {
+            id: 'ci-workflow',
+            category: 'DELIVERY',
+            name: 'GitHub CI Actions',
+            status: isSuccess ? 'COMPLETED' : 'FAILED',
+            progressText: `Run #${delivery.ciRun.id} · ${delivery.trackedSha.slice(0, 7)}`,
+            detailText: `CI ${isSuccess ? 'réussie' : 'échouée'} (${delivery.ciConclusion || 'completed'}) · ${delivery.ciRun.name || 'Pipeline'}${delivery.jobs?.[0] ? ` · Job: ${delivery.jobs[0].name}` : ''}`,
+            route: 'github-settings',
+            icon: Layers,
+          };
+        }
+        if (delivery.ciStatus === 'RUNNING') {
+          return {
+            id: 'ci-workflow',
+            category: 'DELIVERY',
+            name: 'GitHub CI Actions',
+            status: 'RUNNING',
+            progressText: `Run #${delivery.ciRun.id} · ${delivery.trackedSha.slice(0, 7)}`,
+            detailText: delivery.jobs?.[0] ? `Job: ${delivery.jobs[0].name} (${delivery.jobs[0].status})` : 'Workflow détecté — démarrage…',
+            route: 'github-settings',
+            icon: Layers,
+          };
+        }
+        // QUEUED
+        return {
+          id: 'ci-workflow',
+          category: 'DELIVERY',
+          name: 'GitHub CI Actions',
+          status: 'QUEUED',
+          progressText: `Run #${delivery.ciRun.id} · ${delivery.trackedSha.slice(0, 7)}`,
+          detailText: 'Workflow détecté — démarrage…',
+          route: 'github-settings',
+          icon: Layers,
+        };
+      }
+
+      if (delivery.ciStatus === 'NOT_FOUND') {
+        return {
+          id: 'ci-workflow',
+          category: 'DELIVERY',
+          name: 'GitHub CI Actions',
+          status: 'NOT_FOUND',
+          progressText: delivery.trackedSha.slice(0, 7),
+          detailText: `CI non détectée pour ce commit (${delivery.pollAttempts} tentatives)`,
+          route: 'github-settings',
+          icon: Layers,
+        };
+      }
+
+      // Waiting for workflow creation
       return {
         id: 'ci-workflow',
         category: 'DELIVERY',
         name: 'GitHub CI Actions',
         status: 'QUEUED',
-        progressText: delivery.trackedSha ? `Commit ${delivery.trackedSha.slice(0, 7)}` : undefined,
-        detailText: 'CI en attente de création',
+        progressText: delivery.trackedSha.slice(0, 7),
+        detailText: `En attente du workflow GitHub… (tentative ${delivery.pollAttempts}/20)`,
         route: 'github-settings',
         icon: Layers,
       };
     }
-    if (delivery.ciStatus === 'COMPLETED') {
+
+    // No tracked SHA, check latest general run if available
+    if (delivery.ciRun) {
+      const isCompleted = delivery.ciRun.status === 'completed';
+      const isSuccess = delivery.ciRun.conclusion === 'success';
       return {
         id: 'ci-workflow',
         category: 'DELIVERY',
         name: 'GitHub CI Actions',
-        status: delivery.ciConclusion === 'success' ? 'COMPLETED' : 'FAILED',
-        progressText: delivery.ciRunId ? `Run #${delivery.ciRunId}` : undefined,
-        detailText: delivery.ciConclusion ? `Conclusion : ${delivery.ciConclusion.toUpperCase()}` : 'Pipeline terminé',
+        status: isCompleted ? (isSuccess ? 'COMPLETED' : 'FAILED') : delivery.ciRun.status === 'in_progress' ? 'RUNNING' : 'QUEUED',
+        progressText: `Run #${delivery.ciRun.id} · ${delivery.ciRun.head_sha.slice(0, 7)}`,
+        detailText: `Dernier workflow global · ${delivery.ciRun.name || 'CI'} (${delivery.ciRun.status})`,
         route: 'github-settings',
         icon: Layers,
       };
     }
-    if (delivery.ciStatus === 'NOT_FOUND') {
-      return {
-        id: 'ci-workflow',
-        category: 'DELIVERY',
-        name: 'GitHub CI Actions',
-        status: 'NOT_FOUND',
-        progressText: delivery.trackedSha ? `Commit ${delivery.trackedSha.slice(0, 7)}` : undefined,
-        detailText: 'Aucune CI associée détectée pour ce commit',
-        route: 'github-settings',
-        icon: Layers,
-      };
-    }
-    if (delivery.ciStatus === 'UNKNOWN') {
-      return {
-        id: 'ci-workflow',
-        category: 'DELIVERY',
-        name: 'GitHub CI Actions',
-        status: 'UNKNOWN',
-        detailText: 'Statut de CI non synchronisé',
-        route: 'github-settings',
-        icon: Layers,
-      };
-    }
+
     return {
       id: 'ci-workflow',
       category: 'DELIVERY',
       name: 'GitHub CI Actions',
       status: 'IDLE',
-      detailText: 'Surveillance des builds et tests distants',
+      detailText: 'En attente d’un commit pour suivi CI',
       route: 'github-settings',
       icon: Layers,
     };
@@ -262,6 +316,7 @@ export const GlobalActivityCenter: React.FC<GlobalActivityCenterProps> = ({
   // 5. Google Jules Cloud Agent Activity Item
   const isJulesActive =
     jules.isStartingSession ||
+    jules.isFetching ||
     Boolean(jules.activeSession && ['IN_PROGRESS', 'QUEUED', 'PLANNING'].includes(jules.activeSession.state));
 
   const julesItem: ActivityItem = (() => {
@@ -272,7 +327,7 @@ export const GlobalActivityCenter: React.FC<GlobalActivityCenterProps> = ({
         name: 'Google Jules Coding Agent',
         status: 'RUNNING',
         progressText: jules.activeSession?.id ? `Session #${jules.activeSession.id.slice(0, 8)}` : undefined,
-        detailText: `Activité : ${jules.activities[jules.activities.length - 1]?.description || 'En cours'}`,
+        detailText: `Activité : ${jules.activities[jules.activities.length - 1]?.description || 'En cours d’exécution'}`,
         route: 'jules',
         icon: GitPullRequest,
       };
@@ -284,7 +339,7 @@ export const GlobalActivityCenter: React.FC<GlobalActivityCenterProps> = ({
         name: 'Google Jules Coding Agent',
         status: 'COMPLETED',
         progressText: 'PR GitHub créée',
-        detailText: jules.activeSession.prUrl ? `PR : ${jules.activeSession.prUrl}` : 'Tâche terminée',
+        detailText: jules.activeSession.prUrl ? `PR : ${jules.activeSession.prUrl}` : 'Tâche terminée avec succès',
         route: 'jules',
         icon: GitPullRequest,
       };
@@ -296,6 +351,17 @@ export const GlobalActivityCenter: React.FC<GlobalActivityCenterProps> = ({
         name: 'Google Jules Coding Agent',
         status: 'FAILED',
         detailText: jules.error?.message || 'Session interrompue',
+        route: 'jules',
+        icon: GitPullRequest,
+      };
+    }
+    if (jules.error) {
+      return {
+        id: 'jules-agent',
+        category: 'BUILD',
+        name: 'Google Jules Coding Agent',
+        status: 'FAILED',
+        detailText: jules.error.message || 'Erreur Jules',
         route: 'jules',
         icon: GitPullRequest,
       };
@@ -312,15 +378,26 @@ export const GlobalActivityCenter: React.FC<GlobalActivityCenterProps> = ({
   })();
 
   // 6. Adaptive Multi-LLM Routing Activity Item
-  const adaptiveItem: ActivityItem = {
-    id: 'adaptive-routing',
-    category: 'INTELLIGENCE',
-    name: 'Routage Adaptatif & Benchmarks',
-    status: 'IDLE',
-    detailText: 'Sélection bayésienne sous contraintes strictes',
-    route: 'adaptive-llm',
-    icon: Brain,
-  };
+  const adaptiveItem: ActivityItem = operationalDecision
+    ? {
+        id: 'adaptive-routing',
+        category: 'INTELLIGENCE',
+        name: 'Routage Adaptatif Multi-LLM',
+        status: 'COMPLETED',
+        progressText: operationalDecision.selectedModelId,
+        detailText: `Dernière décision op. : ${operationalDecision.selectedModelId} (${operationalDecision.decisionType})`,
+        route: 'adaptive-llm',
+        icon: Brain,
+      }
+    : {
+        id: 'adaptive-routing',
+        category: 'INTELLIGENCE',
+        name: 'Routage Adaptatif & Benchmarks',
+        status: 'IDLE',
+        detailText: 'Sélection bayésienne sous contraintes strictes',
+        route: 'adaptive-llm',
+        icon: Brain,
+      };
 
   const allActivities: ActivityItem[] = [
     workflowItem,
@@ -334,7 +411,7 @@ export const GlobalActivityCenter: React.FC<GlobalActivityCenterProps> = ({
   // UX Hierarchy: 1. EN COURS -> 2. TERMINÉES -> 3. INACTIVES
   const activeItems = allActivities.filter((a) => a.status === 'RUNNING' || a.status === 'QUEUED');
   const completedItems = allActivities.filter((a) =>
-    ['COMPLETED', 'FAILED', 'ROLLED_BACK', 'HALTED_GATE', 'NOT_FOUND'].includes(a.status)
+    ['COMPLETED', 'FAILED', 'CANCELLED', 'ROLLED_BACK', 'HALTED_GATE', 'NOT_FOUND'].includes(a.status)
   );
   const inactiveItems = allActivities.filter((a) => ['IDLE', 'UNKNOWN'].includes(a.status));
 
@@ -366,6 +443,13 @@ export const GlobalActivityCenter: React.FC<GlobalActivityCenterProps> = ({
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">
             <XCircle className="w-3 h-3 text-rose-400" />
             FAILED
+          </span>
+        );
+      case 'CANCELLED':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-slate-800 text-slate-300 border border-slate-700">
+            <Square className="w-2.5 h-2.5 fill-slate-400 text-slate-400" />
+            CANCELLED
           </span>
         );
       case 'ROLLED_BACK':
@@ -412,10 +496,23 @@ export const GlobalActivityCenter: React.FC<GlobalActivityCenterProps> = ({
     return (
       <div
         key={item.id}
-        className="bg-slate-950/80 border border-slate-800 hover:border-slate-700 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors"
+        tabIndex={0}
+        role="button"
+        onClick={() => {
+          onNavigate(item.route);
+          onClose();
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onNavigate(item.route);
+            onClose();
+          }
+        }}
+        className="bg-slate-950/80 border border-slate-800 hover:border-slate-700 hover:bg-slate-900/60 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors cursor-pointer group focus:outline-none focus:border-blue-500"
       >
         <div className="flex items-start gap-3 min-w-0">
-          <div className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 mt-0.5 shrink-0">
+          <div className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 group-hover:text-blue-400 group-hover:border-slate-700 transition mt-0.5 shrink-0">
             <Icon className="w-4 h-4" />
           </div>
           <div className="min-w-0">
@@ -423,7 +520,9 @@ export const GlobalActivityCenter: React.FC<GlobalActivityCenterProps> = ({
               <span className="text-[10px] font-mono font-bold text-slate-500 uppercase">
                 [{item.category}]
               </span>
-              <strong className="text-xs text-slate-100 font-semibold">{item.name}</strong>
+              <strong className="text-xs text-slate-100 font-semibold group-hover:text-white transition">
+                {item.name}
+              </strong>
               {item.progressText && (
                 <span className="text-[10px] font-mono text-indigo-300 bg-indigo-500/10 px-1.5 py-0.2 rounded border border-indigo-500/20">
                   {item.progressText}
@@ -442,17 +541,12 @@ export const GlobalActivityCenter: React.FC<GlobalActivityCenterProps> = ({
             </span>
           )}
           {renderBadge(item.status)}
-          <button
-            type="button"
-            onClick={() => {
-              onNavigate(item.route);
-              onClose();
-            }}
-            className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 transition cursor-pointer"
+          <span
+            className="p-1.5 rounded-lg bg-slate-900 group-hover:bg-slate-800 text-slate-400 group-hover:text-white border border-slate-800 transition"
             title={`Accéder à ${item.name}`}
           >
             <ArrowRight className="w-3.5 h-3.5" />
-          </button>
+          </span>
         </div>
       </div>
     );
@@ -543,9 +637,12 @@ export const GlobalActivityCenter: React.FC<GlobalActivityCenterProps> = ({
           )}
         </div>
 
-        {/* Footer info */}
-        <div className="pt-2 border-t border-slate-800 text-[11px] text-slate-500 flex items-center justify-between">
-          <span>Données réelles synchronisées en direct</span>
+        {/* Footer info (Requirement 10: faithful message + sync timer) */}
+        <div className="pt-2 border-t border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
+          <span className="flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+            États synchronisés avec les services actifs · <span className="text-slate-500 font-mono">Dernière actualisation : {secondsAgo}s</span>
+          </span>
           <button
             type="button"
             onClick={onClose}

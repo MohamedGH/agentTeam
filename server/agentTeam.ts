@@ -125,6 +125,7 @@ export class AgentTeamEngine {
       };
 
       selectionDecision = this.llmSelector.selectModelForTask(taskPrompt, undefined, constraints);
+      this.llmSelector.setLastOperationalDecision(selectionDecision);
 
       if (selectionDecision.decisionType === 'NO_FEASIBLE_MODEL') {
         throw new Error(`[LLMSelector] No feasible model satisfies constraints: ${selectionDecision.reason}`);

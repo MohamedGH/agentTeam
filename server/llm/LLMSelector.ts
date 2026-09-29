@@ -530,6 +530,16 @@ export class LLMSelector {
       excludeModels: generatorModelId ? [generatorModelId] : undefined,
     });
   }
+
+  private lastOperationalDecision: SelectionDecision | null = null;
+
+  public setLastOperationalDecision(decision: SelectionDecision | null): void {
+    this.lastOperationalDecision = decision;
+  }
+
+  public getLastOperationalDecision(): SelectionDecision | null {
+    return this.lastOperationalDecision;
+  }
 }
 
 export const llmSelector = new LLMSelector();

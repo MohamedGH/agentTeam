@@ -93,10 +93,12 @@ export async function runDeliveryStateManagerTests() {
     await manager.fetchCiRuns(mockCommitSha);
     const trackedState = manager.getState();
     assert.strictEqual(trackedState.ciRunId, 987654);
+    assert.strictEqual(trackedState.ciHeadSha, mockCommitSha);
     assert.strictEqual(trackedState.ciRun?.head_sha, mockCommitSha);
     assert.strictEqual(trackedState.ciStatus, 'RUNNING');
     assert.strictEqual(trackedState.jobs.length, 1);
-    console.log('✅ PASS: CI Run correlated strictly by head_sha with jobs and steps');
+    assert.ok(trackedState.updatedAt);
+    console.log('✅ PASS: CI Run correlated strictly by head_sha with jobs, steps, ciHeadSha, and updatedAt');
 
     // Test 5: ZERO Fallback to runs[0] when targetSha is not found in returned runs
     globalThis.fetch = async (url: any) => {
