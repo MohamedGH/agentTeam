@@ -374,15 +374,22 @@ export async function runAdaptiveLLMUnitTests() {
   assert(healthObs.recommendations.length > 0, 'Produces actionable recommendations for the self-improvement cycle');
 
   // =========================================================================
-  // TEST SUITE 9: Non-Circumvention
+  // TEST SUITE 9: Non-Circumvention & Operational Decision Tracking
   // =========================================================================
-  console.log('\n--- 9. Testing Non-Circumvention Invariants ---');
+  console.log('\n--- 9. Testing Non-Circumvention & Operational Decision Invariants ---');
   // Verify that selecting an LLM never triggers git push, PR creation, or bypasses Quality Gate
   const testSelection = selector.selectModelForTask('Any prompt');
   assert(Boolean(testSelection.selectedModelId), 'Selection produces model decision');
   // Ensure no git actions attached to selection
   assert((testSelection as any).gitCommitted === undefined, 'No git commit bypass');
   assert((testSelection as any).prCreated === undefined, 'No PR creation bypass');
+
+  // Verify operational decision tracking
+  assert(selector.getLastOperationalDecision() === null, 'Initial lastOperationalDecision is null before real execution');
+  selector.setLastOperationalDecision(testSelection);
+  const recorded = selector.getLastOperationalDecision();
+  assert(recorded?.selectedModelId === testSelection.selectedModelId, 'Records and retrieves lastOperationalDecision reliably');
+  assert(recorded?.decisionType === testSelection.decisionType, 'Preserves decisionType in recorded operational decision');
 
   console.log('\n====================================================');
   console.log('🎉 ALL ADAPTIVE MULTI-LLM ROUTING TESTS PASSED (100%)');

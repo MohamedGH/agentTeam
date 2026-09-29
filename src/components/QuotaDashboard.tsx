@@ -59,6 +59,8 @@ export const QuotaDashboard: React.FC<QuotaDashboardProps> = ({
   const [selectedProviderTab, setSelectedProviderTab] = useState<AIProviderId | 'all'>('all');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSimulatingCooldown, setIsSimulatingCooldown] = useState(false);
+  const [resettingTarget, setResettingTarget] = useState<string | 'all' | null>(null);
+  const [resetFeedback, setResetFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // Live cooldown countdown state
   const [cooldownRemaining, setCooldownRemaining] = useState<Record<string, number>>({});
@@ -130,6 +132,31 @@ export const QuotaDashboard: React.FC<QuotaDashboardProps> = ({
       await onForceRefresh();
     }
     setTimeout(() => setIsRefreshing(false), 500);
+  };
+
+  const handleResetWithFeedback = async (modelTarget?: string) => {
+    const targetKey = modelTarget || 'all';
+    setResettingTarget(targetKey);
+    setResetFeedback(null);
+    try {
+      await onResetQuota(modelTarget);
+      if (onForceRefresh) {
+        await onForceRefresh();
+      }
+      setResetFeedback({
+        type: 'success',
+        message: modelTarget
+          ? `État et cache réinitialisés avec succès pour ${modelTarget}.`
+          : 'État global des quotas et caches réinitialisé avec succès.',
+      });
+    } catch (err: any) {
+      setResetFeedback({
+        type: 'error',
+        message: err.message || 'Erreur lors de la réinitialisation du quota.',
+      });
+    } finally {
+      setResettingTarget(null);
+    }
   };
 
   const handleSimulateCooldown = async (targetModel = 'gemini-3.7-flash') => {

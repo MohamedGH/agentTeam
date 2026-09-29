@@ -264,6 +264,32 @@ export const FinalReportCard: React.FC<FinalReportCardProps> = ({ report, onView
             <Cpu className="w-3.5 h-3.5 text-slate-500" />
             Model: <strong className="text-slate-200">{report.metrics.modelUsed}</strong>
           </span>
+          {(() => {
+            const decision = report.metrics.selectionDecision;
+            const verified = decision?.isIdentityVerified ?? decision?.proof?.isIdentityVerified;
+            const idStatus = verified === true || decision?.identityStatus === 'VERIFIED'
+              ? 'VERIFIED'
+              : verified === false || decision?.identityStatus === 'NOT_VERIFIED'
+              ? 'NOT VERIFIED'
+              : 'UNKNOWN';
+
+            return (
+              <span className="flex items-center gap-1.5">
+                <span className="text-slate-500">Identité:</span>
+                <span
+                  className={`font-bold ${
+                    idStatus === 'VERIFIED'
+                      ? 'text-emerald-400'
+                      : idStatus === 'NOT VERIFIED'
+                      ? 'text-rose-400'
+                      : 'text-slate-400'
+                  }`}
+                >
+                  {idStatus}
+                </span>
+              </span>
+            );
+          })()}
           <span className="flex items-center gap-1.5">
             <Sparkles className="w-3.5 h-3.5 text-slate-500" />
             Tokens: {' '}

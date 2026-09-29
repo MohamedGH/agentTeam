@@ -235,13 +235,39 @@ export const ExecutionStatusBanner: React.FC<ExecutionStatusBannerProps> = ({
             </div>
           </div>
 
-          <div className="bg-slate-950/70 p-2.5 rounded-lg border border-slate-800">
-            <span className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">Identité LLM</span>
-            <div className="flex items-center gap-1.5 font-bold font-mono text-emerald-400">
-              <ShieldCheck className="w-3.5 h-3.5" aria-hidden="true" />
-              <span>VERIFIED</span>
-            </div>
-          </div>
+          {(() => {
+            const decision = finalReport?.metrics?.selectionDecision;
+            const verified = decision?.isIdentityVerified ?? decision?.proof?.isIdentityVerified;
+            const idStatus = verified === true || decision?.identityStatus === 'VERIFIED'
+              ? 'VERIFIED'
+              : verified === false || decision?.identityStatus === 'NOT_VERIFIED'
+              ? 'NOT VERIFIED'
+              : 'UNKNOWN';
+
+            return (
+              <div className="bg-slate-950/70 p-2.5 rounded-lg border border-slate-800">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">Identité LLM</span>
+                <div
+                  className={`flex items-center gap-1.5 font-bold font-mono ${
+                    idStatus === 'VERIFIED'
+                      ? 'text-emerald-400'
+                      : idStatus === 'NOT VERIFIED'
+                      ? 'text-rose-400'
+                      : 'text-slate-400'
+                  }`}
+                >
+                  {idStatus === 'VERIFIED' ? (
+                    <ShieldCheck className="w-3.5 h-3.5" aria-hidden="true" />
+                  ) : idStatus === 'NOT VERIFIED' ? (
+                    <AlertTriangle className="w-3.5 h-3.5" aria-hidden="true" />
+                  ) : (
+                    <span className="w-2 h-2 rounded-full bg-slate-500 shrink-0" aria-hidden="true" />
+                  )}
+                  <span>{idStatus}</span>
+                </div>
+              </div>
+            );
+          })()}
 
           <div className="bg-slate-950/70 p-2.5 rounded-lg border border-slate-800">
             <span className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">Modèle utilisé</span>

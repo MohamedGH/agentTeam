@@ -233,9 +233,11 @@ export const Header: React.FC<HeaderProps> = ({
               className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs text-slate-300 hover:text-white transition cursor-pointer"
             >
               <Activity className="w-3.5 h-3.5 text-violet-400" />
-              <span className="hidden sm:inline">Activités</span>
-              {activeActivitiesCount > 0 && (
-                <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
+              <span className="hidden sm:inline font-semibold">Activités</span>
+              {typeof activeActivitiesCount === 'number' && activeActivitiesCount > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full bg-blue-500/20 text-blue-300 font-mono text-[10px] font-bold border border-blue-500/30 animate-pulse">
+                  {activeActivitiesCount}
+                </span>
               )}
             </button>
           )}

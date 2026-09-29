@@ -156,7 +156,15 @@ export default function App() {
       const res = await fetch('/api/providers/list');
       if (res.ok) {
         const data = await res.json();
-        setProviders(data.providers || []);
+        const provs = data.providers || [];
+        setProviders(provs);
+        if (data.activeProvider) {
+          const activeProvInfo = provs.find((p: ProviderInfo) => p.id === data.activeProvider);
+          const currentModel = workflowStateManager.getState().chosenModel;
+          const isCurrentModelValid = activeProvInfo?.models.some((m: any) => m.name === currentModel);
+          const validatedModel = isCurrentModelValid ? currentModel : activeProvInfo?.defaultModel || currentModel;
+          workflowStateManager.setModelAndProvider(validatedModel, data.activeProvider);
+        }
       }
     } catch (e) {
       console.warn('Failed to load providers list:', e);
@@ -165,15 +173,19 @@ export default function App() {
 
   const handleSelectProvider = async (providerId: AIProviderId, model?: string) => {
     try {
+      const targetProvider = providers.find((p) => p.id === providerId);
+      const isModelValid = targetProvider && model ? targetProvider.models.some((m) => m.name === model) : false;
+      const targetModel = isModelValid ? model : (targetProvider ? targetProvider.defaultModel : undefined);
+
       const res = await fetch('/api/providers/select', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ provider: providerId, model }),
+        body: JSON.stringify({ provider: providerId, model: targetModel }),
       });
       if (res.ok) {
         const data = await res.json();
         const effectiveProvider = (data.activeProvider || data.provider || providerId) as AIProviderId;
-        const effectiveModel = data.model || model || chosenModel;
+        const effectiveModel = data.model || targetModel || targetProvider?.defaultModel || chosenModel;
         workflowStateManager.setModelAndProvider(effectiveModel, effectiveProvider);
       }
       await fetchProviders();

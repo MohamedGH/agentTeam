@@ -3,6 +3,7 @@ import cors from 'cors';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { providerManager } from './server/providerManager';
+import { ProviderModelConfig } from './server/providers/types';
 import { quotaManager } from './server/quotaManager';
 import { workspace } from './server/virtualWorkspace';
 import { agentTeamEngine } from './server/agentTeam';
@@ -254,10 +255,13 @@ async function startServer() {
       if (!provider) {
         return res.status(400).json({ error: 'Provider is required' });
       }
-      providerManager.setActiveProvider(provider, model);
+      const p = providerManager.getProvider(provider);
+      const isModelValid = model && p.models.some((m: ProviderModelConfig) => m.name === model);
+      const effectiveModel = isModelValid ? model : p.defaultModel;
+
+      providerManager.setActiveProvider(provider, effectiveModel);
       const effectiveProvider = providerManager.getActiveProvider();
-      const p = providerManager.getProvider(effectiveProvider);
-      const effectiveModel = model || providerManager.getModelOverride(effectiveProvider) || p.defaultModel;
+
       res.json({
         success: true,
         activeProvider: effectiveProvider,
