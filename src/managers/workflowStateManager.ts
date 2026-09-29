@@ -208,6 +208,10 @@ export class WorkflowStateManager {
     this.timerId = setInterval(() => {
       this.dispatch({ type: 'TICK', delta: 0.1 });
     }, 100);
+
+    if (this.timerId && typeof this.timerId.unref === 'function') {
+      this.timerId.unref();
+    }
   }
 
   public setModelAndProvider(chosenModel: string, activeProvider: AIProviderId): void {

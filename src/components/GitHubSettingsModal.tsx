@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   GitPullRequest,
   Key,
@@ -19,6 +19,7 @@ import {
   XCircle,
   Loader2,
 } from 'lucide-react';
+import { useDeliveryState } from '../managers/useDeliveryState';
 
 interface GitHubStatus {
   configured: boolean;
@@ -38,15 +39,14 @@ export const GitHubSettingsModal: React.FC = () => {
   const [repoInput, setRepoInput] = useState('MohamedGH/agentTeam');
   const [branchInput, setBranchInput] = useState('main');
   const [isLoading, setIsLoading] = useState(false);
-  const [isPushing, setIsPushing] = useState(false);
-  const [isLoadingCi, setIsLoadingCi] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string; details?: string } | null>(null);
-  const [lastPushResult, setLastPushResult] = useState<any>(null);
-  const [trackedSha, setTrackedSha] = useState<string | null>(null);
   const [showAdvancedConfig, setShowAdvancedConfig] = useState(false);
-  const ciPollIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  const fetchStatusAndCi = async () => {
+  // Global shared Delivery and CI state
+  const delivery = useDeliveryState();
+  const isPushing = delivery.pushStatus === 'RUNNING';
+
+  const fetchStatus = async () => {
     setIsLoading(true);
     try {
       const res = await fetch('/api/github/status');
@@ -54,7 +54,7 @@ export const GitHubSettingsModal: React.FC = () => {
       setStatus(data);
 
       if (data.configured) {
-        await fetchCiForSha(trackedSha);
+        await delivery.fetchCiRuns();
       }
     } catch (err: any) {
       setStatus({ configured: false, error: err.message });
@@ -63,47 +63,9 @@ export const GitHubSettingsModal: React.FC = () => {
     }
   };
 
-  const fetchCiForSha = async (targetSha?: string | null) => {
-    setIsLoadingCi(true);
-    try {
-      const shaQuery = targetSha ? `&head_sha=${encodeURIComponent(targetSha)}` : '';
-      const res = await fetch(`/api/github/ci-runs?repository=${encodeURIComponent(repoInput)}${shaQuery}`);
-      const data = await res.json();
-      if (data.success) {
-        const selected = data.selectedRun || (data.runs && data.runs[0]) || null;
-        setLastPushResult((prev: any) => ({
-          ...prev,
-          ciRun: selected,
-          jobs: data.jobs || [],
-        }));
-
-        // Poll continuously if workflow is queued or running
-        if (selected && (selected.status === 'in_progress' || selected.status === 'queued')) {
-          if (!ciPollIntervalRef.current) {
-            ciPollIntervalRef.current = setInterval(() => {
-              fetchCiForSha(targetSha);
-            }, 3000);
-          }
-        } else if (ciPollIntervalRef.current) {
-          clearInterval(ciPollIntervalRef.current);
-          ciPollIntervalRef.current = null;
-        }
-      }
-    } catch (e) {
-      console.warn('Could not fetch CI runs:', e);
-    } finally {
-      setIsLoadingCi(false);
-    }
-  };
-
   useEffect(() => {
-    fetchStatusAndCi();
-    return () => {
-      if (ciPollIntervalRef.current) {
-        clearInterval(ciPollIntervalRef.current);
-        ciPollIntervalRef.current = null;
-      }
-    };
+    fetchStatus();
+    delivery.setRepositoryAndBranch(repoInput, branchInput);
   }, []);
 
   const handleSaveToken = async (e: React.FormEvent) => {
@@ -129,7 +91,7 @@ export const GitHubSettingsModal: React.FC = () => {
       });
       setStatus({ configured: true, user: data.user });
       setTokenInput('');
-      await fetchCiForSha(trackedSha);
+      await delivery.fetchCiRuns(delivery.trackedSha);
     } catch (err: any) {
       setFeedback({
         type: 'error',
@@ -141,56 +103,25 @@ export const GitHubSettingsModal: React.FC = () => {
   };
 
   const handlePushMain = async () => {
-    setIsPushing(true);
     setFeedback(null);
 
-    try {
-      const res = await fetch('/api/github/push-main', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          repository: repoInput.trim(),
-          branch: branchInput.trim(),
-          token: tokenInput.trim() || undefined,
-        }),
-      });
+    const result = await delivery.pushMain({
+      repository: repoInput.trim(),
+      branch: branchInput.trim(),
+      token: tokenInput.trim() || undefined,
+    });
 
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Push failed');
-      }
-
-      const actualSha = data.push?.commitSha || 'N/A';
-      if (actualSha !== 'N/A') {
-        setTrackedSha(actualSha);
-      }
-      setLastPushResult({
-        push: data.push,
-        ciRun: data.ciRun,
-        jobs: data.jobs || [],
-      });
-
+    if (result.success) {
       setFeedback({
         type: 'success',
         message: `Push exécuté avec succès vers ${repoInput} sur la branche ${branchInput} !`,
-        details: actualSha !== 'N/A' ? `Commit SHA vérifié : ${actualSha}` : undefined,
+        details: result.commitSha ? `Commit SHA vérifié : ${result.commitSha}` : undefined,
       });
-
-      // Poll CI runs specifically for the pushed SHA
-      if (actualSha !== 'N/A') {
-        setTimeout(() => {
-          fetchCiForSha(actualSha);
-        }, 1500);
-      } else {
-        await fetchStatusAndCi();
-      }
-    } catch (err: any) {
+    } else {
       setFeedback({
         type: 'error',
-        message: `Échec du push : ${err.message}`,
+        message: `Échec du push : ${result.error || 'Erreur inconnue'}`,
       });
-    } finally {
-      setIsPushing(false);
     }
   };
 
@@ -222,17 +153,16 @@ export const GitHubSettingsModal: React.FC = () => {
 
           <button
             type="button"
-            onClick={fetchStatusAndCi}
-            disabled={isLoading || isLoadingCi}
+            onClick={fetchStatus}
+            disabled={isLoading || delivery.isPolling}
             className="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-950 hover:bg-slate-800 text-slate-300 text-xs font-semibold border border-slate-800 transition-all cursor-pointer self-start sm:self-auto"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${isLoading || isLoadingCi ? 'animate-spin text-blue-400' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 ${isLoading || delivery.isPolling ? 'animate-spin text-blue-400' : ''}`} />
             Actualiser statut & CI
           </button>
         </div>
       </div>
 
-      {/* PRIORITÉ 7 — STATE FIRST DASHBOARD */}
       {/* 1. Connexion GitHub & Dépôt Cible */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* État de Connexion GitHub */}
@@ -263,7 +193,7 @@ export const GitHubSettingsModal: React.FC = () => {
                 href={status.user.html_url}
                 target="_blank"
                 rel="noreferrer"
-                className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300"
+                className="text-blue-400 hover:text-blue-300 text-xs flex items-center gap-1"
               >
                 Profil <ArrowUpRight className="w-3.5 h-3.5" />
               </a>
@@ -272,25 +202,30 @@ export const GitHubSettingsModal: React.FC = () => {
             <div className="bg-amber-500/10 border border-amber-500/20 p-3.5 rounded-xl flex items-start gap-2.5 text-xs text-amber-300">
               <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
               <div>
-                <strong className="block font-semibold text-amber-200">Non authentifié</strong>
-                Configurez votre Personal Access Token dans les paramètres ci-dessous pour activer le push distant.
+                <strong className="block font-semibold">Token non configuré</strong>
+                <p className="mt-0.5 text-slate-400">
+                  Définissez la variable d'environnement <code className="text-amber-200">GITHUB_TOKEN</code> ou
+                  fournissez un Personal Access Token ci-dessous.
+                </p>
               </div>
             </div>
           )}
         </div>
 
-        {/* Dépôt & Branche Cibles */}
+        {/* Dépôt & Branche Cible */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-3">
           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-            2. Cible de Déploiement Git
+            2. Dépôt & Branche Cible
           </span>
 
-          <div className="bg-slate-950/80 p-3.5 rounded-xl border border-slate-800 space-y-2.5 text-xs">
+          <div className="bg-slate-950/80 p-3.5 rounded-xl border border-slate-800 space-y-2 text-xs">
             <div className="flex items-center justify-between">
               <span className="text-slate-400 flex items-center gap-1.5">
-                <FolderGit2 className="w-3.5 h-3.5 text-blue-400" /> Dépôt :
+                <FolderGit2 className="w-3.5 h-3.5 text-blue-400" /> Dépôt autorisé :
               </span>
-              <strong className="text-slate-100 font-mono">{repoInput}</strong>
+              <span className="font-mono font-bold text-slate-200 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+                {repoInput}
+              </span>
             </div>
             <div className="flex items-center justify-between border-t border-slate-800/80 pt-2">
               <span className="text-slate-400 flex items-center gap-1.5">
@@ -316,23 +251,24 @@ export const GitHubSettingsModal: React.FC = () => {
                 3. Dernier Push & État de la CI GitHub Actions
               </h3>
               <p className="text-xs text-slate-400">
-                Données authentiques et vérifiées récupérées depuis l'API officielle GitHub.
+                Traçabilité rigoureuse : corrélation stricte par commit SHA authentique.
               </p>
             </div>
           </div>
 
           <button
             type="button"
-            onClick={() => fetchCiForSha(trackedSha)}
-            disabled={isLoadingCi || !status.configured}
+            onClick={() => delivery.fetchCiRuns(delivery.trackedSha)}
+            disabled={delivery.isPolling || !status.configured}
             className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 cursor-pointer disabled:opacity-40"
           >
-            <RefreshCw className={`w-3 h-3 ${isLoadingCi ? 'animate-spin' : ''}`} />
-            Recharger runs CI
+            <RefreshCw className={`w-3 h-3 ${delivery.isPolling ? 'animate-spin' : ''}`} />
+            {delivery.isPolling ? 'Polling CI en cours (3s)...' : 'Recharger runs CI'}
           </button>
         </div>
 
-        {lastPushResult?.ciRun ? (
+        {/* SHA fourni + run trouvé */}
+        {delivery.ciRun ? (
           <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 sm:p-5 space-y-3 font-mono text-xs">
             {/* Visual Traceability Chain */}
             <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 pb-2 border-b border-slate-800">
@@ -344,51 +280,51 @@ export const GitHubSettingsModal: React.FC = () => {
               <div className="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
                 <span className="text-slate-500 block text-[10px] uppercase font-bold">1. Commit SHA</span>
                 <span className="text-emerald-400 font-bold truncate block">
-                  {lastPushResult.ciRun.head_sha || lastPushResult.push?.commitSha || trackedSha || 'N/A'}
+                  {delivery.ciRun.head_sha || delivery.commitSha || delivery.trackedSha || 'N/A'}
                 </span>
               </div>
 
               <div className="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
                 <span className="text-slate-500 block text-[10px] uppercase font-bold">2. Run ID GitHub</span>
-                <span className="text-amber-400 font-bold">#{lastPushResult.ciRun.id}</span>
+                <span className="text-amber-400 font-bold">#{delivery.ciRun.id}</span>
               </div>
 
               <div className="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
                 <span className="text-slate-500 block text-[10px] uppercase font-bold">3. Workflow</span>
-                <span className="text-white font-bold truncate block">{lastPushResult.ciRun.name || 'CI Pipeline'}</span>
+                <span className="text-white font-bold truncate block">{delivery.ciRun.name || 'CI Pipeline'}</span>
               </div>
 
               <div className="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
                 <span className="text-slate-500 block text-[10px] uppercase font-bold">4. Statut & Conclusion</span>
                 <span
                   className={`font-bold block truncate ${
-                    lastPushResult.ciRun.conclusion === 'success'
+                    delivery.ciRun.conclusion === 'success'
                       ? 'text-emerald-400'
-                      : lastPushResult.ciRun.status === 'completed'
+                      : delivery.ciRun.status === 'completed'
                       ? 'text-rose-400'
                       : 'text-amber-400 animate-pulse'
                   }`}
                 >
-                  {lastPushResult.ciRun.status} {lastPushResult.ciRun.conclusion ? `(${lastPushResult.ciRun.conclusion})` : '• en cours'}
+                  {delivery.ciRun.status} {delivery.ciRun.conclusion ? `(${delivery.ciRun.conclusion})` : '• en cours'}
                 </span>
               </div>
             </div>
 
-            {lastPushResult.ciRun.head_commit?.message && (
+            {delivery.ciRun.head_commit?.message && (
               <div className="text-[11px] text-slate-400 bg-slate-900/40 p-2.5 rounded-lg border border-slate-800/60">
                 <span className="text-slate-500 font-bold uppercase text-[10px] block mb-0.5">Message du commit réel :</span>
-                <span className="text-slate-200">{lastPushResult.ciRun.head_commit.message}</span>
+                <span className="text-slate-200">{delivery.ciRun.head_commit.message}</span>
               </div>
             )}
 
             {/* Étapes du job CI */}
-            {lastPushResult.jobs && lastPushResult.jobs.length > 0 && (
+            {delivery.jobs && delivery.jobs.length > 0 && (
               <div className="pt-2 border-t border-slate-800 space-y-2">
                 <span className="text-slate-400 font-semibold block text-[11px] uppercase tracking-wider">
-                  Étapes du Job CI ({lastPushResult.jobs[0]?.name || 'test & build'}) :
+                  Étapes du Job CI ({delivery.jobs[0]?.name || 'test & build'}) :
                 </span>
                 <div className="space-y-1.5">
-                  {lastPushResult.jobs[0]?.steps?.map((step: any, idx: number) => (
+                  {delivery.jobs[0]?.steps?.map((step: any, idx: number) => (
                     <div
                       key={idx}
                       className="flex items-center justify-between text-[11px] bg-slate-900/70 px-3 py-1.5 rounded-lg border border-slate-800/80"
@@ -413,16 +349,46 @@ export const GitHubSettingsModal: React.FC = () => {
               </div>
             )}
 
-            <div className="pt-2">
-              <a
-                href={lastPushResult.ciRun.html_url}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1.5 text-blue-400 hover:text-blue-300 underline font-sans text-xs"
-              >
-                Inspecter l'exécution complète sur GitHub Actions <ArrowUpRight className="w-3.5 h-3.5" />
-              </a>
+            {delivery.ciRun.html_url && (
+              <div className="pt-2">
+                <a
+                  href={delivery.ciRun.html_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 text-blue-400 hover:text-blue-300 underline font-sans text-xs"
+                >
+                  Inspecter l'exécution complète sur GitHub Actions <ArrowUpRight className="w-3.5 h-3.5" />
+                </a>
+              </div>
+            )}
+          </div>
+        ) : delivery.trackedSha && delivery.ciStatus === 'QUEUED' ? (
+          /* SHA fourni + run non encore créé */
+          <div className="bg-slate-950/80 border border-amber-500/30 rounded-xl p-5 text-center text-xs space-y-2">
+            <div className="flex items-center justify-center gap-2 text-amber-300 font-bold font-mono">
+              <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
+              <span>CI en attente de création</span>
             </div>
+            <p className="text-slate-400 font-mono text-[11px]">
+              Commit ciblé : <span className="text-emerald-400 font-semibold">{delivery.trackedSha}</span>
+            </p>
+            <p className="text-slate-500 text-[11px]">
+              Vérification automatique en cours (tentative {delivery.pollAttempts}/20)...
+            </p>
+          </div>
+        ) : delivery.trackedSha && delivery.ciStatus === 'NOT_FOUND' ? (
+          /* SHA fourni + aucun run après les tentatives */
+          <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-5 text-center text-xs space-y-2">
+            <div className="flex items-center justify-center gap-2 text-slate-300 font-semibold">
+              <AlertTriangle className="w-4 h-4 text-amber-400" />
+              <span>Aucune CI associée détectée pour ce commit</span>
+            </div>
+            <p className="text-slate-500 font-mono text-[11px]">
+              SHA recherché : <span className="text-slate-400">{delivery.trackedSha}</span>
+            </p>
+            <p className="text-slate-500 text-[11px]">
+              Aucun workflow GitHub Actions n'a été déclenché pour ce commit précis.
+            </p>
           </div>
         ) : (
           <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-4 text-center text-xs text-slate-400">
@@ -439,7 +405,7 @@ export const GitHubSettingsModal: React.FC = () => {
           <div className="text-xs text-slate-400">
             Dernier push enregistré :{' '}
             <span className="font-mono text-slate-200">
-              {lastPushResult?.push?.commitSha?.slice(0, 7) || lastPushResult?.ciRun?.head_sha?.slice(0, 7) || 'N/A'}
+              {delivery.commitSha?.slice(0, 7) || delivery.ciRun?.head_sha?.slice(0, 7) || delivery.trackedSha?.slice(0, 7) || 'N/A'}
             </span>
           </div>
 
@@ -518,42 +484,20 @@ export const GitHubSettingsModal: React.FC = () => {
                   value={tokenInput}
                   onChange={(e) => setTokenInput(e.target.value)}
                   placeholder="ghp_... ou github_pat_..."
-                  autoComplete="off"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs font-mono text-white placeholder-slate-600 focus:outline-none focus:border-blue-500"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 font-mono"
                 />
-                <span className="block text-[11px] text-slate-500 mt-1">
-                  Le token n'est jamais stocké ni affiché en clair dans l'UI.
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] text-slate-400 mb-1 font-medium">Dépôt cible</label>
-                  <input
-                    type="text"
-                    value={repoInput}
-                    onChange={(e) => setRepoInput(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs font-mono text-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] text-slate-400 mb-1 font-medium">Branche cible</label>
-                  <input
-                    type="text"
-                    value={branchInput}
-                    onChange={(e) => setBranchInput(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs font-mono text-white"
-                  />
-                </div>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Requis : permissions <code className="text-slate-400">repo</code> (push et création de PR) et{' '}
+                  <code className="text-slate-400">actions:read</code> (suivi des workflows).
+                </p>
               </div>
 
               <button
                 type="submit"
-                disabled={!tokenInput.trim() || isLoading}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-bold transition-all cursor-pointer disabled:cursor-not-allowed"
+                disabled={isLoading || !tokenInput.trim()}
+                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white text-xs font-semibold transition cursor-pointer disabled:cursor-not-allowed"
               >
-                <Key className="w-3.5 h-3.5" />
-                Enregistrer & Valider le token
+                {isLoading ? 'Vérification...' : 'Enregistrer et Tester la Connexion'}
               </button>
             </form>
           </div>

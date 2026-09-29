@@ -18,6 +18,9 @@ import { routeManager, AppRoute } from './managers/routeManager';
 import { workflowStateManager } from './managers/workflowStateManager';
 import { errorManager } from './managers/errorManager';
 import { useWorkflowState } from './managers/useWorkflowState';
+import { useDeliveryState } from './managers/useDeliveryState';
+import { useSelfImprovementState } from './managers/useSelfImprovementState';
+import { useJulesState } from './managers/useJulesState';
 import {
   Play,
   Sparkles,
@@ -120,15 +123,18 @@ export default function App() {
   const [gitStatus, setGitStatus] = useState<string>('');
   const [gitDiff, setGitDiff] = useState<string>('');
 
+  // Centralized Delivery, Self-Improvement and Jules States
+  const delivery = useDeliveryState();
+  const selfImprovement = useSelfImprovementState();
+  const jules = useJulesState();
+
   // Quota Manager State
   const [quotaModels, setQuotaModels] = useState<Record<string, ModelQuotaStatus>>({});
   const [isResettingQuota, setIsResettingQuota] = useState<boolean>(false);
   const [quotaResetError, setQuotaResetError] = useState<string | null>(null);
 
-  // Global Activity Center & CI Real-Time Tracking State
+  // Global Activity Center Toggle State
   const [isActivityCenterOpen, setIsActivityCenterOpen] = useState<boolean>(false);
-  const [latestPush, setLatestPush] = useState<{ commitSha?: string; branch?: string; timestamp?: string } | null>(null);
-  const [ciStatus, setCiStatus] = useState<{ id?: number; head_sha?: string; status?: string; conclusion?: string } | null>(null);
 
   // Load initial workspace files, quota stats, and provider catalog
   const fetchWorkspace = async () => {
@@ -154,26 +160,6 @@ export default function App() {
       }
     } catch (e) {
       console.warn('Failed to load providers list:', e);
-    }
-  };
-
-  const fetchCiStatus = async () => {
-    try {
-      const res = await fetch('/api/github/ci-runs?repository=MohamedGH/agentTeam');
-      if (res.ok) {
-        const data = await res.json();
-        const activeRun = data.selectedRun || (data.runs && data.runs[0]);
-        if (activeRun) {
-          setCiStatus({
-            id: typeof activeRun.id === 'number' ? activeRun.id : Number(activeRun.id) || undefined,
-            head_sha: activeRun.head_sha,
-            status: activeRun.status,
-            conclusion: activeRun.conclusion,
-          });
-        }
-      }
-    } catch (e) {
-      // background fetch silent error
     }
   };
 
@@ -214,7 +200,7 @@ export default function App() {
     fetchWorkspace();
     fetchProviders();
     fetchQuotaStatus(selectedTier);
-    fetchCiStatus();
+    delivery.fetchCiRuns();
   }, [selectedTier]);
 
   // Handle aborting in-flight workflow run
@@ -419,7 +405,10 @@ export default function App() {
         onOpenActivityCenter={() => setIsActivityCenterOpen(true)}
         activeActivitiesCount={
           (executionState === 'RUNNING' ? 1 : 0) +
-          (ciStatus?.status === 'in_progress' || ciStatus?.status === 'queued' ? 1 : 0)
+          (delivery.pushStatus === 'RUNNING' ? 1 : 0) +
+          (delivery.ciStatus === 'RUNNING' || delivery.ciStatus === 'QUEUED' ? 1 : 0) +
+          (selfImprovement.isRunning ? 1 : 0) +
+          (jules.isStartingSession || (jules.activeSession && ['IN_PROGRESS', 'QUEUED', 'PLANNING'].includes(jules.activeSession.state)) ? 1 : 0)
         }
       />
 
@@ -780,9 +769,6 @@ export default function App() {
         isOpen={isActivityCenterOpen}
         onClose={() => setIsActivityCenterOpen(false)}
         onNavigate={(tab) => handleTabChange(tab as any)}
-        workflowState={workflowState}
-        latestPush={latestPush}
-        ciStatus={ciStatus}
       />
 
       {/* Footer */}
