@@ -127,19 +127,19 @@ export async function runDeliveryStateManagerTests() {
     // Invariant: ciRun must NOT be set to runs[0] (id: 111111)
     assert.strictEqual(unmatchedState.ciRun, null);
     assert.strictEqual(unmatchedState.ciRunId, null);
-    assert.strictEqual(unmatchedState.ciStatus, 'QUEUED'); // "CI en attente de création"
-    console.log('✅ PASS: ZERO fallback to runs[0] when targetSha has no matching run (strictly null / QUEUED)');
+    assert.strictEqual(unmatchedState.ciStatus, 'WAITING_WORKFLOW'); // "CI en attente de création"
+    console.log('✅ PASS: ZERO fallback to runs[0] when targetSha has no matching run (strictly null / WAITING_WORKFLOW)');
 
-    // Test 6: Max poll attempts reached triggers NOT_FOUND without inventing run
+    // Test 6: Max poll attempts reached triggers RUN_NOT_FOUND_FOR_SHA without inventing run
     for (let i = 0; i < 25; i++) {
       await manager.fetchCiRuns(targetShaUnmatched);
     }
     const timedOutState = manager.getState();
-    assert.strictEqual(timedOutState.ciStatus, 'NOT_FOUND');
+    assert.strictEqual(timedOutState.ciStatus, 'RUN_NOT_FOUND_FOR_SHA');
     assert.strictEqual(timedOutState.ciRun, null);
-    console.log('✅ PASS: Polling timeout correctly sets state to NOT_FOUND with zero fabricated runs');
+    console.log('✅ PASS: Polling timeout correctly sets state to RUN_NOT_FOUND_FOR_SHA with zero fabricated runs');
 
-    // Test 7: Completed CI stops polling and updates conclusion
+    // Test 7: Completed CI stops polling and updates to TERMINAL_SUCCESS
     globalThis.fetch = async (url: any) => {
       return {
         ok: true,
@@ -160,12 +160,82 @@ export async function runDeliveryStateManagerTests() {
 
     await manager.fetchCiRuns(mockCommitSha);
     const completedState = manager.getState();
-    assert.strictEqual(completedState.ciStatus, 'COMPLETED');
+    assert.strictEqual(completedState.ciStatus, 'TERMINAL_SUCCESS');
     assert.strictEqual(completedState.ciConclusion, 'success');
     assert.strictEqual(completedState.isPolling, false);
-    console.log('✅ PASS: Completed CI stops polling and sets status to COMPLETED with success conclusion');
+    console.log('✅ PASS: Completed CI stops polling and sets status to TERMINAL_SUCCESS');
 
-    // Test 8: Reset restores state to IDLE
+    // Test 8: Failed CI stops polling and updates to TERMINAL_FAILURE
+    globalThis.fetch = async (url: any) => {
+      return {
+        ok: true,
+        json: async () => ({
+          success: true,
+          selectedRun: {
+            id: 987654,
+            name: 'Build and Test',
+            head_sha: mockCommitSha,
+            status: 'completed',
+            conclusion: 'failure',
+          },
+          runs: [],
+          jobs: [],
+        }),
+      } as any;
+    };
+    await manager.fetchCiRuns(mockCommitSha);
+    const failedState = manager.getState();
+    assert.strictEqual(failedState.ciStatus, 'TERMINAL_FAILURE');
+    assert.strictEqual(failedState.ciConclusion, 'failure');
+    console.log('✅ PASS: Failed CI sets status to TERMINAL_FAILURE');
+
+    // Test 9: Network error handling preserves state and counts towards polling limit
+    globalThis.fetch = async () => {
+      throw new Error('Connection refused');
+    };
+    manager.reset();
+    manager.setRepositoryAndBranch('MohamedGH/agentTeam', 'main');
+    (manager as any).state.trackedSha = mockCommitSha;
+    await manager.fetchCiRuns(mockCommitSha);
+    const netErrState = manager.getState();
+    assert.strictEqual(netErrState.ciStatus, 'POLLING_FAILED_NETWORK');
+    assert.strictEqual(netErrState.pollAttempts, 1);
+    assert.strictEqual(netErrState.trackedSha, mockCommitSha, 'trackedSha must be preserved during network error');
+    console.log('✅ PASS: Network error records POLLING_FAILED_NETWORK and increments pollAttempts without losing trackedSha');
+
+    // Test 10: Network error timeout after max attempts
+    for (let i = 0; i < 25; i++) {
+      await manager.fetchCiRuns(mockCommitSha);
+    }
+    assert.strictEqual(manager.getState().ciStatus, 'POLLING_FAILED_TIMEOUT');
+    console.log('✅ PASS: Repeated network errors trigger POLLING_FAILED_TIMEOUT after MAX_POLL_ATTEMPTS');
+
+    // Test 11: Concurrency protection (race condition guard when trackedSha changes)
+    manager.reset();
+    (manager as any).state.trackedSha = 'sha-A';
+    let delayedResolve: (value: any) => void;
+    const delayedPromise = new Promise((resolve) => {
+      delayedResolve = resolve;
+    });
+    globalThis.fetch = async () => {
+      return delayedPromise as any;
+    };
+    const inFlightFetch = manager.fetchCiRuns('sha-A');
+    // Change tracked SHA while fetch is in-flight
+    (manager as any).state.trackedSha = 'sha-B';
+    delayedResolve!({
+      ok: true,
+      json: async () => ({
+        success: true,
+        selectedRun: { id: 777, head_sha: 'sha-A', status: 'completed', conclusion: 'success' },
+      }),
+    });
+    await inFlightFetch;
+    assert.strictEqual(manager.getState().trackedSha, 'sha-B');
+    assert.strictEqual(manager.getState().ciRunId, null, 'Stale async response must be discarded when trackedSha changed');
+    console.log('✅ PASS: Concurrency guard strictly discards stale responses when trackedSha changes');
+
+    // Test 12: Reset restores state to IDLE
     manager.reset();
     assert.strictEqual(manager.getState().ciStatus, 'IDLE');
     assert.strictEqual(manager.getState().commitSha, null);

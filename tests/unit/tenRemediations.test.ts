@@ -133,8 +133,11 @@ export async function runTenRemediationsUnitTests() {
   console.log('\n--- Point 5 & 6: Production API Key & Stream route security ---');
   // Verify requireApiKey logic structure
   const makeMiddleware = (env: string, key?: string) => {
-    return (authHeader?: string, apiKeyHeader?: string) => {
+    return (authHeader?: string, apiKeyHeader?: string, queryKey?: string) => {
       const requiredApiKey = key;
+      if (queryKey) {
+        return { status: 401, error: 'Unauthorized: API keys in URL query parameters are forbidden. Use X-API-Key or Authorization header.' };
+      }
       if (!requiredApiKey) {
         if (env === 'production') {
           return { status: 403, error: 'Forbidden: AGENTTEAM_API_KEY must be configured in production environment' };
@@ -156,7 +159,8 @@ export async function runTenRemediationsUnitTests() {
   assert.strictEqual(prodWithKey().status, 401, 'Unauthorized request without key returns 401');
   assert.strictEqual(prodWithKey('Bearer secret-key-123').status, 200, 'Authorized request with Bearer returns 200');
   assert.strictEqual(prodWithKey(undefined, 'secret-key-123').status, 200, 'Authorized request with x-api-key returns 200');
-  console.log('✅ Point 5 & 6 PASS: Production requires AGENTTEAM_API_KEY and protects streaming/mutation endpoints');
+  assert.strictEqual(prodWithKey(undefined, undefined, 'secret-key-123').status, 401, 'Request with query parameter key must be refused');
+  console.log('✅ Point 5 & 6 PASS: Production requires AGENTTEAM_API_KEY and strictly forbids query string keys');
 
   // Point 7 & 8: workingDirectory and testCommand propagated strictly via WorkflowOrchestrator
   console.log('\n--- Point 7 & 8: Propagation in non-Jules branch via WorkflowOrchestrator ---');

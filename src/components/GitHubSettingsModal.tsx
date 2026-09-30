@@ -287,15 +287,19 @@ export const GitHubSettingsModal: React.FC = () => {
                 <span className="text-slate-600 shrink-0">→</span>
                 <span
                   className={`px-2 py-0.5 rounded font-bold shrink-0 ${
-                    delivery.ciStatus === 'COMPLETED'
-                      ? delivery.ciConclusion === 'success'
+                    delivery.ciStatus === 'COMPLETED' ||
+                    delivery.ciStatus === 'TERMINAL_SUCCESS' ||
+                    delivery.ciStatus === 'TERMINAL_FAILURE'
+                      ? delivery.ciStatus === 'TERMINAL_SUCCESS' || delivery.ciConclusion === 'success'
                         ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
                         : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
                       : 'bg-blue-500/10 text-blue-300 border border-blue-500/20 animate-pulse'
                   }`}
                 >
-                  {delivery.ciStatus === 'COMPLETED'
-                    ? delivery.ciConclusion === 'success'
+                  {delivery.ciStatus === 'COMPLETED' ||
+                  delivery.ciStatus === 'TERMINAL_SUCCESS' ||
+                  delivery.ciStatus === 'TERMINAL_FAILURE'
+                    ? delivery.ciStatus === 'TERMINAL_SUCCESS' || delivery.ciConclusion === 'success'
                       ? 'CI réussi'
                       : 'CI échoué'
                     : delivery.ciStatus === 'RUNNING'
@@ -303,9 +307,15 @@ export const GitHubSettingsModal: React.FC = () => {
                     : 'CI en attente'}
                 </span>
               </>
-            ) : delivery.ciStatus === 'NOT_FOUND' ? (
+            ) : delivery.ciStatus === 'NOT_FOUND' ||
+              delivery.ciStatus === 'RUN_NOT_FOUND_FOR_SHA' ||
+              delivery.ciStatus === 'POLLING_FAILED_TIMEOUT' ? (
               <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700 shrink-0">
                 CI non détectée pour ce commit
+              </span>
+            ) : delivery.ciStatus === 'POLLING_FAILED_NETWORK' ? (
+              <span className="px-2 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20 shrink-0">
+                Erreur réseau CI ({delivery.pollAttempts}/20)
               </span>
             ) : (
               <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20 animate-pulse font-bold shrink-0">
@@ -417,7 +427,10 @@ export const GitHubSettingsModal: React.FC = () => {
               </div>
             )}
           </div>
-        ) : delivery.trackedSha && delivery.ciStatus === 'NOT_FOUND' ? (
+        ) : delivery.trackedSha &&
+          (delivery.ciStatus === 'NOT_FOUND' ||
+            delivery.ciStatus === 'RUN_NOT_FOUND_FOR_SHA' ||
+            delivery.ciStatus === 'POLLING_FAILED_TIMEOUT') ? (
           /* SHA fourni + aucun run après les tentatives */
           <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-5 text-center text-xs space-y-2">
             <div className="flex items-center justify-center gap-2 text-slate-300 font-semibold">
@@ -429,6 +442,20 @@ export const GitHubSettingsModal: React.FC = () => {
             </p>
             <p className="text-slate-500 text-[11px]">
               Aucun workflow GitHub Actions n'a été déclenché pour ce commit précis après {delivery.pollAttempts} vérifications (arrêt automatique).
+            </p>
+          </div>
+        ) : delivery.trackedSha && delivery.ciStatus === 'POLLING_FAILED_NETWORK' ? (
+          /* Erreur réseau pendant le polling */
+          <div className="bg-rose-950/40 border border-rose-500/30 rounded-xl p-5 text-center text-xs space-y-2">
+            <div className="flex items-center justify-center gap-2 text-rose-300 font-semibold">
+              <AlertTriangle className="w-4 h-4 text-rose-400" />
+              <span>Erreur réseau lors de la vérification CI</span>
+            </div>
+            <p className="text-slate-400 font-mono text-[11px]">
+              SHA : <span className="text-rose-300">{delivery.trackedSha}</span>
+            </p>
+            <p className="text-slate-400 text-[11px]">
+              Impossible de joindre le serveur ou l'API GitHub (tentative {delivery.pollAttempts}/20).
             </p>
           </div>
         ) : delivery.trackedSha ? (

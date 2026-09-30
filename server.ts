@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
+import crypto from 'crypto';
 import { createServer as createViteServer } from 'vite';
 import { providerManager } from './server/providerManager';
 import { ProviderModelConfig } from './server/providers/types';
@@ -13,6 +14,7 @@ import { cloudMonitoringQuotaService } from './server/cloudMonitoring';
 import { githubManager, evaluateQualityGate } from './server/github';
 import { selfImprovementEngine, improvementMemory } from './server/selfImprovement';
 import { createLLMRoutes } from './server/llmRoutes';
+import { createRequireApiKeyMiddleware, parseCookies } from './server/auth';
 
 async function startServer() {
   const app = express();
@@ -35,28 +37,19 @@ async function startServer() {
   }));
   app.use(express.json());
 
-  // AGENTTEAM_API_KEY protection middleware for mutation endpoints
-  const requireApiKey = (req: express.Request, res: express.Response, next: express.NextFunction) => {
-    const requiredApiKey = process.env.AGENTTEAM_API_KEY;
-    if (!requiredApiKey) {
-      if (process.env.NODE_ENV === 'production') {
-        return res.status(403).json({
-          error: 'Forbidden: AGENTTEAM_API_KEY must be configured in production environment',
-        });
-      }
-      return next();
-    }
-    const authHeader = req.headers['authorization'];
-    const apiKeyHeader = req.headers['x-api-key'] as string | undefined;
-    const queryKey = (req.query?.apiKey || req.query?.api_key || req.query?.token) as string | undefined;
-    const token = apiKeyHeader || (authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : authHeader) || queryKey;
-    if (token !== requiredApiKey) {
-      return res.status(401).json({
-        error: 'Unauthorized: Valid AGENTTEAM_API_KEY is required for mutation endpoints',
-      });
+  // First-party web UI session secret (never exposed to client browser)
+  const webSessionSecret = crypto.randomBytes(32).toString('hex');
+  const requireApiKey = createRequireApiKeyMiddleware(webSessionSecret);
+
+  // Set web session cookie for first-party UI requests
+  app.use((req, res, next) => {
+    const rawCookie = req.headers.cookie;
+    const cookies = parseCookies(rawCookie);
+    if (!cookies['agentteam_session']) {
+      res.setHeader('Set-Cookie', `agentteam_session=${webSessionSecret}; Path=/; HttpOnly; SameSite=Strict`);
     }
     next();
-  };
+  });
 
   // Health & Monitoring status
   app.get('/api/health', async (req, res) => {
@@ -165,7 +158,7 @@ async function startServer() {
   });
 
   // Virtual Workspace APIs
-  app.get('/api/workspace/files', (req, res) => {
+  app.get('/api/workspace/files', requireApiKey, (req, res) => {
     try {
       const files = workspace.getFiles();
       const status = workspace.gitStatus();
@@ -473,7 +466,7 @@ async function startServer() {
   });
 
   // List all stored historical sessions
-  app.get('/api/coding-agents/sessions/history', async (req, res) => {
+  app.get('/api/coding-agents/sessions/history', requireApiKey, async (req, res) => {
     try {
       const agentId = req.query.agent as string | undefined;
       const sessions = await codingAgentManager.listStoredSessions(agentId);
@@ -564,11 +557,11 @@ async function startServer() {
   });
 
   // 2. Get Jules session status and details (supports lookup by sessionId or workflowId)
-  app.get('/api/coding-agents/jules/sessions/:sessionId', async (req, res) => {
+  app.get('/api/coding-agents/jules/sessions/:sessionId', requireApiKey, async (req, res) => {
     try {
-      const { sessionId } = req.params;
+      const sessionId = String(req.params.sessionId);
       const wf = await workflowOrchestrator.getWorkflow(sessionId);
-      const actualSessionId = wf?.sessionId || sessionId;
+      const actualSessionId = String(wf?.sessionId || sessionId);
       const session = await codingAgentManager.getSession(actualSessionId, 'jules');
 
       res.json({
@@ -589,9 +582,9 @@ async function startServer() {
   });
 
   // 3. Get Jules session activities (supports incremental ?lastActivityTime=...)
-  app.get('/api/coding-agents/jules/sessions/:sessionId/activities', async (req, res) => {
+  app.get('/api/coding-agents/jules/sessions/:sessionId/activities', requireApiKey, async (req, res) => {
     try {
-      const { sessionId } = req.params;
+      const sessionId = String(req.params.sessionId);
       const lastActivityTime = req.query.lastActivityTime as string | undefined;
       const pageSize = req.query.pageSize ? Number(req.query.pageSize) : undefined;
       const activities = await codingAgentManager.listActivities(sessionId, 'jules', {
@@ -644,12 +637,12 @@ async function startServer() {
     }
   });
 
-  app.get('/api/coding-agents/session/:id', async (req, res) => {
+  app.get('/api/coding-agents/session/:id', requireApiKey, async (req, res) => {
     try {
-      const id = req.params.id;
+      const id = String(req.params.id);
       const agent = (req.query.agent as string) || 'jules';
       const wf = await workflowOrchestrator.getWorkflow(id);
-      const actualSessionId = wf?.sessionId || id;
+      const actualSessionId = String(wf?.sessionId || id);
       const session = await codingAgentManager.getSession(actualSessionId, agent);
       res.json({
         ...session,
@@ -661,12 +654,12 @@ async function startServer() {
     }
   });
 
-  app.get('/api/coding-agents/session/:id/activities', async (req, res) => {
+  app.get('/api/coding-agents/session/:id/activities', requireApiKey, async (req, res) => {
     try {
-      const id = req.params.id;
+      const id = String(req.params.id);
       const agent = (req.query.agent as string) || 'jules';
       const wf = await workflowOrchestrator.getWorkflow(id);
-      const actualSessionId = wf?.sessionId || id;
+      const actualSessionId = String(wf?.sessionId || id);
       const lastActivityTime = req.query.lastActivityTime as string | undefined;
       const pageSize = req.query.pageSize ? Number(req.query.pageSize) : undefined;
       const activities = await codingAgentManager.listActivities(actualSessionId, agent, {
@@ -736,7 +729,7 @@ async function startServer() {
     }
   });
 
-  app.get('/api/workflows', async (req, res) => {
+  app.get('/api/workflows', requireApiKey, async (req, res) => {
     try {
       const active = workflowOrchestrator.getActiveWorkflows();
       const allStored = await codingAgentManager.listStoredSessions();
@@ -755,9 +748,9 @@ async function startServer() {
     }
   });
 
-  app.get('/api/workflows/:id', async (req, res) => {
+  app.get('/api/workflows/:id', requireApiKey, async (req, res) => {
     try {
-      const { id } = req.params;
+      const id = String(req.params.id);
       const workflow = await workflowOrchestrator.getWorkflow(id);
       if (!workflow) {
         return res.status(404).json({ error: `Workflow "${id}" not found` });
@@ -810,7 +803,7 @@ async function startServer() {
     }
   });
 
-  app.get('/api/self-improvement/history', (req, res) => {
+  app.get('/api/self-improvement/history', requireApiKey, (req, res) => {
     try {
       const cycles = selfImprovementEngine.getAllCycles();
       res.json({
@@ -823,7 +816,7 @@ async function startServer() {
     }
   });
 
-  app.get('/api/self-improvement/cycles/:cycleId', (req, res) => {
+  app.get('/api/self-improvement/cycles/:cycleId', requireApiKey, (req, res) => {
     try {
       const cycleId = String(req.params.cycleId);
       const cycle = selfImprovementEngine.getCycle(cycleId);
@@ -878,7 +871,7 @@ async function startServer() {
     }
   });
 
-  app.get('/api/self-improvement/memory', (req, res) => {
+  app.get('/api/self-improvement/memory', requireApiKey, (req, res) => {
     try {
       const records = improvementMemory.getAllRecords();
       const successful = improvementMemory.findSuccessfulImprovements();
@@ -1077,7 +1070,7 @@ async function startServer() {
     }
   });
 
-  app.get('/api/github/ci-runs', async (req, res) => {
+  app.get('/api/github/ci-runs', requireApiKey, async (req, res) => {
     try {
       const repository = ((req.query.repository as string) || 'MohamedGH/agentTeam').trim();
 

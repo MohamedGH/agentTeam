@@ -47,8 +47,6 @@ export const GlobalActivityCenter: React.FC<GlobalActivityCenterProps> = ({
   onClose,
   onNavigate,
 }) => {
-  if (!isOpen) return null;
-
   // Single sources of truth from state managers
   const workflow = useWorkflowState();
   const selfImprovement = useSelfImprovementState();
@@ -59,6 +57,7 @@ export const GlobalActivityCenter: React.FC<GlobalActivityCenterProps> = ({
   const [secondsAgo, setSecondsAgo] = useState<number>(0);
 
   useEffect(() => {
+    if (!isOpen) return;
     fetch('/api/llm/last-operational-decision')
       .then((r) => r.json())
       .then((d) => {
@@ -67,16 +66,17 @@ export const GlobalActivityCenter: React.FC<GlobalActivityCenterProps> = ({
         }
       })
       .catch(() => {});
-  }, []);
+  }, [isOpen]);
 
   // Update sync elapsed time every second
   useEffect(() => {
+    if (!isOpen) return;
     const start = Date.now();
     const timer = setInterval(() => {
       setSecondsAgo(Math.floor((Date.now() - start) / 1000));
     }, 1000);
     return () => clearInterval(timer);
-  }, [delivery.updatedAt]);
+  }, [isOpen, delivery.updatedAt]);
 
   // 1. Workflow AgentTeam Activity Item
   const workflowItem: ActivityItem = {
@@ -222,8 +222,12 @@ export const GlobalActivityCenter: React.FC<GlobalActivityCenterProps> = ({
       const isMatched = delivery.ciRun && delivery.ciRun.head_sha === delivery.trackedSha;
 
       if (isMatched && delivery.ciRun) {
-        if (delivery.ciStatus === 'COMPLETED') {
-          const isSuccess = delivery.ciConclusion === 'success';
+        if (
+          delivery.ciStatus === 'COMPLETED' ||
+          delivery.ciStatus === 'TERMINAL_SUCCESS' ||
+          delivery.ciStatus === 'TERMINAL_FAILURE'
+        ) {
+          const isSuccess = delivery.ciStatus === 'TERMINAL_SUCCESS' || delivery.ciConclusion === 'success';
           return {
             id: 'ci-workflow',
             category: 'DELIVERY',
@@ -247,7 +251,7 @@ export const GlobalActivityCenter: React.FC<GlobalActivityCenterProps> = ({
             icon: Layers,
           };
         }
-        // QUEUED
+        // QUEUED or WAITING_WORKFLOW
         return {
           id: 'ci-workflow',
           category: 'DELIVERY',
@@ -260,7 +264,11 @@ export const GlobalActivityCenter: React.FC<GlobalActivityCenterProps> = ({
         };
       }
 
-      if (delivery.ciStatus === 'NOT_FOUND') {
+      if (
+        delivery.ciStatus === 'NOT_FOUND' ||
+        delivery.ciStatus === 'RUN_NOT_FOUND_FOR_SHA' ||
+        delivery.ciStatus === 'POLLING_FAILED_TIMEOUT'
+      ) {
         return {
           id: 'ci-workflow',
           category: 'DELIVERY',
@@ -268,6 +276,19 @@ export const GlobalActivityCenter: React.FC<GlobalActivityCenterProps> = ({
           status: 'NOT_FOUND',
           progressText: delivery.trackedSha.slice(0, 7),
           detailText: `CI non détectée pour ce commit (${delivery.pollAttempts} tentatives)`,
+          route: 'github-settings',
+          icon: Layers,
+        };
+      }
+
+      if (delivery.ciStatus === 'POLLING_FAILED_NETWORK') {
+        return {
+          id: 'ci-workflow',
+          category: 'DELIVERY',
+          name: 'GitHub CI Actions',
+          status: 'FAILED',
+          progressText: delivery.trackedSha.slice(0, 7),
+          detailText: `Erreur réseau lors de la vérification CI (${delivery.pollAttempts}/20)`,
           route: 'github-settings',
           icon: Layers,
         };
@@ -551,6 +572,8 @@ export const GlobalActivityCenter: React.FC<GlobalActivityCenterProps> = ({
       </div>
     );
   };
+
+  if (!isOpen) return null;
 
   return (
     <div

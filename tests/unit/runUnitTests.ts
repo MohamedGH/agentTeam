@@ -14,6 +14,7 @@ import { runEmpiricalAuditedBenchmarkTests } from './empiricalAuditedBenchmark.t
 import { runAdaptiveRoutingHardeningTests } from './adaptiveRoutingHardening.test';
 import { runWorkflowStateManagerUnitTests } from './workflowStateManager.test';
 import { runDeliveryStateManagerTests } from './deliveryStateManager.test';
+import { runApiAuthUnitTests } from './apiAuth.test';
 
 export async function runAllUnitTests() {
   console.log('====================================================');
@@ -36,6 +37,7 @@ export async function runAllUnitTests() {
   await runAdaptiveRoutingHardeningTests();
   await runWorkflowStateManagerUnitTests();
   await runDeliveryStateManagerTests();
+  await runApiAuthUnitTests();
 
   console.log('\n🎉 ALL UNIT TESTS PASSED (100%)\n');
 }

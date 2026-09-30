@@ -418,7 +418,7 @@ export default function App() {
         activeActivitiesCount={
           (executionState === 'RUNNING' ? 1 : 0) +
           (delivery.pushStatus === 'RUNNING' ? 1 : 0) +
-          (delivery.ciStatus === 'RUNNING' || delivery.ciStatus === 'QUEUED' ? 1 : 0) +
+          (delivery.ciStatus === 'RUNNING' || delivery.ciStatus === 'QUEUED' || delivery.ciStatus === 'WAITING_WORKFLOW' ? 1 : 0) +
           (selfImprovement.isRunning ? 1 : 0) +
           (jules.isStartingSession || (jules.activeSession && ['IN_PROGRESS', 'QUEUED', 'PLANNING'].includes(jules.activeSession.state)) ? 1 : 0)
         }
