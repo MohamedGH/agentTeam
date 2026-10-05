@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { ImprovementPlan, ExecutionResult, FileModificationRecord } from './types';
+import { resolveSafeWorkspacePath } from '../github/githubGitOperations';
 
 export interface FileBackup {
   backupId: string;
@@ -21,24 +22,7 @@ export class ImprovementExecutor {
    * Validate that the target path does not escape the allowed workspace (Path Traversal Protection).
    */
   public validatePathSafety(workingDirectory: string, relativePath: string): string {
-    const resolvedBase = path.resolve(workingDirectory);
-    const resolvedTarget = path.resolve(resolvedBase, relativePath);
-
-    if (!resolvedTarget.startsWith(resolvedBase + path.sep) && resolvedTarget !== resolvedBase) {
-      throw new Error(
-        `Path traversal detected: '${relativePath}' escapes workspace '${workingDirectory}'`
-      );
-    }
-
-    if (relativePath.includes('..')) {
-      // double check
-      const normalized = path.normalize(relativePath);
-      if (normalized.startsWith('..')) {
-        throw new Error(`Path traversal attempt detected with parent directory: '${relativePath}'`);
-      }
-    }
-
-    return resolvedTarget;
+    return resolveSafeWorkspacePath(workingDirectory, relativePath);
   }
 
   /**

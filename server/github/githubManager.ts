@@ -196,6 +196,19 @@ export class GitHubManager {
           error: preliminaryGate.reason,
         };
       }
+
+      const ALLOWED_REPOSITORIES = ['MohamedGH/agentTeam'];
+      const targetSlug = `${owner}/${repo}`;
+      if (!ALLOWED_REPOSITORIES.includes(targetSlug)) {
+        return {
+          success: false,
+          sessionId: options.sessionId,
+          repository: targetSlug,
+          branch: targetBranch,
+          testsPassed: options.testsPassed === true,
+          error: `Git delivery refused: Invalid repository "${targetSlug}". Repository is not in the authorized allowlist (${ALLOWED_REPOSITORIES.join(', ')}).`,
+        };
+      }
     }
 
     // 4. Strict workingDirectory requirement - NO process.cwd() fallback allowed

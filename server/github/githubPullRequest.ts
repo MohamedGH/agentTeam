@@ -1,5 +1,6 @@
 import { GitHubClient, GitHubApiError } from './githubClient';
 import { CreatePROptions, PullRequestDetails } from './types';
+import { validateBranchName, validateRepoIdentifier } from './githubGitOperations';
 
 export class GitHubPullRequest {
   private client: GitHubClient;
@@ -17,10 +18,21 @@ export class GitHubPullRequest {
     repo: string,
     options: CreatePROptions
   ): Promise<PullRequestDetails> {
-    const cleanHead = options.head.includes(':') ? options.head : `${owner}:${options.head}`;
+    validateRepoIdentifier(owner, 'Owner');
+    validateRepoIdentifier(repo, 'Repository');
+    validateBranchName(options.head);
+    validateBranchName(options.base);
+
+    const ALLOWED_REPOSITORIES = ['MohamedGH/agentTeam'];
+    const targetSlug = `${owner.trim()}/${repo.trim()}`;
+    if (!ALLOWED_REPOSITORIES.includes(targetSlug)) {
+      throw new Error(
+        `Pull Request creation forbidden: repository "${targetSlug}" is not in the authorized repository allowlist (${ALLOWED_REPOSITORIES.join(', ')})`
+      );
+    }
 
     try {
-      return await this.client.request<PullRequestDetails>(`/repos/${owner}/${repo}/pulls`, {
+      return await this.client.request<PullRequestDetails>(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls`, {
         method: 'POST',
         body: JSON.stringify({
           title: options.title,

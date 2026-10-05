@@ -1,4 +1,5 @@
 import { GitHubConfig, GitHubUser } from './types';
+import { sanitizeGitOutput } from './githubGitOperations';
 
 export class GitHubApiError extends Error {
   public status: number;
@@ -62,6 +63,10 @@ export class GitHubClient {
     const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
     const url = `${this.baseUrl}${cleanEndpoint}`;
 
+    if (this.token && url.includes(this.token)) {
+      throw new GitHubApiError('Security violation: GITHUB_TOKEN must never be embedded in request URLs', 400);
+    }
+
     const headers: Record<string, string> = {
       Accept: 'application/vnd.github+json',
       'X-GitHub-Api-Version': '2022-11-28',
@@ -74,10 +79,16 @@ export class GitHubClient {
       headers['Content-Type'] = 'application/json';
     }
 
-    const res = await this.fetchFn(url, {
-      ...options,
-      headers,
-    });
+    let res: Response;
+    try {
+      res = await this.fetchFn(url, {
+        ...options,
+        headers,
+      });
+    } catch (fetchErr: any) {
+      const safeMsg = sanitizeGitOutput(fetchErr?.message || String(fetchErr), this.token);
+      throw new GitHubApiError(safeMsg, 500);
+    }
 
     if (res.status === 204) {
       return {} as T;
@@ -89,15 +100,16 @@ export class GitHubClient {
       try {
         data = JSON.parse(text);
       } catch {
-        data = text;
+        data = sanitizeGitOutput(text, this.token);
       }
     }
 
     if (!res.ok) {
-      const message =
+      const rawMessage =
         data?.message ||
         `GitHub API error (${res.status} ${res.statusText}) on ${options.method || 'GET'} ${cleanEndpoint}`;
-      throw new GitHubApiError(message, res.status, data);
+      const safeMessage = sanitizeGitOutput(String(rawMessage), this.token);
+      throw new GitHubApiError(safeMessage, res.status, data);
     }
 
     return data as T;

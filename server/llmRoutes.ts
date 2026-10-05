@@ -20,10 +20,13 @@ export function createLLMRoutes(authMiddleware?: RequestHandler): Router {
   // 1. Classify a problem (Public stateless classifier)
   router.post('/classify', (req: Request, res: Response) => {
     try {
-      const taskPrompt = req.body.taskPrompt || req.body.prompt;
-      const context = req.body.context;
-      if (!taskPrompt || typeof taskPrompt !== 'string') {
-        return res.status(400).json({ error: 'taskPrompt is required and must be a string' });
+      const taskPrompt = req.body?.taskPrompt || req.body?.prompt;
+      const context = req.body?.context;
+      if (!taskPrompt || typeof taskPrompt !== 'string' || taskPrompt.trim().length === 0) {
+        return res.status(400).json({ error: 'taskPrompt is required and must be a non-empty string' });
+      }
+      if (taskPrompt.length > 50_000) {
+        return res.status(400).json({ error: 'taskPrompt exceeds maximum allowed length (50000 chars)' });
       }
       const classified = problemClassifier.classify(taskPrompt, context);
       res.json({ success: true, classified });
@@ -33,7 +36,7 @@ export function createLLMRoutes(authMiddleware?: RequestHandler): Router {
   });
 
   // 2. Discover available models and empirical status (Public)
-  router.get('/models', (req: Request, res: Response) => {
+  router.get('/models', (_req: Request, res: Response) => {
     try {
       const models = llmRegistry.discoverModels();
       res.json({ success: true, count: models.length, models });
@@ -45,8 +48,15 @@ export function createLLMRoutes(authMiddleware?: RequestHandler): Router {
   // 3. Get empirical rankings (Public)
   router.get('/rankings', (req: Request, res: Response) => {
     try {
-      const category = req.query.category as ProblemCategory | undefined;
-      const complexity = req.query.complexity as ProblemComplexity | undefined;
+      const category = typeof req.query.category === 'string' ? (req.query.category as ProblemCategory) : undefined;
+      const complexity = typeof req.query.complexity === 'string' ? (req.query.complexity as ProblemComplexity) : undefined;
+
+      if (category && category.length > 64) {
+        return res.status(400).json({ error: 'Invalid category parameter' });
+      }
+      if (complexity && complexity.length > 64) {
+        return res.status(400).json({ error: 'Invalid complexity parameter' });
+      }
 
       if (category) {
         const ranking = llmRankingEngine.getRankings(category, complexity);
@@ -63,10 +73,13 @@ export function createLLMRoutes(authMiddleware?: RequestHandler): Router {
   // 4. Select model for a task using adaptive routing (Public Simulation/Inspection)
   router.post('/select', (req: Request, res: Response) => {
     try {
-      const taskPrompt = req.body.taskPrompt || req.body.prompt;
-      const { context, constraints } = req.body;
-      if (!taskPrompt) {
-        return res.status(400).json({ error: 'taskPrompt is required' });
+      const taskPrompt = req.body?.taskPrompt || req.body?.prompt;
+      const { context, constraints } = req.body || {};
+      if (!taskPrompt || typeof taskPrompt !== 'string' || taskPrompt.trim().length === 0) {
+        return res.status(400).json({ error: 'taskPrompt is required and must be a non-empty string' });
+      }
+      if (taskPrompt.length > 50_000) {
+        return res.status(400).json({ error: 'taskPrompt exceeds maximum allowed length (50000 chars)' });
       }
       const decision = llmSelector.selectModelForTask(taskPrompt, context, constraints);
       res.json({ success: true, decision });
@@ -75,7 +88,7 @@ export function createLLMRoutes(authMiddleware?: RequestHandler): Router {
     }
   });
 
-  // 4b. Get latest real operational routing decision
+  // 4b. Get latest real operational routing decision (Public read-only summary for dashboard)
   router.get('/last-operational-decision', (_req: Request, res: Response) => {
     try {
       const decision = llmSelector.getLastOperationalDecision();
@@ -86,17 +99,20 @@ export function createLLMRoutes(authMiddleware?: RequestHandler): Router {
   });
 
   // =========================================================================
-  // PROTECTED MUTATION & HEAVY ORCHESTRATION ENDPOINTS (requireAuth)
-  // Endpoints that execute live test suites, mutate memory, or execute system adaptations.
+  // PROTECTED MUTATION & SENSITIVE INTERNAL ENDPOINTS (requireAuth)
+  // Endpoints that execute live test suites, mutate memory, inspect internal memory, or execute system adaptations.
   // =========================================================================
 
   // 5. Decompose complex task into specialized roles (PROTECTED)
   router.post('/decompose-and-select', requireAuth, (req: Request, res: Response) => {
     try {
-      const taskPrompt = req.body.taskPrompt || req.body.prompt;
-      const { context } = req.body;
-      if (!taskPrompt) {
-        return res.status(400).json({ error: 'taskPrompt is required' });
+      const taskPrompt = req.body?.taskPrompt || req.body?.prompt;
+      const { context } = req.body || {};
+      if (!taskPrompt || typeof taskPrompt !== 'string' || taskPrompt.trim().length === 0) {
+        return res.status(400).json({ error: 'taskPrompt is required and must be a non-empty string' });
+      }
+      if (taskPrompt.length > 50_000) {
+        return res.status(400).json({ error: 'taskPrompt exceeds maximum allowed length (50000 chars)' });
       }
       const roles = llmSelector.decomposeAndSelect(taskPrompt, context);
       res.json({ success: true, roles });
@@ -108,7 +124,7 @@ export function createLLMRoutes(authMiddleware?: RequestHandler): Router {
   // 6. Run controlled benchmark suite (MUTATION - Protected)
   router.post('/benchmark/run', requireAuth, async (req: Request, res: Response) => {
     try {
-      const { categories, benchmarkIds, candidateModels, isLive, maxRequestsBudget, maxCostBudget } = req.body;
+      const { categories, benchmarkIds, candidateModels, isLive, maxRequestsBudget, maxCostBudget } = req.body || {};
       const result = await llmBenchmarkEngine.runBenchmarks({
         categories,
         benchmarkIds,
@@ -123,8 +139,8 @@ export function createLLMRoutes(authMiddleware?: RequestHandler): Router {
     }
   });
 
-  // 7. Empirical memory stats & evaluations
-  router.get('/memory/stats', (req: Request, res: Response) => {
+  // 7. Empirical memory stats & evaluations (SENSITIVE READ - Protected)
+  router.get('/memory/stats', requireAuth, (_req: Request, res: Response) => {
     try {
       const stats = llmPerformanceMemory.getAllStats();
       const evaluations = llmPerformanceMemory.getEvaluations();
@@ -139,7 +155,7 @@ export function createLLMRoutes(authMiddleware?: RequestHandler): Router {
   });
 
   // 8. Clear empirical memory (MUTATION - Protected)
-  router.post('/memory/clear', requireAuth, (req: Request, res: Response) => {
+  router.post('/memory/clear', requireAuth, (_req: Request, res: Response) => {
     try {
       llmPerformanceMemory.clear();
       res.json({ success: true, message: 'LLM performance memory cleared.' });
@@ -148,8 +164,8 @@ export function createLLMRoutes(authMiddleware?: RequestHandler): Router {
     }
   });
 
-  // 9. Self-Improvement anomalies detection
-  router.get('/self-improvement/anomalies', (req: Request, res: Response) => {
+  // 9. Self-Improvement anomalies detection (SENSITIVE READ - Protected)
+  router.get('/self-improvement/anomalies', requireAuth, (_req: Request, res: Response) => {
     try {
       const anomalies = llmSelfImprovementAdapter.detectAnomalies();
       res.json({ success: true, count: anomalies.length, anomalies });
@@ -159,7 +175,7 @@ export function createLLMRoutes(authMiddleware?: RequestHandler): Router {
   });
 
   // 10. Execute self-improvement adaptation cycle (MUTATION - Protected)
-  router.post('/self-improvement/adaptations/run', requireAuth, async (req: Request, res: Response) => {
+  router.post('/self-improvement/adaptations/run', requireAuth, async (_req: Request, res: Response) => {
     try {
       const anomalies = llmSelfImprovementAdapter.detectAnomalies();
       const plans = llmSelfImprovementAdapter.planAdaptations(anomalies);
@@ -182,8 +198,8 @@ export function createLLMRoutes(authMiddleware?: RequestHandler): Router {
     }
   });
 
-  // 11. Self-Improvement history
-  router.get('/self-improvement/history', (req: Request, res: Response) => {
+  // 11. Self-Improvement history (SENSITIVE READ - Protected)
+  router.get('/self-improvement/history', requireAuth, (_req: Request, res: Response) => {
     try {
       const history = llmSelfImprovementAdapter.getHistory();
       res.json({ success: true, count: history.length, history });

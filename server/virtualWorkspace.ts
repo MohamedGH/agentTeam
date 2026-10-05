@@ -102,23 +102,65 @@ Managed by agentTeam (Manager, Developer, Tester, Reviewer).
     }
   }
 
-  private isSafePath(filePath: string): { safe: boolean; error?: string } {
-    const normalized = filePath.replace(/\\/g, '/').replace(/^\/+/, '');
+  public isSafePath(filePath: string): { safe: boolean; error?: string } {
+    if (!filePath || typeof filePath !== 'string' || filePath.trim().length === 0) {
+      return { safe: false, error: 'File path must be a non-empty string' };
+    }
 
-    for (const pFile of this.PROTECTED_FILES) {
-      if (normalized === pFile || normalized.endsWith('/' + pFile)) {
-        return { safe: false, error: `Access to protected file forbidden: ${filePath}` };
+    if (filePath.includes('\0') || /%(?:2e|2f|5c|00)/i.test(filePath)) {
+      return { safe: false, error: `Invalid or encoded traversal characters forbidden: ${filePath}` };
+    }
+
+    let decoded = filePath;
+    for (let i = 0; i < 2; i++) {
+      try {
+        const next = decodeURIComponent(decoded);
+        if (next === decoded) break;
+        decoded = next;
+      } catch {
+        return { safe: false, error: `Malformed encoding in file path: ${filePath}` };
       }
     }
 
-    for (const pDir of this.PROTECTED_DIRS) {
-      if (normalized.startsWith(pDir + '/') || normalized === pDir || normalized.includes('/' + pDir + '/')) {
+    if (decoded.includes('\0') || decoded.includes('..') || filePath.includes('..')) {
+      return { safe: false, error: 'Path traversal forbidden' };
+    }
+
+    // Block Windows drive letters, UNC paths, and absolute root paths
+    if (
+      /^[a-zA-Z]:/.test(filePath) ||
+      /^[a-zA-Z]:/.test(decoded) ||
+      /^(\\\\|\/\/)/.test(filePath) ||
+      /^(\\\\|\/\/)/.test(decoded) ||
+      filePath.startsWith('/') ||
+      filePath.startsWith('\\') ||
+      decoded.startsWith('/') ||
+      decoded.startsWith('\\')
+    ) {
+      return { safe: false, error: `Absolute, drive, or UNC path forbidden: ${filePath}` };
+    }
+
+    const normalized = decoded.replace(/\\/g, '/').replace(/^\/+/, '');
+    const segments = normalized.split('/').filter(Boolean);
+    if (segments.length === 0) {
+      return { safe: false, error: `Invalid file path: ${filePath}` };
+    }
+
+    for (const seg of segments) {
+      if (seg === '..' || seg === '.') {
+        return { safe: false, error: 'Path traversal forbidden' };
+      }
+      if (this.PROTECTED_DIRS.includes(seg)) {
         return { safe: false, error: `Access to protected directory forbidden: ${filePath}` };
       }
     }
 
-    if (normalized.includes('..')) {
-      return { safe: false, error: 'Path traversal forbidden' };
+    const baseName = segments[segments.length - 1];
+    if (
+      this.PROTECTED_FILES.includes(baseName) ||
+      ((baseName === '.env' || baseName.startsWith('.env.')) && baseName !== '.env.example')
+    ) {
+      return { safe: false, error: `Access to protected file forbidden: ${filePath}` };
     }
 
     return { safe: true };
@@ -414,12 +456,22 @@ ${testFiles.map(t => `${t} .`).join('\n')}
     return result;
   }
 
-  public setFile(path: string, content: string) {
-    this.files.set(path, content);
+  public setFile(filePath: string, content: string) {
+    const check = this.isSafePath(filePath);
+    if (!check.safe) {
+      throw new Error(check.error || `Unsafe file path: ${filePath}`);
+    }
+    const normalized = filePath.replace(/\\/g, '/').replace(/^\/+/, '');
+    this.files.set(normalized, content);
   }
 
-  public deleteFile(path: string) {
-    this.files.delete(path);
+  public deleteFile(filePath: string) {
+    const check = this.isSafePath(filePath);
+    if (!check.safe) {
+      throw new Error(check.error || `Unsafe file path: ${filePath}`);
+    }
+    const normalized = filePath.replace(/\\/g, '/').replace(/^\/+/, '');
+    this.files.delete(normalized);
   }
 }
 

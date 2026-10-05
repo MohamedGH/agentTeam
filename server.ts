@@ -14,45 +14,48 @@ import { cloudMonitoringQuotaService } from './server/cloudMonitoring';
 import { githubManager, evaluateQualityGate } from './server/github';
 import { selfImprovementEngine, improvementMemory } from './server/selfImprovement';
 import { createLLMRoutes } from './server/llmRoutes';
-import { createRequireApiKeyMiddleware, parseCookies } from './server/auth';
+import { createRequireApiKeyMiddleware, validateApiKeyRequest, isOriginAllowed } from './server/auth';
+import {
+  validateGitBranch,
+  validateAllowedRepository,
+  validateSafeId,
+  validateSafeTestCommand,
+  validateTier,
+  validatePaginationLimit,
+} from './server/validation';
 
 async function startServer() {
   const app = express();
   const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
-  const allowedOriginsEnv = process.env.ALLOWED_ORIGINS;
-  const allowedOrigins = allowedOriginsEnv
-    ? allowedOriginsEnv.split(',').map(s => s.trim())
-    : ['http://localhost:3000', 'http://127.0.0.1:3000'];
+  app.use(
+    cors({
+      origin: (origin, callback) => {
+        if (
+          isOriginAllowed(origin, {
+            env: process.env.NODE_ENV,
+            allowedOriginsEnv: process.env.ALLOWED_ORIGINS,
+          })
+        ) {
+          callback(null, origin || false);
+        } else {
+          callback(new Error('Origin not allowed by CORS policy'));
+        }
+      },
+      credentials: false,
+    })
+  );
+  app.use(express.json({ limit: '512kb' }));
 
-  app.use(cors({
-    origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV !== 'production') {
-        callback(null, true);
-      } else {
-        callback(new Error('Not allowed by CORS'));
-      }
-    },
-    credentials: true,
-  }));
-  app.use(express.json());
+  const requireApiKey = createRequireApiKeyMiddleware();
 
-  // First-party web UI session secret (never exposed to client browser)
-  const webSessionSecret = crypto.randomBytes(32).toString('hex');
-  const requireApiKey = createRequireApiKeyMiddleware(webSessionSecret);
+  // =========================================================================
+  // INTENTIONALLY PUBLIC DASHBOARD DISCOVERY ENDPOINTS
+  // Read-only, non-sensitive capability & catalog status for dashboard initialization.
+  // =========================================================================
 
-  // Set web session cookie for first-party UI requests
-  app.use((req, res, next) => {
-    const rawCookie = req.headers.cookie;
-    const cookies = parseCookies(rawCookie);
-    if (!cookies['agentteam_session']) {
-      res.setHeader('Set-Cookie', `agentteam_session=${webSessionSecret}; Path=/; HttpOnly; SameSite=Strict`);
-    }
-    next();
-  });
-
-  // Health & Monitoring status
-  app.get('/api/health', async (req, res) => {
+  // Public Health & Capability Summary (returns boolean flags only, never secrets)
+  app.get('/api/health', async (_req, res) => {
     try {
       const health = await providerManager.getHealthStatus();
       res.json({
@@ -76,20 +79,25 @@ async function startServer() {
     }
   });
 
-  // Unified Quota Status API (Google Cloud Monitoring + Service Usage + Quota Manager)
+  // Public Unified Quota Status Overview (live refresh requires authentication to prevent abuse)
   app.get('/api/quota/status', async (req, res) => {
     try {
-      const tier = (req.query.tier as string) || 'tier_3';
-      const forceRefresh = req.query.refresh === 'true';
-      const result = await providerManager.getAllQuotaStatus(tier, forceRefresh);
+      const tierCheck = validateTier(req.query.tier);
+      if (!tierCheck.valid) {
+        return res.status(400).json({ error: tierCheck.error });
+      }
+      const requestedRefresh = req.query.refresh === 'true';
+      const authRes = validateApiKeyRequest(req);
+      const forceRefresh = requestedRefresh && authRes.authorized;
+      const result = await providerManager.getAllQuotaStatus(tierCheck.normalized, forceRefresh);
       res.json(result);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
   });
 
-  // Dedicated Google Cloud Monitoring Telemetry API
-  app.get('/api/monitoring/telemetry', async (req, res) => {
+  // Protected Google Cloud Monitoring Telemetry API (costly external API / internal telemetry)
+  app.get('/api/monitoring/telemetry', requireApiKey, async (req, res) => {
     try {
       const forceRefresh = req.query.refresh === 'true';
       const result = await cloudMonitoringQuotaService.fetchRealQuotaMetrics(forceRefresh);
@@ -105,13 +113,23 @@ async function startServer() {
 
   app.post('/api/quota/select-model', requireApiKey, async (req, res) => {
     try {
-      const { preferredModels, tier = 'tier_3', estimatedTokens = 1000 } = req.body;
-      const models = preferredModels || ['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.1-pro-preview'];
-      const selected = await providerManager.selectOptimalModel(models, tier, estimatedTokens);
+      const { preferredModels, tier = 'tier_3', estimatedTokens = 1000 } = req.body || {};
+      const tierCheck = validateTier(tier);
+      if (!tierCheck.valid) {
+        return res.status(400).json({ error: tierCheck.error });
+      }
+      const tokensNum = Number(estimatedTokens);
+      if (!Number.isFinite(tokensNum) || tokensNum < 0 || tokensNum > 2_000_000) {
+        return res.status(400).json({ error: 'Invalid estimatedTokens value' });
+      }
+      const models = Array.isArray(preferredModels)
+        ? preferredModels.filter((m): m is string => typeof m === 'string' && m.length <= 128).slice(0, 20)
+        : ['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.1-pro-preview'];
+      const selected = await providerManager.selectOptimalModel(models, tierCheck.normalized, tokensNum);
       res.json({
         selectedModel: selected,
-        tier,
-        estimatedTokens,
+        tier: tierCheck.normalized,
+        estimatedTokens: tokensNum,
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -120,12 +138,12 @@ async function startServer() {
 
   app.post('/api/quota/record-usage', requireApiKey, (req, res) => {
     try {
-      const { model, usageMetadata } = req.body;
-      if (!model) {
-        return res.status(400).json({ error: 'Model name is required' });
+      const { model, usageMetadata } = req.body || {};
+      if (!model || typeof model !== 'string' || model.trim().length === 0 || model.length > 128) {
+        return res.status(400).json({ error: 'Valid model name is required' });
       }
-      providerManager.recordModelUsage(model, usageMetadata || {});
-      res.json({ success: true, model });
+      providerManager.recordModelUsage(model.trim(), usageMetadata || {});
+      res.json({ success: true, model: model.trim() });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -133,7 +151,10 @@ async function startServer() {
 
   app.post('/api/quota/reset-state', requireApiKey, (req, res) => {
     try {
-      const { model } = req.body;
+      const { model } = req.body || {};
+      if (model !== undefined && (typeof model !== 'string' || model.length > 128)) {
+        return res.status(400).json({ error: 'Invalid model name' });
+      }
       quotaManager.resetState(model);
       cloudMonitoringQuotaService.invalidateCache();
       res.json({ success: true, message: model ? `Reset quota for ${model}` : 'Reset all model quotas' });
@@ -144,21 +165,28 @@ async function startServer() {
 
   app.post('/api/quota/simulate-cooldown', requireApiKey, (req, res) => {
     try {
-      const { model = 'gemini-3.7-flash', durationSeconds = 30 } = req.body;
-      quotaManager.handle429Error(model, durationSeconds);
+      const { model = 'gemini-3.7-flash', durationSeconds = 30 } = req.body || {};
+      if (typeof model !== 'string' || model.trim().length === 0 || model.length > 128) {
+        return res.status(400).json({ error: 'Invalid model name' });
+      }
+      const duration = Number(durationSeconds);
+      if (!Number.isFinite(duration) || duration < 1 || duration > 3600) {
+        return res.status(400).json({ error: 'durationSeconds must be between 1 and 3600' });
+      }
+      quotaManager.handle429Error(model.trim(), duration);
       res.json({
         success: true,
-        model,
-        durationSeconds,
-        message: `Simulated 429 rate limit cooldown on ${model} for ${durationSeconds}s. Failover routing is now active.`,
+        model: model.trim(),
+        durationSeconds: duration,
+        message: `Simulated 429 rate limit cooldown on ${model.trim()} for ${duration}s. Failover routing is now active.`,
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
   });
 
-  // Virtual Workspace APIs
-  app.get('/api/workspace/files', requireApiKey, (req, res) => {
+  // Virtual Workspace APIs (All protected with requireApiKey and strict path validation)
+  app.get('/api/workspace/files', requireApiKey, (_req, res) => {
     try {
       const files = workspace.getFiles();
       const status = workspace.gitStatus();
@@ -176,33 +204,43 @@ async function startServer() {
 
   app.post('/api/workspace/file', requireApiKey, (req, res) => {
     try {
-      const { path: filePath, content } = req.body;
-      if (!filePath || content === undefined) {
-        return res.status(400).json({ error: 'File path and content are required' });
+      const { path: filePath, content } = req.body || {};
+      if (!filePath || typeof filePath !== 'string' || content === undefined || typeof content !== 'string') {
+        return res.status(400).json({ error: 'Valid file path and string content are required' });
+      }
+      if (!workspace.isSafePath(filePath)) {
+        return res.status(400).json({ error: 'Unsafe or forbidden file path' });
       }
       workspace.setFile(filePath, content);
       res.json({ success: true, path: filePath });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(400).json({ error: err.message });
     }
   });
 
   app.delete('/api/workspace/file', requireApiKey, (req, res) => {
     try {
-      const { path: filePath } = req.body;
-      if (!filePath) {
-        return res.status(400).json({ error: 'File path is required' });
+      const { path: filePath } = req.body || {};
+      if (!filePath || typeof filePath !== 'string') {
+        return res.status(400).json({ error: 'Valid file path is required' });
+      }
+      if (!workspace.isSafePath(filePath)) {
+        return res.status(400).json({ error: 'Unsafe or forbidden file path' });
       }
       workspace.deleteFile(filePath);
       res.json({ success: true, path: filePath });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(400).json({ error: err.message });
     }
   });
 
   app.post('/api/workspace/run-command', requireApiKey, (req, res) => {
     try {
-      const { command = 'pytest' } = req.body;
+      const { command = 'pytest' } = req.body || {};
+      const cmdCheck = validateSafeTestCommand(command);
+      if (!cmdCheck.valid) {
+        return res.status(400).json({ error: cmdCheck.error });
+      }
       const output = workspace.runCommand(command);
       res.json({
         success: true,
@@ -211,11 +249,11 @@ async function startServer() {
         timestamp: Date.now(),
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(400).json({ error: err.message });
     }
   });
 
-  app.post('/api/workspace/reset', requireApiKey, (req, res) => {
+  app.post('/api/workspace/reset', requireApiKey, (_req, res) => {
     try {
       workspace.seedDefaultFiles();
       res.json({
@@ -228,8 +266,8 @@ async function startServer() {
     }
   });
 
-  // Multi-Provider Management APIs
-  app.get('/api/providers/list', (req, res) => {
+  // Public Multi-Provider Catalog Discovery (intentionally public for dashboard selector)
+  app.get('/api/providers/list', (_req, res) => {
     try {
       const list = providerManager.getProvidersList();
       const activeProvider = providerManager.getActiveProvider();
@@ -244,15 +282,18 @@ async function startServer() {
 
   app.post('/api/providers/select', requireApiKey, (req, res) => {
     try {
-      const { provider, model } = req.body;
-      if (!provider) {
-        return res.status(400).json({ error: 'Provider is required' });
+      const { provider, model } = req.body || {};
+      if (!provider || typeof provider !== 'string' || provider.length > 64) {
+        return res.status(400).json({ error: 'Valid provider is required' });
       }
-      const p = providerManager.getProvider(provider);
+      if (model !== undefined && (typeof model !== 'string' || model.length > 128)) {
+        return res.status(400).json({ error: 'Invalid model name' });
+      }
+      const p = providerManager.getProvider(provider as any);
       const isModelValid = model && p.models.some((m: ProviderModelConfig) => m.name === model);
       const effectiveModel = isModelValid ? model : p.defaultModel;
 
-      providerManager.setActiveProvider(provider, effectiveModel);
+      providerManager.setActiveProvider(provider as any, effectiveModel);
       const effectiveProvider = providerManager.getActiveProvider();
 
       res.json({
@@ -273,7 +314,8 @@ async function startServer() {
   // AUTONOMOUS CODING AGENT APIS (Google Jules)
   // Kept architecturally separate from LLM ProviderManager
   // -------------------------------------------------------------
-  app.get('/api/coding-agents/list', (req, res) => {
+  // Intentionally public agent capability discovery for dashboard
+  app.get('/api/coding-agents/list', (_req, res) => {
     try {
       const agents = codingAgentManager.listAgents();
       res.json({
@@ -285,10 +327,14 @@ async function startServer() {
     }
   });
 
-  app.get('/api/coding-agents/sources', async (req, res) => {
+  // Protected external Jules sources lookup
+  app.get('/api/coding-agents/sources', requireApiKey, async (req, res) => {
     try {
-      const agentId = (req.query.agent as string) || 'jules';
-      const sources = await codingAgentManager.listSources(agentId);
+      const agentId = typeof req.query.agent === 'string' ? req.query.agent.trim() : 'jules';
+      if (!/^[a-zA-Z0-9_-]{1,32}$/.test(agentId)) {
+        return res.status(400).json({ error: 'Invalid agent identifier' });
+      }
+      const sources = await codingAgentManager.listSources(agentId as any);
       res.json({
         agent: agentId,
         sources,

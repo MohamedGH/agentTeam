@@ -1252,6 +1252,25 @@ export class WorkflowOrchestrator {
     const workingDir = options.workingDirectory;
     const repoTarget = options.repository;
 
+    const ALLOWED_REPOSITORIES = ['MohamedGH/agentTeam'];
+    const normalizedRepo = (repoTarget || '')
+      .trim()
+      .replace(/^ssh:\/\/git@github\.com\//i, '')
+      .replace(/^git@github\.com:/i, '')
+      .replace(/^https?:\/\/github\.com\//i, '')
+      .replace(/\.git$/i, '')
+      .replace(/^\/+|\/+$/g, '');
+    if (!ALLOWED_REPOSITORIES.includes(normalizedRepo)) {
+      return {
+        success: false,
+        sessionId: options.sessionId,
+        repository: repoTarget,
+        branch: options.branch || 'main',
+        testsPassed: false,
+        error: `Git delivery refused: Invalid repository "${repoTarget}". Only authorized repositories (${ALLOWED_REPOSITORIES.join(', ')}) are permitted.`,
+      };
+    }
+
     if (!workingDir || typeof workingDir !== 'string' || workingDir.trim().length === 0) {
       return {
         success: false,
@@ -1297,9 +1316,20 @@ export class WorkflowOrchestrator {
       };
     }
 
+    // Consult server-side stored workflow/session if sessionId is provided to prevent client flag spoofing
+    let storedWorkflow: WorkflowState | null = null;
+    let storedSession: StoredCodingSession | null = null;
+    if (options.sessionId) {
+      storedWorkflow = await this.getWorkflow(options.sessionId);
+      const cleanId = options.sessionId.replace(/^sessions\//, '').replace(/^wf_/, '');
+      storedSession = (await this.sessionStore.getSession(cleanId)) || (await this.sessionStore.getSession(options.sessionId));
+    }
+
     // Internally derive realExecution (NEVER trust caller flag; options.realExecution has zero influence; mock/simulation is strictly forbidden)
     const isMockOrSimulated = Boolean(
       options.sessionId?.startsWith('mock_') ||
+      storedWorkflow?.agentId === 'mock' ||
+      storedSession?.agentId === 'mock' ||
       (options as any).agentId === 'mock' ||
       (options as any).isSimulation === true ||
       (options as any).isMockWorkspace === true ||
@@ -1307,14 +1337,41 @@ export class WorkflowOrchestrator {
     );
     const internallyDerivedRealExecution = Boolean(repoVerification.isValid && !isMockOrSimulated);
 
+    const authoritativeSessionStatus =
+      storedWorkflow && storedWorkflow.status !== 'COMPLETED'
+        ? storedWorkflow.status
+        : storedSession && storedSession.status !== 'COMPLETED'
+        ? storedSession.status
+        : options.sessionStatus;
+
+    const authoritativeExecutionStatus =
+      storedWorkflow && storedWorkflow.executionStatus !== 'COMPLETED'
+        ? storedWorkflow.executionStatus
+        : options.executionStatus;
+
+    const authoritativeTestsPassed =
+      storedWorkflow && storedWorkflow.testsPassed !== undefined
+        ? storedWorkflow.testsPassed
+        : options.testsPassed;
+
+    const authoritativeReviewExecuted =
+      storedWorkflow && storedWorkflow.reviewExecuted !== undefined
+        ? storedWorkflow.reviewExecuted
+        : options.reviewExecuted;
+
+    const authoritativeReviewApproved =
+      storedWorkflow && storedWorkflow.reviewApproved !== undefined
+        ? storedWorkflow.reviewApproved
+        : options.reviewApproved;
+
     // Enforce Quality Gate check
     const gateCheck = evaluateQualityGate({
-      sessionStatus: options.sessionStatus,
-      executionStatus: options.executionStatus,
+      sessionStatus: authoritativeSessionStatus,
+      executionStatus: authoritativeExecutionStatus,
       realExecution: internallyDerivedRealExecution,
-      testsPassed: options.testsPassed,
-      reviewExecuted: options.reviewExecuted,
-      reviewApproved: options.reviewApproved,
+      testsPassed: authoritativeTestsPassed,
+      reviewExecuted: authoritativeReviewExecuted,
+      reviewApproved: authoritativeReviewApproved,
     });
 
     if (!gateCheck.authorized) {
@@ -1323,13 +1380,18 @@ export class WorkflowOrchestrator {
         sessionId: options.sessionId,
         repository: repoTarget,
         branch: options.branch || 'main',
-        testsPassed: options.testsPassed === true,
+        testsPassed: authoritativeTestsPassed === true,
         error: gateCheck.reason,
       };
     }
 
     return await this.githubManager.processTaskResult({
       ...options,
+      sessionStatus: authoritativeSessionStatus as any,
+      executionStatus: authoritativeExecutionStatus as any,
+      testsPassed: authoritativeTestsPassed ?? undefined,
+      reviewExecuted: authoritativeReviewExecuted ?? undefined,
+      reviewApproved: authoritativeReviewApproved ?? undefined,
       workingDirectory: resolvedDir,
       realExecution: internallyDerivedRealExecution,
     });

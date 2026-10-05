@@ -16,12 +16,87 @@ export function safeCompareTokens(a: string, b: string): boolean {
  * Utility to parse Cookie header into key-value map
  */
 export function parseCookies(cookieHeader?: string): Record<string, string> {
-  if (!cookieHeader) return {};
+  if (!cookieHeader || typeof cookieHeader !== 'string') return {};
   return cookieHeader.split(';').reduce((acc, str) => {
-    const [k, v] = str.trim().split('=');
-    if (k && v) acc[k] = decodeURIComponent(v);
+    const idx = str.indexOf('=');
+    if (idx > 0) {
+      const k = str.slice(0, idx).trim();
+      const v = str.slice(idx + 1).trim();
+      if (k && v) {
+        try {
+          acc[k] = decodeURIComponent(v);
+        } catch {
+          acc[k] = v;
+        }
+      }
+    }
     return acc;
   }, {} as Record<string, string>);
+}
+
+/**
+ * Strict CORS Origin validator using URL parsing.
+ * - Never uses substring matching (.includes() / .endsWith()).
+ * - Rejects wildcards ('*') when credentials are enabled.
+ * - Compares protocol + hostname + port strictly.
+ * - In production, only explicitly configured ALLOWED_ORIGINS are permitted.
+ */
+export function isOriginAllowed(
+  origin: string | undefined,
+  allowedOrigins: string[],
+  env: string = process.env.NODE_ENV || 'development'
+): boolean {
+  // Requests without Origin header (e.g., CLI/API clients with X-API-Key/Bearer or same-origin GET)
+  if (!origin) {
+    return true;
+  }
+
+  if (typeof origin !== 'string' || origin === 'null' || origin.trim() === '*') {
+    return false;
+  }
+
+  let parsedOrigin: URL;
+  try {
+    parsedOrigin = new URL(origin);
+  } catch {
+    return false;
+  }
+
+  if (parsedOrigin.protocol !== 'http:' && parsedOrigin.protocol !== 'https:') {
+    return false;
+  }
+
+  // Ensure origin string does not carry path, query, hash, or credentials
+  if (parsedOrigin.origin !== origin) {
+    return false;
+  }
+
+  for (const allowed of allowedOrigins) {
+    const trimmed = (allowed || '').trim();
+    if (!trimmed || trimmed === '*') continue;
+    try {
+      const parsedAllowed = new URL(trimmed);
+      if (
+        parsedOrigin.protocol === parsedAllowed.protocol &&
+        parsedOrigin.hostname.toLowerCase() === parsedAllowed.hostname.toLowerCase() &&
+        parsedOrigin.port === parsedAllowed.port
+      ) {
+        return true;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  // In non-production, allow strict localhost / 127.0.0.1 origins (parsed via URL, never substring match)
+  if (env !== 'production') {
+    const host = parsedOrigin.hostname.toLowerCase();
+    if (host === 'localhost' || host === '127.0.0.1') {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 export interface AuthValidationResult {
@@ -32,31 +107,45 @@ export interface AuthValidationResult {
 
 /**
  * Validates request authorization using AGENTTEAM_API_KEY with fail-closed semantics.
- * - API keys in URL query parameters are FORBIDDEN (returns 401).
- * - Supported headers: 'X-API-Key: <key>' or 'Authorization: Bearer <key>'.
- * - First-party Web UI sessions (via SameSite HttpOnly cookie) are authorized without exposing keys to browser.
+ * - API keys in URL query parameters (?apiKey=, ?api_key=, ?token=) are STRICTLY FORBIDDEN (returns 401),
+ *   even if a valid header is also present.
+ * - Only 'X-API-Key: <key>' or 'Authorization: Bearer <key>' headers are accepted.
+ * - 'Authorization: <key>' without 'Bearer ' prefix is rejected with 401.
+ * - Anonymous visitors never receive privileged session cookies or bypasses.
  * - In production, missing AGENTTEAM_API_KEY returns 403 fail-closed.
  */
 export function validateApiKeyRequest(
   req: {
     headers: Record<string, string | string[] | undefined>;
     query?: Record<string, any>;
+    url?: string;
+    originalUrl?: string;
   },
   options: {
     env?: string;
     requiredApiKey?: string;
-    webSessionSecret?: string;
-  }
+  } = {}
 ): AuthValidationResult {
   const env = options.env || process.env.NODE_ENV || 'development';
   const requiredApiKey = options.requiredApiKey ?? process.env.AGENTTEAM_API_KEY;
 
   // 1. Explicitly reject any attempt to pass API keys via query string parameters
-  if (req.query && (req.query.apiKey !== undefined || req.query.api_key !== undefined || req.query.token !== undefined)) {
+  const hasForbiddenQueryObj = Boolean(
+    req.query &&
+      (req.query.apiKey !== undefined ||
+        req.query.api_key !== undefined ||
+        req.query.token !== undefined)
+  );
+
+  const rawUrl = req.originalUrl || req.url || '';
+  const queryPart = rawUrl.includes('?') ? rawUrl.slice(rawUrl.indexOf('?') + 1) : '';
+  const hasForbiddenRawQuery = /(?:^|&)(?:apiKey|api_key|token)(?:=|$)/i.test(queryPart);
+
+  if (hasForbiddenQueryObj || hasForbiddenRawQuery) {
     return {
       authorized: false,
       status: 401,
-      error: 'Unauthorized: API keys in URL query parameters are forbidden. Use X-API-Key or Authorization header.',
+      error: 'Unauthorized: API keys in URL query parameters are forbidden. Use X-API-Key or Authorization: Bearer header.',
     };
   }
 
@@ -72,18 +161,38 @@ export function validateApiKeyRequest(
     return { authorized: true };
   }
 
-  // 3. Extract tokens from headers ONLY (never query)
+  // 3. Extract tokens strictly from 'X-API-Key' or 'Authorization: Bearer <key>'
   const authHeader = req.headers['authorization'];
-  const apiKeyHeader = req.headers['x-api-key'] as string | undefined;
+  const apiKeyHeader = req.headers['x-api-key'];
+
+  if (Array.isArray(apiKeyHeader) || Array.isArray(authHeader)) {
+    return {
+      authorized: false,
+      status: 401,
+      error: 'Unauthorized: Multiple authentication headers are not allowed',
+    };
+  }
 
   let headerToken: string | undefined = undefined;
-  if (apiKeyHeader && typeof apiKeyHeader === 'string') {
+
+  if (typeof apiKeyHeader === 'string' && apiKeyHeader.trim().length > 0) {
     headerToken = apiKeyHeader.trim();
-  } else if (authHeader && typeof authHeader === 'string') {
-    if (authHeader.startsWith('Bearer ')) {
-      headerToken = authHeader.slice(7).trim();
-    } else {
-      headerToken = authHeader.trim();
+  } else if (typeof authHeader === 'string' && authHeader.trim().length > 0) {
+    const trimmedAuth = authHeader.trim();
+    if (!trimmedAuth.startsWith('Bearer ')) {
+      return {
+        authorized: false,
+        status: 401,
+        error: 'Unauthorized: Authorization header must use the Bearer scheme (Authorization: Bearer <key>)',
+      };
+    }
+    headerToken = trimmedAuth.slice(7).trim();
+    if (!headerToken) {
+      return {
+        authorized: false,
+        status: 401,
+        error: 'Unauthorized: Bearer token cannot be empty',
+      };
     }
   }
 
@@ -98,26 +207,7 @@ export function validateApiKeyRequest(
     };
   }
 
-  // 4. Server-side session verification for first-party Web UI (zero secret exposure to client)
-  if (options.webSessionSecret) {
-    const rawCookie = typeof req.headers['cookie'] === 'string' ? req.headers['cookie'] : undefined;
-    const cookies = parseCookies(rawCookie);
-    const sessionCookie = cookies['agentteam_session'];
-    const secFetchSite = req.headers['sec-fetch-site'];
-    const origin = req.headers['origin'];
-    const host = req.headers['host'];
-
-    const isSameOrigin =
-      secFetchSite === 'same-origin' ||
-      !origin ||
-      (typeof origin === 'string' && typeof host === 'string' && (origin.includes(host) || origin.endsWith(host)));
-
-    if (sessionCookie && safeCompareTokens(sessionCookie, options.webSessionSecret) && isSameOrigin) {
-      return { authorized: true };
-    }
-  }
-
-  // 5. Fail-closed: No valid API key header and no valid session
+  // 4. Fail-closed: No valid API key header provided
   return {
     authorized: false,
     status: 401,
@@ -128,12 +218,11 @@ export function validateApiKeyRequest(
 /**
  * Express middleware factory for AGENTTEAM_API_KEY protection
  */
-export function createRequireApiKeyMiddleware(webSessionSecret?: string) {
+export function createRequireApiKeyMiddleware() {
   return (req: express.Request, res: express.Response, next: express.NextFunction) => {
     const result = validateApiKeyRequest(req, {
       env: process.env.NODE_ENV,
       requiredApiKey: process.env.AGENTTEAM_API_KEY,
-      webSessionSecret,
     });
 
     if (!result.authorized) {

@@ -51,7 +51,12 @@ export function validateFilePath(filePath?: string): void {
   const trimmed = filePath.trim();
   if (
     trimmed.includes('..') ||
+    trimmed.includes('\0') ||
+    /%(?:2e|2f|5c|00)/i.test(trimmed) ||
     trimmed.startsWith('-') ||
+    trimmed.startsWith('/') ||
+    trimmed.startsWith('\\') ||
+    /^[a-zA-Z]:/.test(trimmed) ||
     /[;`$<>|&"'\n\r\t]/.test(trimmed)
   ) {
     throw new Error(`Invalid file path "${filePath}": contains disallowed characters or path traversal`);
@@ -60,7 +65,7 @@ export function validateFilePath(filePath?: string): void {
 
 /**
  * Validates and resolves a relative workspace file path safely.
- * Strictly prevents directory traversal (../../x, ..\..\x, /etc/x, C:\x, \\server\share\x).
+ * Strictly prevents directory traversal (../../x, ..\..\x, %2e%2e%2f, /etc/x, C:\x, \\server\share\x, .env, .git, node_modules).
  * Enforces that resolved path resides strictly within the specified working directory.
  */
 export function resolveSafeWorkspacePath(cwd: string, relPath: string): string {
@@ -71,29 +76,66 @@ export function resolveSafeWorkspacePath(cwd: string, relPath: string): string {
     throw new Error('Invalid file path: path must be a non-empty string');
   }
 
-  // Reject null bytes
-  if (relPath.includes('\0')) {
-    throw new Error(`Invalid file path "${relPath}": contains null bytes`);
+  // Reject null bytes and URL-encoded traversal/null-byte sequences
+  if (relPath.includes('\0') || /%(?:2e|2f|5c|00)/i.test(relPath)) {
+    throw new Error(`Invalid file path "${relPath}": contains null bytes or encoded path traversal sequences`);
   }
 
-  // Windows-style drive letters (C:\, C:/, etc.) or UNC network shares (\\server\share, //server/share)
-  if (/^[a-zA-Z]:[\\/]/.test(relPath) || /^(\\\\|\/\/)/.test(relPath)) {
+  // Decode up to 2 times to catch multi-encoded traversal attempts
+  let decoded = relPath;
+  for (let i = 0; i < 2; i++) {
+    try {
+      const next = decodeURIComponent(decoded);
+      if (next === decoded) break;
+      decoded = next;
+    } catch {
+      throw new Error(`Invalid file path "${relPath}": malformed percent-encoding`);
+    }
+  }
+
+  if (decoded.includes('\0') || decoded.includes('..')) {
+    throw new Error(`Path traversal attempt blocked in "${relPath}"`);
+  }
+
+  // Windows-style drive letters (C:\, C:/, C:, etc.) or UNC network shares (\\server\share, //server/share)
+  if (/^[a-zA-Z]:/.test(relPath) || /^[a-zA-Z]:/.test(decoded) || /^(\\\\|\/\/)/.test(relPath) || /^(\\\\|\/\/)/.test(decoded)) {
     throw new Error(`Invalid file path "${relPath}": absolute drive or UNC network paths are strictly forbidden`);
   }
 
   // Disallow paths starting with absolute root '/' or '\'
-  if (relPath.startsWith('/') || relPath.startsWith('\\')) {
+  if (relPath.startsWith('/') || relPath.startsWith('\\') || decoded.startsWith('/') || decoded.startsWith('\\')) {
     throw new Error(`Invalid file path "${relPath}": absolute root paths are strictly forbidden`);
   }
 
+  const normalizedRel = decoded.replace(/\\/g, '/');
+  const segments = normalizedRel.split('/').filter(Boolean);
+  if (segments.length === 0) {
+    throw new Error(`Invalid file path "${relPath}"`);
+  }
+
+  const PROTECTED_DIRS = new Set(['.git', 'node_modules', '.venv', '__pycache__']);
+  for (const seg of segments) {
+    if (seg === '..' || seg === '.') {
+      throw new Error(`Path traversal attempt blocked: "${relPath}"`);
+    }
+    if (PROTECTED_DIRS.has(seg)) {
+      throw new Error(`Access to protected directory "${seg}" is forbidden: "${relPath}"`);
+    }
+  }
+
+  const baseName = segments[segments.length - 1];
+  if ((baseName === '.env' || baseName.startsWith('.env.')) && baseName !== '.env.example') {
+    throw new Error(`Access to sensitive environment file "${baseName}" is forbidden: "${relPath}"`);
+  }
+
   const resolvedCwd = path.resolve(cwd);
-  const normalizedRel = relPath.replace(/\\/g, '/');
   const resolvedTarget = path.resolve(resolvedCwd, normalizedRel);
 
   // Check containment via path.relative
   const relative = path.relative(resolvedCwd, resolvedTarget);
 
   if (
+    !relative ||
     relative.startsWith('..') ||
     path.isAbsolute(relative) ||
     relative === '..' ||
@@ -141,6 +183,9 @@ export function validateTestCommand(cmd?: string): { file: string; args: string[
     throw new Error('Invalid test command: command must be a non-empty string');
   }
   const trimmed = cmd.trim();
+  if (trimmed.length > 512 || trimmed.includes('\0')) {
+    throw new Error('Invalid test command: exceeds maximum length or contains null bytes');
+  }
   // Disallow shell operators / piping / chaining / redirection / command substitution
   if (/[;&|`$<>()\\]/.test(trimmed) || /[\r\n]/.test(trimmed)) {
     throw new Error(`Disallowed test command "${cmd}": shell operators, piping, and chaining are strictly forbidden.`);
@@ -149,6 +194,7 @@ export function validateTestCommand(cmd?: string): { file: string; args: string[
   // Parse space-delimited tokens safely
   const tokens = trimmed.split(/\s+/).filter(Boolean);
   const binary = tokens[0];
+  const args = tokens.slice(1);
   const ALLOWED_TEST_BINARIES = [
     'npm',
     'npx',
@@ -169,9 +215,39 @@ export function validateTestCommand(cmd?: string): { file: string; args: string[
     throw new Error(`Disallowed test executable "${binary}". Allowed test executables: ${ALLOWED_TEST_BINARIES.join(', ')}`);
   }
 
+  // Block dangerous flags that transform a test runner into arbitrary code execution
+  const FORBIDDEN_FLAGS = new Set([
+    '-e',
+    '--eval',
+    '-p',
+    '--print',
+    '-c',
+    '--call',
+    '--require',
+    '-r',
+    '--import',
+    '--loader',
+    '--experimental-loader',
+    '--inspect',
+    '--inspect-brk',
+  ]);
+  for (const arg of args) {
+    const flagName = arg.split('=')[0];
+    if (FORBIDDEN_FLAGS.has(flagName)) {
+      throw new Error(`Disallowed test command argument "${arg}" in "${cmd}"`);
+    }
+  }
+
+  if ((binary === 'npm' || binary === 'yarn' || binary === 'pnpm') && args.length > 0) {
+    const sub = args[0];
+    if (sub === 'exec' || sub === 'dlx' || sub === 'config' || sub === 'publish') {
+      throw new Error(`Disallowed ${binary} subcommand "${sub}" in test command`);
+    }
+  }
+
   return {
     file: binary,
-    args: tokens.slice(1),
+    args,
   };
 }
 
@@ -565,6 +641,14 @@ export class GitHubGitOperations {
     validateBranchName(options.branch);
     validateRepoIdentifier(options.owner, 'Owner');
     validateRepoIdentifier(options.repo, 'Repository');
+
+    const ALLOWED_REPOSITORIES = ['MohamedGH/agentTeam'];
+    const targetSlug = `${options.owner.trim()}/${options.repo.trim()}`;
+    if (!ALLOWED_REPOSITORIES.includes(targetSlug)) {
+      throw new Error(
+        `Git push forbidden: repository "${targetSlug}" is not in the authorized repository allowlist (${ALLOWED_REPOSITORIES.join(', ')})`
+      );
+    }
 
     if (!options.token || typeof options.token !== 'string') {
       throw new Error('Authentication token is required for push operations');

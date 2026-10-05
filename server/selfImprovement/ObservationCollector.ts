@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import {
   ObservationSnapshot,
   SecurityIssue,
@@ -21,6 +21,20 @@ export interface ObserverConfig {
   maxFilesToScan?: number;
 }
 
+const ALLOWED_OBSERVER_BINARIES = new Set([
+  'npm',
+  'npx',
+  'pytest',
+  'yarn',
+  'pnpm',
+  'vitest',
+  'jest',
+  'cargo',
+  'go',
+  'node',
+  'tsx',
+]);
+
 export class ObservationCollector {
   private config: ObserverConfig;
 
@@ -29,23 +43,46 @@ export class ObservationCollector {
   }
 
   /**
-   * Validate and sanitize command to prevent arbitrary shell injection.
+   * Validate and parse command into binary + args to execute via execFileSync without a shell.
    */
-  private validateSafeCommand(command: string): void {
-    const trimmed = command.trim();
-    if (!trimmed) {
+  private parseSafeCommand(command: string): { file: string; args: string[] } {
+    if (!command || typeof command !== 'string') {
       throw new Error('Command cannot be empty');
     }
-    // Block dangerous chaining operators
-    if (/[\;&\|`\$\>\<]/.test(trimmed)) {
-      // Allow standard node -e or npm test, but block malicious chaining
-      const parts = trimmed.split(/\s+/);
-      const main = parts[0];
-      const isNodeEval = main === 'node' && trimmed.includes('-e');
-      if (!isNodeEval && /[\;&\|`\$\>\<]/.test(trimmed)) {
-        throw new Error(`Command '${command}' contains forbidden shell metacharacters.`);
+    const trimmed = command.trim();
+    if (!trimmed || trimmed.length > 512 || trimmed.includes('\0') || /[\r\n]/.test(trimmed)) {
+      throw new Error('Invalid command');
+    }
+
+    // Permit deterministic hermetic exit code checks used in tests: node -e "process.exit(0|1)"
+    const exitMatch = /^node\s+-e\s+["']process\.exit\((\d+)\)["']$/.exec(trimmed);
+    if (exitMatch) {
+      return {
+        file: 'node',
+        args: ['-e', `process.exit(${exitMatch[1]})`],
+      };
+    }
+
+    if (/[;&|`$<>()\\]/.test(trimmed)) {
+      throw new Error(`Command '${command}' contains forbidden shell metacharacters.`);
+    }
+
+    const parts = trimmed.split(/\s+/).filter(Boolean);
+    const binary = parts[0];
+    const args = parts.slice(1);
+
+    if (!ALLOWED_OBSERVER_BINARIES.has(binary)) {
+      throw new Error(`Disallowed executable '${binary}' in observation command`);
+    }
+
+    const FORBIDDEN_FLAGS = new Set(['-e', '--eval', '-p', '--print', '-c', '--call', '--require', '-r', '--import', '--loader']);
+    for (const arg of args) {
+      if (FORBIDDEN_FLAGS.has(arg.split('=')[0])) {
+        throw new Error(`Disallowed flag '${arg}' in observation command`);
       }
     }
+
+    return { file: binary, args };
   }
 
   /**
@@ -455,7 +492,7 @@ export class ObservationCollector {
         return { isGitRepo: false, clean: true, uncommittedFiles: [] };
       }
 
-      const statusOutput = execSync('git status --porcelain', {
+      const statusOutput = execFileSync('git', ['status', '--porcelain'], {
         cwd: workingDir,
         encoding: 'utf8',
         stdio: ['ignore', 'pipe', 'ignore'],
@@ -468,7 +505,7 @@ export class ObservationCollector {
 
       let headSha: string | undefined;
       try {
-        headSha = execSync('git rev-parse HEAD', {
+        headSha = execFileSync('git', ['rev-parse', 'HEAD'], {
           cwd: workingDir,
           encoding: 'utf8',
           stdio: ['ignore', 'pipe', 'ignore'],
