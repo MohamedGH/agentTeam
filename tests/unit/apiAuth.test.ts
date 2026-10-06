@@ -1,5 +1,12 @@
 import assert from 'assert';
-import { validateApiKeyRequest, safeCompareTokens, parseCookies } from '../../server/auth';
+import { validateApiKeyRequest, safeCompareTokens, isOriginAllowed } from '../../server/auth';
+import {
+  validateGitBranch,
+  validateAllowedRepository,
+  validateSafeTestCommand,
+  validateSafeId,
+} from '../../server/validation';
+import { workspace } from '../../server/virtualWorkspace';
 
 export async function runApiAuthUnitTests() {
   console.log('\n--- [Unit Test] API Authentication & URL Query Protection ---');
@@ -21,6 +28,15 @@ export async function runApiAuthUnitTests() {
   );
   assert.strictEqual(resValidBearer.authorized, true, 'Valid Bearer token must be authorized');
   console.log('✅ PASS: Valid Authorization: Bearer is authorized');
+
+  // 2b. Authorization: <clé> sans Bearer -> 401
+  const resBareAuthorization = validateApiKeyRequest(
+    { headers: { authorization: secretKey } },
+    { env: 'production', requiredApiKey: secretKey }
+  );
+  assert.strictEqual(resBareAuthorization.authorized, false, 'Authorization without Bearer must be rejected');
+  assert.strictEqual(resBareAuthorization.status, 401);
+  console.log('✅ PASS: Authorization: <key> without Bearer is strictly rejected with 401');
 
   // 3. Clé incorrecte -> 401
   const resInvalidKey = validateApiKeyRequest(
@@ -101,19 +117,93 @@ export async function runApiAuthUnitTests() {
   assert.strictEqual(safeCompareTokens('abc', 'abd'), false);
   console.log('✅ PASS: Timing-safe token comparison validates accurately');
 
-  // 12. Server-side session verification for first-party Web UI (zero secret exposure to client)
-  const webSessionSecret = 'random-session-secret-xyz';
-  const resWebUiSession = validateApiKeyRequest(
+  // 12. Anonymous visitor with agentteam_session cookie CANNOT bypass AGENTTEAM_API_KEY -> 401
+  const resCookieBypassAttempt = validateApiKeyRequest(
     {
       headers: {
-        cookie: `other=1; agentteam_session=${webSessionSecret}; other2=2`,
+        cookie: `other=1; agentteam_session=${secretKey}; other2=2`,
         'sec-fetch-site': 'same-origin',
       },
     },
-    { env: 'production', requiredApiKey: secretKey, webSessionSecret }
+    { env: 'production', requiredApiKey: secretKey }
   );
-  assert.strictEqual(resWebUiSession.authorized, true);
-  console.log('✅ PASS: First-party Web UI with HttpOnly session cookie is authorized without exposing API key');
+  assert.strictEqual(resCookieBypassAttempt.authorized, false, 'Cookie must NEVER bypass AGENTTEAM_API_KEY');
+  assert.strictEqual(resCookieBypassAttempt.status, 401);
+  console.log('✅ PASS: Anonymous agentteam_session cookie cannot bypass AGENTTEAM_API_KEY');
+
+  // 13. Strict CORS Origin Validation (new URL() protocol + hostname + port)
+  assert.strictEqual(
+    isOriginAllowed('https://legitime.com', {
+      env: 'production',
+      allowedOriginsEnv: 'https://legitime.com,https://app.legitime.com:8443',
+    }),
+    true
+  );
+  assert.strictEqual(
+    isOriginAllowed('https://legitime.com.evil.example', {
+      env: 'production',
+      allowedOriginsEnv: 'https://legitime.com',
+    }),
+    false,
+    'Malicious subdomain suffix must be rejected'
+  );
+  assert.strictEqual(
+    isOriginAllowed('http://legitime.com', {
+      env: 'production',
+      allowedOriginsEnv: 'https://legitime.com',
+    }),
+    false,
+    'Protocol mismatch must be rejected'
+  );
+  assert.strictEqual(
+    isOriginAllowed('https://legitime.com:8080', {
+      env: 'production',
+      allowedOriginsEnv: 'https://legitime.com',
+    }),
+    false,
+    'Port mismatch must be rejected'
+  );
+  assert.strictEqual(
+    isOriginAllowed(undefined, {
+      env: 'production',
+      allowedOriginsEnv: 'https://legitime.com',
+    }),
+    true,
+    'Non-browser API request without Origin header is allowed to proceed to header auth'
+  );
+  console.log('✅ PASS: Strict CORS origin parser blocks https://legitime.com.evil.example and protocol/port mismatches');
+
+  // 14. Path Traversal & Input Validation Regressions
+  assert.strictEqual(workspace.isSafePath('src/math_utils.py'), true);
+  assert.strictEqual(workspace.isSafePath('../etc/passwd'), false);
+  assert.strictEqual(workspace.isSafePath('..\\windows\\system32'), false);
+  assert.strictEqual(workspace.isSafePath('%2e%2e%2fsecret.txt'), false);
+  assert.strictEqual(workspace.isSafePath('/etc/passwd'), false);
+  assert.strictEqual(workspace.isSafePath('C:\\Users\\admin\\secret'), false);
+  assert.strictEqual(workspace.isSafePath('\\\\server\\share\\file.txt'), false);
+  assert.strictEqual(workspace.isSafePath('src/file\0.py'), false);
+  assert.strictEqual(workspace.isSafePath('.env'), false);
+  assert.strictEqual(workspace.isSafePath('.env.production'), false);
+  assert.strictEqual(workspace.isSafePath('.git/config'), false);
+  assert.strictEqual(workspace.isSafePath('node_modules/pkg/index.js'), false);
+  assert.throws(() => workspace.setFile('../escape.txt', 'bad'), /Unsafe file path/);
+  assert.throws(() => workspace.deleteFile('.env'), /Unsafe file path/);
+  console.log('✅ PASS: VirtualWorkspace blocks all path traversal, UNC, drive letter, encoded, and sensitive dotfile paths');
+
+  // 15. Repository allowlist, Git branch, and testCommand validation
+  assert.strictEqual(validateAllowedRepository('MohamedGH/agentTeam').valid, true);
+  assert.strictEqual(validateAllowedRepository('https://github.com/MohamedGH/agentTeam.git').valid, true);
+  assert.strictEqual(validateAllowedRepository('attacker/evilRepo').valid, false);
+  assert.strictEqual(validateAllowedRepository('MohamedGH/agentTeam/extra').valid, false);
+  assert.strictEqual(validateGitBranch('main').valid, true);
+  assert.strictEqual(validateGitBranch('--upload-pack=evil').valid, false);
+  assert.strictEqual(validateGitBranch('branch;rm -rf /').valid, false);
+  assert.strictEqual(validateSafeTestCommand('npm test').valid, true);
+  assert.strictEqual(validateSafeTestCommand('pytest && curl evil.com').valid, false);
+  assert.strictEqual(validateSafeTestCommand('node -e "process.exit(1)"').valid, false);
+  assert.strictEqual(validateSafeId('wf-123_abc').valid, true);
+  assert.strictEqual(validateSafeId('../wf-123').valid, false);
+  console.log('✅ PASS: Strict input validators reject shell operators, eval flags, unauthorized repos, and invalid branches');
 }
 
 if (import.meta.url.endsWith(process.argv[1]) || process.argv[1]?.includes('apiAuth.test')) {

@@ -23,6 +23,7 @@ import { useWorkflowState } from '../managers/useWorkflowState';
 import { useSelfImprovementState } from '../managers/useSelfImprovementState';
 import { useDeliveryState } from '../managers/useDeliveryState';
 import { useJulesState } from '../managers/useJulesState';
+import { apiFetch } from '../utils/apiFetch';
 
 export interface ActivityItem {
   id: string;
@@ -58,14 +59,18 @@ export const GlobalActivityCenter: React.FC<GlobalActivityCenterProps> = ({
 
   useEffect(() => {
     if (!isOpen) return;
-    fetch('/api/llm/last-operational-decision')
+    let cancelled = false;
+    apiFetch('/api/llm/last-operational-decision')
       .then((r) => r.json())
       .then((d) => {
-        if (d.success && d.decision) {
+        if (!cancelled && d.success && d.decision) {
           setOperationalDecision(d.decision);
         }
       })
       .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, [isOpen]);
 
   // Update sync elapsed time every second
@@ -105,7 +110,7 @@ export const GlobalActivityCenter: React.FC<GlobalActivityCenterProps> = ({
         : undefined,
     detailText:
       workflow.executionState === 'COMPLETED'
-        ? `Tests : ${workflow.finalReport?.tests || 'PASS'} · Review : ${workflow.finalReport?.review || 'APPROVED'}`
+        ? `Tests : ${workflow.finalReport?.tests || 'N/A'} · Review : ${workflow.finalReport?.review || 'N/A'}`
         : workflow.executionState === 'FAILED'
         ? workflow.errorMessage || 'Erreur d’exécution'
         : workflow.executionState === 'CANCELLED'
@@ -140,7 +145,11 @@ export const GlobalActivityCenter: React.FC<GlobalActivityCenterProps> = ({
           ? 'FAILED'
           : cycle.status === 'HALTED_GATE'
           ? 'HALTED_GATE'
-          : 'COMPLETED';
+          : cycle.status === 'RUNNING'
+          ? 'RUNNING'
+          : cycle.status === 'IDLE'
+          ? 'IDLE'
+          : 'UNKNOWN';
 
       return {
         id: 'self-improvement',
@@ -216,10 +225,10 @@ export const GlobalActivityCenter: React.FC<GlobalActivityCenterProps> = ({
     };
   })();
 
-  // 4. GitHub Actions (CI) Activity Item
+  // 4. GitHub Actions (CI) Activity Item (Strict trackedSha correlation, zero cross-SHA display)
   const ciWorkflowItem: ActivityItem = (() => {
     if (delivery.trackedSha) {
-      const isMatched = delivery.ciRun && delivery.ciRun.head_sha === delivery.trackedSha;
+      const isMatched = Boolean(delivery.ciRun && delivery.ciRun.head_sha === delivery.trackedSha);
 
       if (isMatched && delivery.ciRun) {
         if (
@@ -307,38 +316,26 @@ export const GlobalActivityCenter: React.FC<GlobalActivityCenterProps> = ({
       };
     }
 
-    // No tracked SHA, check latest general run if available
-    if (delivery.ciRun) {
-      const isCompleted = delivery.ciRun.status === 'completed';
-      const isSuccess = delivery.ciRun.conclusion === 'success';
-      return {
-        id: 'ci-workflow',
-        category: 'DELIVERY',
-        name: 'GitHub CI Actions',
-        status: isCompleted ? (isSuccess ? 'COMPLETED' : 'FAILED') : delivery.ciRun.status === 'in_progress' ? 'RUNNING' : 'QUEUED',
-        progressText: `Run #${delivery.ciRun.id} · ${delivery.ciRun.head_sha.slice(0, 7)}`,
-        detailText: `Dernier workflow global · ${delivery.ciRun.name || 'CI'} (${delivery.ciRun.status})`,
-        route: 'github-settings',
-        icon: Layers,
-      };
-    }
-
     return {
       id: 'ci-workflow',
       category: 'DELIVERY',
       name: 'GitHub CI Actions',
       status: 'IDLE',
-      detailText: 'En attente d’un commit pour suivi CI',
+      detailText: 'En attente d’un commit suivi (trackedSha) pour vérification CI',
       route: 'github-settings',
       icon: Layers,
     };
   })();
 
-  // 5. Google Jules Cloud Agent Activity Item
+  // 5. Google Jules Cloud Agent Activity Item (Never mark terminal sessions as RUNNING)
+  const julesState = jules.activeSession?.state;
+  const isJulesTerminal = Boolean(
+    julesState && ['COMPLETED', 'SUCCEEDED', 'FAILED', 'CANCELLED'].includes(julesState)
+  );
   const isJulesActive =
-    jules.isStartingSession ||
-    jules.isFetching ||
-    Boolean(jules.activeSession && ['IN_PROGRESS', 'QUEUED', 'PLANNING'].includes(jules.activeSession.state));
+    !isJulesTerminal &&
+    (jules.isStartingSession ||
+      Boolean(julesState && ['IN_PROGRESS', 'QUEUED', 'PLANNING', 'AWAITING_PLAN_APPROVAL'].includes(julesState)));
 
   const julesItem: ActivityItem = (() => {
     if (isJulesActive) {
@@ -346,7 +343,7 @@ export const GlobalActivityCenter: React.FC<GlobalActivityCenterProps> = ({
         id: 'jules-agent',
         category: 'BUILD',
         name: 'Google Jules Coding Agent',
-        status: 'RUNNING',
+        status: julesState === 'QUEUED' ? 'QUEUED' : 'RUNNING',
         progressText: jules.activeSession?.id ? `Session #${jules.activeSession.id.slice(0, 8)}` : undefined,
         detailText: `Activité : ${jules.activities[jules.activities.length - 1]?.description || 'En cours d’exécution'}`,
         route: 'jules',
@@ -359,8 +356,19 @@ export const GlobalActivityCenter: React.FC<GlobalActivityCenterProps> = ({
         category: 'BUILD',
         name: 'Google Jules Coding Agent',
         status: 'COMPLETED',
-        progressText: 'PR GitHub créée',
+        progressText: jules.activeSession.prUrl ? 'PR GitHub créée' : 'Terminé',
         detailText: jules.activeSession.prUrl ? `PR : ${jules.activeSession.prUrl}` : 'Tâche terminée avec succès',
+        route: 'jules',
+        icon: GitPullRequest,
+      };
+    }
+    if (jules.activeSession && jules.activeSession.state === 'CANCELLED') {
+      return {
+        id: 'jules-agent',
+        category: 'BUILD',
+        name: 'Google Jules Coding Agent',
+        status: 'CANCELLED',
+        detailText: 'Session annulée',
         route: 'jules',
         icon: GitPullRequest,
       };
@@ -371,7 +379,7 @@ export const GlobalActivityCenter: React.FC<GlobalActivityCenterProps> = ({
         category: 'BUILD',
         name: 'Google Jules Coding Agent',
         status: 'FAILED',
-        detailText: jules.error?.message || 'Session interrompue',
+        detailText: jules.error?.message || jules.activeSession.resultSummary || 'Session interrompue',
         route: 'jules',
         icon: GitPullRequest,
       };
@@ -398,27 +406,31 @@ export const GlobalActivityCenter: React.FC<GlobalActivityCenterProps> = ({
     };
   })();
 
-  // 6. Adaptive Multi-LLM Routing Activity Item
-  const adaptiveItem: ActivityItem = operationalDecision
-    ? {
-        id: 'adaptive-routing',
-        category: 'INTELLIGENCE',
-        name: 'Routage Adaptatif Multi-LLM',
-        status: 'COMPLETED',
-        progressText: operationalDecision.selectedModelId,
-        detailText: `Dernière décision op. : ${operationalDecision.selectedModelId} (${operationalDecision.decisionType})`,
-        route: 'adaptive-llm',
-        icon: Brain,
-      }
-    : {
-        id: 'adaptive-routing',
-        category: 'INTELLIGENCE',
-        name: 'Routage Adaptatif & Benchmarks',
-        status: 'IDLE',
-        detailText: 'Sélection bayésienne sous contraintes strictes',
-        route: 'adaptive-llm',
-        icon: Brain,
-      };
+  // 6. Adaptive Multi-LLM Routing Activity Item (Historical decision is IDLE unless an active workflow is currently routing)
+  const adaptiveItem: ActivityItem =
+    workflow.executionState === 'RUNNING'
+      ? {
+          id: 'adaptive-routing',
+          category: 'INTELLIGENCE',
+          name: 'Routage Adaptatif Multi-LLM',
+          status: 'RUNNING',
+          progressText: operationalDecision?.selectedModelId || workflow.chosenModel,
+          detailText: `Routage actif pour l’exécution en cours`,
+          route: 'adaptive-llm',
+          icon: Brain,
+        }
+      : {
+          id: 'adaptive-routing',
+          category: 'INTELLIGENCE',
+          name: 'Routage Adaptatif & Benchmarks',
+          status: 'IDLE',
+          progressText: operationalDecision?.selectedModelId,
+          detailText: operationalDecision
+            ? `Dernière décision historique : ${operationalDecision.selectedModelId} (${operationalDecision.decisionType})`
+            : 'Sélection bayésienne sous contraintes strictes',
+          route: 'adaptive-llm',
+          icon: Brain,
+        };
 
   const allActivities: ActivityItem[] = [
     workflowItem,

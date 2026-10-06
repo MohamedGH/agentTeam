@@ -18,6 +18,7 @@ import {
   XCircle,
   FileText,
 } from 'lucide-react';
+import { apiFetch } from '../utils/apiFetch';
 
 interface WorkspaceExplorerProps {
   files: Record<string, string>;
@@ -102,7 +103,7 @@ export const WorkspaceExplorer: React.FC<WorkspaceExplorerProps> = ({
     if (onDeleteFile) {
       await onDeleteFile(fileToDelete);
     } else {
-      await fetch('/api/workspace/file', {
+      await apiFetch('/api/workspace/file', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: fileToDelete }),
@@ -144,7 +145,7 @@ export const WorkspaceExplorer: React.FC<WorkspaceExplorerProps> = ({
     setIsRunningCommand(true);
 
     try {
-      const res = await fetch('/api/workspace/run-command', {
+      const res = await apiFetch('/api/workspace/run-command', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ command: cmdToRun }),

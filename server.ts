@@ -365,12 +365,32 @@ async function startServer() {
         commitPushAndCreatePR,
         testCommand,
         workingDirectory,
-      } = req.body;
+      } = req.body || {};
 
       const taskPrompt = task || prompt;
       const repoTarget = repositoryName || repository;
-      if (!repoTarget || !taskPrompt) {
-        return res.status(400).json({ error: 'Repository and task are required' });
+      if (!repoTarget || typeof repoTarget !== 'string' || !taskPrompt || typeof taskPrompt !== 'string' || taskPrompt.trim().length === 0) {
+        return res.status(400).json({ error: 'Repository and non-empty task prompt are required' });
+      }
+      if (taskPrompt.length > 50_000) {
+        return res.status(400).json({ error: 'Task prompt exceeds maximum allowed length (50000 chars)' });
+      }
+
+      const repoCheck = validateAllowedRepository(repoTarget);
+      if (!repoCheck.valid) {
+        return res.status(403).json({ success: false, error: repoCheck.error });
+      }
+
+      const branchCheck = validateGitBranch(branch);
+      if (!branchCheck.valid) {
+        return res.status(400).json({ success: false, error: branchCheck.error });
+      }
+
+      if (testCommand !== undefined) {
+        const cmdCheck = validateSafeTestCommand(testCommand);
+        if (!cmdCheck.valid) {
+          return res.status(400).json({ success: false, error: cmdCheck.error });
+        }
       }
 
       const gitRequested = Boolean(
@@ -392,14 +412,14 @@ async function startServer() {
       const workflow = await workflowOrchestrator.startWorkflow({
         workflowId,
         agent,
-        repository: repoTarget,
-        branch,
+        repository: repoCheck.normalized,
+        branch: branchCheck.normalized,
         taskPrompt,
         title,
         automationMode,
         requirePlanApproval,
         createRepository,
-        repositoryName,
+        repositoryName: repoCheck.normalized,
         private: isPrivate,
         git,
         commitAndPush,
@@ -415,8 +435,8 @@ async function startServer() {
         executionStatus: workflow.executionStatus,
         status: workflow.status,
         stage: workflow.stage,
-        repository: repoTarget,
-        branch,
+        repository: repoCheck.normalized,
+        branch: branchCheck.normalized,
         title: workflow.title || title,
         prompt: taskPrompt,
         prUrl: workflow.prUrl,
@@ -451,14 +471,34 @@ async function startServer() {
         commitPushAndCreatePR,
         testCommand,
         workingDirectory,
-      } = req.body;
+      } = req.body || {};
 
       const taskPrompt = task || prompt;
       const repoTarget = repositoryName || repository;
-      if (!repoTarget || !taskPrompt) {
+      if (!repoTarget || typeof repoTarget !== 'string' || !taskPrompt || typeof taskPrompt !== 'string' || taskPrompt.trim().length === 0) {
         return res.status(400).json({
-          error: 'Repository and task prompt are required to start a Jules session',
+          error: 'Repository and non-empty task prompt are required to start a Jules session',
         });
+      }
+      if (taskPrompt.length > 50_000) {
+        return res.status(400).json({ error: 'Task prompt exceeds maximum allowed length (50000 chars)' });
+      }
+
+      const repoCheck = validateAllowedRepository(repoTarget);
+      if (!repoCheck.valid) {
+        return res.status(403).json({ success: false, error: repoCheck.error });
+      }
+
+      const branchCheck = validateGitBranch(branch);
+      if (!branchCheck.valid) {
+        return res.status(400).json({ success: false, error: branchCheck.error });
+      }
+
+      if (testCommand !== undefined) {
+        const cmdCheck = validateSafeTestCommand(testCommand);
+        if (!cmdCheck.valid) {
+          return res.status(400).json({ success: false, error: cmdCheck.error });
+        }
       }
 
       const gitRequested = Boolean(
@@ -481,14 +521,14 @@ async function startServer() {
       const workflow = await workflowOrchestrator.startWorkflow({
         workflowId,
         agent,
-        repository: repoTarget,
-        branch,
+        repository: repoCheck.normalized,
+        branch: branchCheck.normalized,
         taskPrompt,
         title,
         automationMode,
         requirePlanApproval,
         createRepository,
-        repositoryName,
+        repositoryName: repoCheck.normalized,
         private: isPrivate,
         git,
         commitAndPush,
@@ -514,8 +554,11 @@ async function startServer() {
   // List all stored historical sessions
   app.get('/api/coding-agents/sessions/history', requireApiKey, async (req, res) => {
     try {
-      const agentId = req.query.agent as string | undefined;
-      const sessions = await codingAgentManager.listStoredSessions(agentId);
+      const agentId = typeof req.query.agent === 'string' ? req.query.agent.trim() : undefined;
+      if (agentId && !/^[a-zA-Z0-9_-]{1,32}$/.test(agentId)) {
+        return res.status(400).json({ error: 'Invalid agent parameter' });
+      }
+      const sessions = await codingAgentManager.listStoredSessions(agentId as any);
       res.json({ success: true, sessions });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -543,14 +586,34 @@ async function startServer() {
         commitPushAndCreatePR,
         testCommand,
         workingDirectory,
-      } = req.body;
+      } = req.body || {};
 
       const taskPrompt = task || prompt;
       const repoTarget = repositoryName || repository;
-      if (!repoTarget || !taskPrompt) {
+      if (!repoTarget || typeof repoTarget !== 'string' || !taskPrompt || typeof taskPrompt !== 'string' || taskPrompt.trim().length === 0) {
         return res.status(400).json({
-          error: 'Repository and task prompt are required',
+          error: 'Repository and non-empty task prompt are required',
         });
+      }
+      if (taskPrompt.length > 50_000) {
+        return res.status(400).json({ error: 'Task prompt exceeds maximum allowed length (50000 chars)' });
+      }
+
+      const repoCheck = validateAllowedRepository(repoTarget);
+      if (!repoCheck.valid) {
+        return res.status(403).json({ success: false, error: repoCheck.error });
+      }
+
+      const branchCheck = validateGitBranch(branch);
+      if (!branchCheck.valid) {
+        return res.status(400).json({ success: false, error: branchCheck.error });
+      }
+
+      if (testCommand !== undefined) {
+        const cmdCheck = validateSafeTestCommand(testCommand);
+        if (!cmdCheck.valid) {
+          return res.status(400).json({ success: false, error: cmdCheck.error });
+        }
       }
 
       const gitRequested = Boolean(
@@ -572,14 +635,14 @@ async function startServer() {
       const workflow = await workflowOrchestrator.startWorkflow({
         workflowId,
         agent,
-        repository: repoTarget,
-        branch,
+        repository: repoCheck.normalized,
+        branch: branchCheck.normalized,
         taskPrompt,
         title,
         automationMode,
         requirePlanApproval,
         createRepository,
-        repositoryName,
+        repositoryName: repoCheck.normalized,
         private: isPrivate,
         git,
         commitAndPush,
@@ -605,7 +668,11 @@ async function startServer() {
   // 2. Get Jules session status and details (supports lookup by sessionId or workflowId)
   app.get('/api/coding-agents/jules/sessions/:sessionId', requireApiKey, async (req, res) => {
     try {
-      const sessionId = String(req.params.sessionId);
+      const idCheck = validateSafeId(req.params.sessionId, 'sessionId');
+      if (!idCheck.valid) {
+        return res.status(400).json({ error: idCheck.error });
+      }
+      const sessionId = idCheck.normalized;
       const wf = await workflowOrchestrator.getWorkflow(sessionId);
       const actualSessionId = String(wf?.sessionId || sessionId);
       const session = await codingAgentManager.getSession(actualSessionId, 'jules');
@@ -630,12 +697,19 @@ async function startServer() {
   // 3. Get Jules session activities (supports incremental ?lastActivityTime=...)
   app.get('/api/coding-agents/jules/sessions/:sessionId/activities', requireApiKey, async (req, res) => {
     try {
-      const sessionId = String(req.params.sessionId);
-      const lastActivityTime = req.query.lastActivityTime as string | undefined;
-      const pageSize = req.query.pageSize ? Number(req.query.pageSize) : undefined;
+      const idCheck = validateSafeId(req.params.sessionId, 'sessionId');
+      if (!idCheck.valid) {
+        return res.status(400).json({ error: idCheck.error });
+      }
+      const pageSizeCheck = validatePaginationLimit(req.query.pageSize, 50, 200);
+      if (!pageSizeCheck.valid) {
+        return res.status(400).json({ error: pageSizeCheck.error });
+      }
+      const sessionId = idCheck.normalized;
+      const lastActivityTime = typeof req.query.lastActivityTime === 'string' ? req.query.lastActivityTime.slice(0, 64) : undefined;
       const activities = await codingAgentManager.listActivities(sessionId, 'jules', {
         lastActivityTime,
-        pageSize,
+        pageSize: pageSizeCheck.value,
       });
       res.json({
         success: true,
@@ -651,10 +725,17 @@ async function startServer() {
   // 4. Send interactive message/prompt to Jules session
   app.post('/api/coding-agents/jules/sessions/:sessionId/message', requireApiKey, async (req, res) => {
     try {
-      const sessionId = String(req.params.sessionId);
+      const idCheck = validateSafeId(req.params.sessionId, 'sessionId');
+      if (!idCheck.valid) {
+        return res.status(400).json({ error: idCheck.error });
+      }
+      const sessionId = idCheck.normalized;
       const message = req.body?.message || req.body?.prompt;
-      if (!message || typeof message !== 'string') {
+      if (!message || typeof message !== 'string' || message.trim().length === 0) {
         return res.status(400).json({ error: 'Message content is required' });
+      }
+      if (message.length > 20_000) {
+        return res.status(400).json({ error: 'Message exceeds maximum allowed length (20000 chars)' });
       }
 
       await codingAgentManager.sendMessage(sessionId, message, 'jules');
@@ -671,7 +752,11 @@ async function startServer() {
   // 5. Approve plan for Jules session
   app.post('/api/coding-agents/jules/sessions/:sessionId/approve-plan', requireApiKey, async (req, res) => {
     try {
-      const sessionId = String(req.params.sessionId);
+      const idCheck = validateSafeId(req.params.sessionId, 'sessionId');
+      if (!idCheck.valid) {
+        return res.status(400).json({ error: idCheck.error });
+      }
+      const sessionId = idCheck.normalized;
       await codingAgentManager.approvePlan(sessionId, 'jules');
       res.json({
         success: true,
@@ -685,11 +770,15 @@ async function startServer() {
 
   app.get('/api/coding-agents/session/:id', requireApiKey, async (req, res) => {
     try {
-      const id = String(req.params.id);
-      const agent = (req.query.agent as string) || 'jules';
+      const idCheck = validateSafeId(req.params.id, 'id');
+      if (!idCheck.valid) {
+        return res.status(400).json({ error: idCheck.error });
+      }
+      const id = idCheck.normalized;
+      const agent = typeof req.query.agent === 'string' && /^[a-zA-Z0-9_-]{1,32}$/.test(req.query.agent) ? req.query.agent : 'jules';
       const wf = await workflowOrchestrator.getWorkflow(id);
       const actualSessionId = String(wf?.sessionId || id);
-      const session = await codingAgentManager.getSession(actualSessionId, agent);
+      const session = await codingAgentManager.getSession(actualSessionId, agent as any);
       res.json({
         ...session,
         workflowId: wf?.workflowId,
@@ -702,15 +791,22 @@ async function startServer() {
 
   app.get('/api/coding-agents/session/:id/activities', requireApiKey, async (req, res) => {
     try {
-      const id = String(req.params.id);
-      const agent = (req.query.agent as string) || 'jules';
+      const idCheck = validateSafeId(req.params.id, 'id');
+      if (!idCheck.valid) {
+        return res.status(400).json({ error: idCheck.error });
+      }
+      const pageSizeCheck = validatePaginationLimit(req.query.pageSize, 50, 200);
+      if (!pageSizeCheck.valid) {
+        return res.status(400).json({ error: pageSizeCheck.error });
+      }
+      const id = idCheck.normalized;
+      const agent = typeof req.query.agent === 'string' && /^[a-zA-Z0-9_-]{1,32}$/.test(req.query.agent) ? req.query.agent : 'jules';
       const wf = await workflowOrchestrator.getWorkflow(id);
       const actualSessionId = String(wf?.sessionId || id);
-      const lastActivityTime = req.query.lastActivityTime as string | undefined;
-      const pageSize = req.query.pageSize ? Number(req.query.pageSize) : undefined;
-      const activities = await codingAgentManager.listActivities(actualSessionId, agent, {
+      const lastActivityTime = typeof req.query.lastActivityTime === 'string' ? req.query.lastActivityTime.slice(0, 64) : undefined;
+      const activities = await codingAgentManager.listActivities(actualSessionId, agent as any, {
         lastActivityTime,
-        pageSize,
+        pageSize: pageSizeCheck.value,
       });
       res.json({ sessionId: actualSessionId, activities });
     } catch (err: any) {
@@ -738,18 +834,38 @@ async function startServer() {
         createRepository,
         testCommand,
         workingDirectory,
-      } = req.body;
+      } = req.body || {};
 
       const taskPrompt = task || prompt;
-      if (!repository || !taskPrompt) {
-        return res.status(400).json({ error: 'repository and task prompt are required' });
+      if (!repository || typeof repository !== 'string' || !taskPrompt || typeof taskPrompt !== 'string' || taskPrompt.trim().length === 0) {
+        return res.status(400).json({ error: 'repository and non-empty task prompt are required' });
+      }
+      if (taskPrompt.length > 50_000) {
+        return res.status(400).json({ error: 'Task prompt exceeds maximum allowed length (50000 chars)' });
+      }
+
+      const repoCheck = validateAllowedRepository(repository);
+      if (!repoCheck.valid) {
+        return res.status(403).json({ success: false, error: repoCheck.error });
+      }
+
+      const branchCheck = validateGitBranch(branch);
+      if (!branchCheck.valid) {
+        return res.status(400).json({ success: false, error: branchCheck.error });
+      }
+
+      if (testCommand !== undefined) {
+        const cmdCheck = validateSafeTestCommand(testCommand);
+        if (!cmdCheck.valid) {
+          return res.status(400).json({ success: false, error: cmdCheck.error });
+        }
       }
 
       const workflow = await workflowOrchestrator.startWorkflow({
         workflowId,
         agent,
-        repository,
-        branch,
+        repository: repoCheck.normalized,
+        branch: branchCheck.normalized,
         taskPrompt,
         title,
         automationMode,
@@ -775,7 +891,7 @@ async function startServer() {
     }
   });
 
-  app.get('/api/workflows', requireApiKey, async (req, res) => {
+  app.get('/api/workflows', requireApiKey, async (_req, res) => {
     try {
       const active = workflowOrchestrator.getActiveWorkflows();
       const allStored = await codingAgentManager.listStoredSessions();
@@ -796,7 +912,11 @@ async function startServer() {
 
   app.get('/api/workflows/:id', requireApiKey, async (req, res) => {
     try {
-      const id = String(req.params.id);
+      const idCheck = validateSafeId(req.params.id, 'id');
+      if (!idCheck.valid) {
+        return res.status(400).json({ error: idCheck.error });
+      }
+      const id = idCheck.normalized;
       const workflow = await workflowOrchestrator.getWorkflow(id);
       if (!workflow) {
         return res.status(404).json({ error: `Workflow "${id}" not found` });
@@ -809,7 +929,11 @@ async function startServer() {
 
   app.post('/api/workflows/:id/poll', requireApiKey, async (req, res) => {
     try {
-      const id = String(req.params.id);
+      const idCheck = validateSafeId(req.params.id, 'id');
+      if (!idCheck.valid) {
+        return res.status(400).json({ error: idCheck.error });
+      }
+      const id = idCheck.normalized;
       const workflow = await workflowOrchestrator.pollWorkflow(id);
       res.json({ success: true, workflow });
     } catch (err: any) {
@@ -819,7 +943,11 @@ async function startServer() {
 
   app.post('/api/workflows/:id/resume', requireApiKey, async (req, res) => {
     try {
-      const id = String(req.params.id);
+      const idCheck = validateSafeId(req.params.id, 'id');
+      if (!idCheck.valid) {
+        return res.status(400).json({ error: idCheck.error });
+      }
+      const id = idCheck.normalized;
       const workflow = await workflowOrchestrator.resumeWorkflow(id);
       if (!workflow) {
         return res.status(404).json({ error: `Workflow "${id}" not found` });
@@ -831,9 +959,9 @@ async function startServer() {
   });
 
   // -------------------------------------------------------------
-  // SELF-IMPROVEMENT ENGINE APIS & SSE STREAM
+  // SELF-IMPROVEMENT ENGINE APIS & SSE STREAM (All Protected)
   // -------------------------------------------------------------
-  app.get('/api/self-improvement/status', (req, res) => {
+  app.get('/api/self-improvement/status', requireApiKey, (_req, res) => {
     try {
       const current = selfImprovementEngine.getCurrentCycle();
       const all = selfImprovementEngine.getAllCycles();
@@ -849,7 +977,7 @@ async function startServer() {
     }
   });
 
-  app.get('/api/self-improvement/history', requireApiKey, (req, res) => {
+  app.get('/api/self-improvement/history', requireApiKey, (_req, res) => {
     try {
       const cycles = selfImprovementEngine.getAllCycles();
       res.json({
@@ -864,7 +992,11 @@ async function startServer() {
 
   app.get('/api/self-improvement/cycles/:cycleId', requireApiKey, (req, res) => {
     try {
-      const cycleId = String(req.params.cycleId);
+      const idCheck = validateSafeId(req.params.cycleId, 'cycleId');
+      if (!idCheck.valid) {
+        return res.status(400).json({ error: idCheck.error });
+      }
+      const cycleId = idCheck.normalized;
       const cycle = selfImprovementEngine.getCycle(cycleId);
       if (!cycle) {
         return res.status(404).json({ error: `Cycle "${cycleId}" not found` });
@@ -877,7 +1009,21 @@ async function startServer() {
 
   app.post('/api/self-improvement/run', requireApiKey, async (req, res) => {
     try {
-      const options = req.body || {};
+      const options = { ...(req.body || {}) };
+      delete options.realExecution;
+      if (options.testCommand !== undefined) {
+        const cmdCheck = validateSafeTestCommand(options.testCommand);
+        if (!cmdCheck.valid) {
+          return res.status(400).json({ error: cmdCheck.error });
+        }
+      }
+      if (options.repository !== undefined) {
+        const repoCheck = validateAllowedRepository(options.repository);
+        if (!repoCheck.valid) {
+          return res.status(403).json({ error: repoCheck.error });
+        }
+        options.repository = repoCheck.normalized;
+      }
       const cycle = await selfImprovementEngine.runCycle(options);
       res.status(200).json({
         success: true,
@@ -893,7 +1039,11 @@ async function startServer() {
 
   app.post('/api/self-improvement/rollback/:cycleId', requireApiKey, async (req, res) => {
     try {
-      const cycleId = String(req.params.cycleId);
+      const idCheck = validateSafeId(req.params.cycleId, 'cycleId');
+      if (!idCheck.valid) {
+        return res.status(400).json({ error: idCheck.error });
+      }
+      const cycleId = idCheck.normalized;
       const workingDirectory = req.body?.workingDirectory;
       const success = await selfImprovementEngine.rollbackCycle(cycleId, workingDirectory);
       if (!success) {
@@ -908,7 +1058,7 @@ async function startServer() {
     }
   });
 
-  app.get('/api/self-improvement/config', (req, res) => {
+  app.get('/api/self-improvement/config', requireApiKey, (_req, res) => {
     try {
       const config = selfImprovementEngine.getConfig();
       res.json({ success: true, config });
@@ -917,7 +1067,7 @@ async function startServer() {
     }
   });
 
-  app.get('/api/self-improvement/memory', requireApiKey, (req, res) => {
+  app.get('/api/self-improvement/memory', requireApiKey, (_req, res) => {
     try {
       const records = improvementMemory.getAllRecords();
       const successful = improvementMemory.findSuccessfulImprovements();
@@ -934,7 +1084,7 @@ async function startServer() {
     }
   });
 
-  app.delete('/api/self-improvement/memory', requireApiKey, (req, res) => {
+  app.delete('/api/self-improvement/memory', requireApiKey, (_req, res) => {
     try {
       improvementMemory.clearMemory();
       res.json({ success: true, message: 'Improvement memory cleared.' });
@@ -943,7 +1093,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/self-improvement/reset-failures', requireApiKey, (req, res) => {
+  app.post('/api/self-improvement/reset-failures', requireApiKey, (_req, res) => {
     try {
       selfImprovementEngine.resetFailureCount();
       res.json({ success: true, message: 'Consecutive failure counter reset.' });
@@ -980,9 +1130,9 @@ async function startServer() {
   });
 
   // -------------------------------------------------------------
-  // GITHUB DIRECT WORKFLOW & REPOSITORY APIS
+  // GITHUB DIRECT WORKFLOW & REPOSITORY APIS (All Protected)
   // -------------------------------------------------------------
-  app.get('/api/github/status', async (req, res) => {
+  app.get('/api/github/status', requireApiKey, async (_req, res) => {
     try {
       const configured = githubManager.isConfigured();
       if (!configured) {
@@ -1016,9 +1166,12 @@ async function startServer() {
 
   app.post('/api/github/config', requireApiKey, async (req, res) => {
     try {
-      const { token, owner } = req.body;
-      if (!token || typeof token !== 'string' || token.trim().length === 0) {
-        return res.status(400).json({ success: false, error: 'Token is required' });
+      const { token, owner } = req.body || {};
+      if (!token || typeof token !== 'string' || token.trim().length === 0 || token.length > 512) {
+        return res.status(400).json({ success: false, error: 'Valid token is required' });
+      }
+      if (owner !== undefined && (typeof owner !== 'string' || !/^[a-zA-Z0-9-]{1,39}$/.test(owner.trim()))) {
+        return res.status(400).json({ success: false, error: 'Invalid GitHub owner format' });
       }
 
       githubManager.configureToken(token.trim(), owner ? String(owner).trim() : undefined);
@@ -1052,30 +1205,39 @@ async function startServer() {
 
   app.post('/api/github/push-main', requireApiKey, async (req, res) => {
     try {
-      const token = (req.body.token || process.env.GITHUB_TOKEN || githubManager.getClient().getToken() || '').trim();
-      const repository = (req.body.repository || 'MohamedGH/agentTeam').trim();
-      const branch = (req.body.branch || 'main').trim();
+      const explicitToken = typeof req.body?.token === 'string' ? req.body.token.trim() : '';
+      const token = explicitToken || (process.env.GITHUB_TOKEN || '').trim() || (githubManager.getClient().getToken() || '').trim();
+      const rawRepository = typeof req.body?.repository === 'string' ? req.body.repository.trim() : 'MohamedGH/agentTeam';
+      const rawBranch = typeof req.body?.branch === 'string' ? req.body.branch.trim() : 'main';
 
       // Security check: restrict target repository to authorized repositories only to prevent arbitrary token exfiltration
-      const ALLOWED_REPOSITORIES = ['MohamedGH/agentTeam'];
-      if (!ALLOWED_REPOSITORIES.includes(repository)) {
+      const repoCheck = validateAllowedRepository(rawRepository);
+      if (!repoCheck.valid) {
         return res.status(403).json({
           success: false,
-          error: `Push non autorisé : le dépôt "${repository}" n'est pas dans la liste des dépôts autorisés (${ALLOWED_REPOSITORIES.join(', ')})`,
+          error: repoCheck.error,
         });
       }
 
-      const [owner, repo] = repository.split('/');
+      const branchCheck = validateGitBranch(rawBranch);
+      if (!branchCheck.valid) {
+        return res.status(400).json({
+          success: false,
+          error: branchCheck.error,
+        });
+      }
+
       if (!token) {
         return res.status(400).json({ success: false, error: 'GitHub Token required for push' });
       }
-      if (!owner || !repo) {
-        return res.status(400).json({ success: false, error: 'Invalid repository format (expected owner/repo)' });
-      }
 
-      // Ensure token configured
-      githubManager.configureToken(token, owner);
-      process.env.GITHUB_TOKEN = token;
+      const { owner, repo } = repoCheck;
+      const branch = branchCheck.normalized;
+
+      if (explicitToken) {
+        githubManager.configureToken(explicitToken, owner);
+        process.env.GITHUB_TOKEN = explicitToken;
+      }
 
       const gitOps = githubManager.getGitOps();
       const pushResult = await gitOps.pushBranch({
@@ -1111,35 +1273,38 @@ async function startServer() {
         jobs,
       });
     } catch (err: any) {
-      console.error('[Server] Push failed:', err);
       res.status(500).json({ success: false, error: err.message });
     }
   });
 
   app.get('/api/github/ci-runs', requireApiKey, async (req, res) => {
     try {
-      const repository = ((req.query.repository as string) || 'MohamedGH/agentTeam').trim();
+      const rawRepository = typeof req.query.repository === 'string' ? req.query.repository.trim() : 'MohamedGH/agentTeam';
 
       // Security check: restrict target repository to authorized repositories only
-      const ALLOWED_REPOSITORIES = ['MohamedGH/agentTeam'];
-      if (!ALLOWED_REPOSITORIES.includes(repository)) {
+      const repoCheck = validateAllowedRepository(rawRepository);
+      if (!repoCheck.valid) {
         return res.status(403).json({
           success: false,
-          error: `Accès non autorisé : le dépôt "${repository}" n'est pas dans la liste des dépôts autorisés (${ALLOWED_REPOSITORIES.join(', ')})`,
+          error: repoCheck.error,
         });
       }
 
-      const [owner, repo] = repository.split('/');
+      const { owner, repo } = repoCheck;
       const client = githubManager.getClient();
       if (!client.isConfigured()) {
         return res.status(401).json({ success: false, error: 'GitHub client not configured' });
       }
 
       const headSha = ((req.query.head_sha as string) || (req.query.sha as string) || '').trim();
+      if (headSha && !/^[0-9a-f]{7,40}$/i.test(headSha)) {
+        return res.status(400).json({ success: false, error: 'Invalid commit SHA format' });
+      }
+
       const runsRes = await client.request<any>(`/repos/${owner}/${repo}/actions/runs?per_page=20`);
       const allRuns = runsRes?.workflow_runs || [];
 
-      // Look up specific run matching head_sha if supplied
+      // Look up specific run matching head_sha if supplied (ZERO fallback to runs[0] when headSha is specified)
       let selectedRun: any = null;
       if (headSha) {
         selectedRun = allRuns.find((r: any) => r.head_sha === headSha) || null;
@@ -1164,7 +1329,7 @@ async function startServer() {
         runs: allRuns,
         selectedRun,
         selectedRunId: selectedRun?.id || null,
-        headShaMatched: Boolean(headSha && selectedRun),
+        headShaMatched: Boolean(headSha && selectedRun && selectedRun.head_sha === headSha),
         jobs,
       });
     } catch (err: any) {
@@ -1181,32 +1346,67 @@ async function startServer() {
         });
       }
 
+      const body = req.body || {};
+      const repoCheck = validateAllowedRepository(body.repository || 'MohamedGH/agentTeam');
+      if (!repoCheck.valid) {
+        return res.status(403).json({
+          success: false,
+          error: repoCheck.error,
+          gateAuthorized: false,
+        });
+      }
+
+      // Derive Quality Gate state strictly from authoritative server-side WorkflowOrchestrator state
+      // NEVER trust client-supplied realExecution, testsPassed, reviewExecuted, reviewApproved, or sessionStatus
+      const lookupId = typeof (body.workflowId || body.sessionId) === 'string' ? String(body.workflowId || body.sessionId).trim() : '';
+      const authoritativeWf = lookupId ? await workflowOrchestrator.getWorkflow(lookupId) : null;
+
+      const serverSessionStatus = authoritativeWf ? authoritativeWf.status : undefined;
+      const serverExecutionStatus = authoritativeWf ? authoritativeWf.executionStatus : undefined;
+      const serverRealExecution = Boolean(
+        authoritativeWf &&
+          authoritativeWf.agentId !== 'mock' &&
+          authoritativeWf.workingDirectory
+      );
+      const serverTestsPassed = Boolean(authoritativeWf && authoritativeWf.testsPassed === true);
+      const serverReviewExecuted = Boolean(authoritativeWf && authoritativeWf.reviewExecuted === true);
+      const serverReviewApproved = Boolean(authoritativeWf && authoritativeWf.reviewApproved === true);
+
       // Check Quality Gate before executing any Git mutations
-      const shouldCommit = Boolean(req.body.git?.commit || req.body.commitAndPush || req.body.commitPushAndCreatePR);
-      const shouldPush = Boolean(req.body.git?.push || req.body.commitAndPush || req.body.commitPushAndCreatePR);
-      const shouldCreatePR = Boolean(req.body.git?.createPullRequest || req.body.commitPushAndCreatePR);
-      const shouldCreateRepo = Boolean(req.body.createRepository);
+      const shouldCommit = Boolean(body.git?.commit || body.commitAndPush || body.commitPushAndCreatePR);
+      const shouldPush = Boolean(body.git?.push || body.commitAndPush || body.commitPushAndCreatePR);
+      const shouldCreatePR = Boolean(body.git?.createPullRequest || body.commitPushAndCreatePR);
+      const shouldCreateRepo = Boolean(body.createRepository);
       if (shouldCommit || shouldPush || shouldCreatePR || shouldCreateRepo) {
         const gateCheck = evaluateQualityGate({
-          sessionStatus: req.body.sessionStatus,
-          executionStatus: req.body.executionStatus,
-          realExecution: req.body.realExecution,
-          testsPassed: req.body.testsPassed,
-          reviewExecuted: req.body.reviewExecuted,
-          reviewApproved: req.body.reviewApproved,
+          sessionStatus: serverSessionStatus,
+          executionStatus: serverExecutionStatus,
+          realExecution: serverRealExecution,
+          testsPassed: serverTestsPassed,
+          reviewExecuted: serverReviewExecuted,
+          reviewApproved: serverReviewApproved,
         });
 
         if (!gateCheck.authorized) {
           return res.status(403).json({
             success: false,
             error: gateCheck.reason,
-            testsPassed: req.body.testsPassed === true,
+            testsPassed: serverTestsPassed,
             gateAuthorized: false,
           });
         }
       }
 
-      const result = await workflowOrchestrator.executeDelivery(req.body);
+      const result = await workflowOrchestrator.executeDelivery({
+        ...body,
+        repository: repoCheck.normalized,
+        sessionStatus: serverSessionStatus,
+        executionStatus: serverExecutionStatus,
+        realExecution: serverRealExecution,
+        testsPassed: serverTestsPassed,
+        reviewExecuted: serverReviewExecuted,
+        reviewApproved: serverReviewApproved,
+      });
       return res.status(result.success ? 200 : (result.testsPassed === false ? 422 : 500)).json(result);
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
@@ -1222,37 +1422,62 @@ async function startServer() {
         });
       }
 
-      const { repository, createRepository = true, private: isPrivate = false } = req.body;
+      const body = req.body || {};
+      const { repository, createRepository = true, private: isPrivate = false } = body;
+      const repoCheck = validateAllowedRepository(repository);
+      if (!repoCheck.valid) {
+        return res.status(403).json({
+          success: false,
+          error: repoCheck.error,
+          gateAuthorized: false,
+        });
+      }
+
+      // Derive Quality Gate state strictly from authoritative server-side WorkflowOrchestrator state
+      const lookupId = typeof (body.workflowId || body.sessionId) === 'string' ? String(body.workflowId || body.sessionId).trim() : '';
+      const authoritativeWf = lookupId ? await workflowOrchestrator.getWorkflow(lookupId) : null;
+
+      const serverSessionStatus = authoritativeWf ? authoritativeWf.status : undefined;
+      const serverExecutionStatus = authoritativeWf ? authoritativeWf.executionStatus : undefined;
+      const serverRealExecution = Boolean(
+        authoritativeWf &&
+          authoritativeWf.agentId !== 'mock' &&
+          authoritativeWf.workingDirectory
+      );
+      const serverTestsPassed = Boolean(authoritativeWf && authoritativeWf.testsPassed === true);
+      const serverReviewExecuted = Boolean(authoritativeWf && authoritativeWf.reviewExecuted === true);
+      const serverReviewApproved = Boolean(authoritativeWf && authoritativeWf.reviewApproved === true);
+
       if (createRepository) {
         const gateCheck = evaluateQualityGate({
-          sessionStatus: req.body.sessionStatus,
-          executionStatus: req.body.executionStatus,
-          realExecution: req.body.realExecution,
-          testsPassed: req.body.testsPassed,
-          reviewExecuted: req.body.reviewExecuted,
-          reviewApproved: req.body.reviewApproved,
+          sessionStatus: serverSessionStatus,
+          executionStatus: serverExecutionStatus,
+          realExecution: serverRealExecution,
+          testsPassed: serverTestsPassed,
+          reviewExecuted: serverReviewExecuted,
+          reviewApproved: serverReviewApproved,
         });
 
         if (!gateCheck.authorized) {
           return res.status(403).json({
             success: false,
             error: gateCheck.reason,
-            testsPassed: req.body.testsPassed === true,
+            testsPassed: serverTestsPassed,
             gateAuthorized: false,
           });
         }
       }
 
       const repo = await githubManager.ensureRepository({
-        repository,
+        repository: repoCheck.normalized,
         createRepository,
         private: isPrivate,
-        sessionStatus: req.body.sessionStatus,
-        executionStatus: req.body.executionStatus,
-        realExecution: req.body.realExecution,
-        testsPassed: req.body.testsPassed,
-        reviewExecuted: req.body.reviewExecuted,
-        reviewApproved: req.body.reviewApproved,
+        sessionStatus: serverSessionStatus,
+        executionStatus: serverExecutionStatus,
+        realExecution: serverRealExecution,
+        testsPassed: serverTestsPassed,
+        reviewExecuted: serverReviewExecuted,
+        reviewApproved: serverReviewApproved,
       });
 
       res.json({ success: true, repository: repo });
@@ -1282,30 +1507,54 @@ async function startServer() {
         testCommand,
         workingDirectory,
         git,
-      } = req.body;
+      } = req.body || {};
 
-      if (!prompt || typeof prompt !== 'string') {
+      if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
         return res.status(400).json({ error: 'Task prompt is required' });
+      }
+      if (prompt.length > 50_000) {
+        return res.status(400).json({ error: 'Task prompt exceeds maximum allowed length (50000 chars)' });
+      }
+
+      const tierCheck = validateTier(tier);
+      if (!tierCheck.valid) {
+        return res.status(400).json({ error: tierCheck.error });
+      }
+
+      if (testCommand !== undefined) {
+        const cmdCheck = validateSafeTestCommand(testCommand);
+        if (!cmdCheck.valid) {
+          return res.status(400).json({ error: cmdCheck.error });
+        }
       }
 
       if (codingAgent === 'jules' || codingAgent === 'mock') {
         const repoTarget = repositoryName || repository || 'MohamedGH/agentTeam';
+        const repoCheck = validateAllowedRepository(repoTarget);
+        if (!repoCheck.valid) {
+          return res.status(403).json({ error: repoCheck.error });
+        }
+        const branchCheck = validateGitBranch(branch || 'main');
+        if (!branchCheck.valid) {
+          return res.status(400).json({ error: branchCheck.error });
+        }
+
         const workflow = await workflowOrchestrator.startWorkflow({
           agent: codingAgent,
-          repository: repoTarget,
-          branch: branch || 'main',
+          repository: repoCheck.normalized,
+          branch: branchCheck.normalized,
           taskPrompt: prompt,
           title,
           automationMode,
           createRepository,
-          repositoryName,
+          repositoryName: repoCheck.normalized,
           private: isPrivate,
           git,
           commitAndPush,
           commitPushAndCreatePR,
           testCommand,
           workingDirectory,
-          tier,
+          tier: tierCheck.normalized,
           model,
           provider,
         });
@@ -1329,7 +1578,7 @@ async function startServer() {
         });
       }
 
-      const result = await agentTeamEngine.runWorkflow(prompt, tier, undefined, {
+      const result = await agentTeamEngine.runWorkflow(prompt, tierCheck.normalized as any, undefined, {
         provider,
         model,
         codingAgent,
@@ -1344,7 +1593,6 @@ async function startServer() {
         commitPushAndCreatePR,
         testCommand,
         workingDirectory,
-        realExecution: req.body.realExecution,
         git,
       });
       res.json(result);
@@ -1373,6 +1621,20 @@ async function startServer() {
     const workingDirectory = (req.body?.workingDirectory || req.query?.workingDirectory) as string | undefined;
     const git = req.body?.git;
 
+    if (typeof prompt !== 'string' || prompt.trim().length === 0 || prompt.length > 50_000) {
+      return res.status(400).json({ error: 'Valid task prompt (1..50000 chars) is required' });
+    }
+    const tierCheck = validateTier(tier);
+    if (!tierCheck.valid) {
+      return res.status(400).json({ error: tierCheck.error });
+    }
+    if (testCommand !== undefined) {
+      const cmdCheck = validateSafeTestCommand(testCommand);
+      if (!cmdCheck.valid) {
+        return res.status(400).json({ error: cmdCheck.error });
+      }
+    }
+
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
@@ -1381,22 +1643,33 @@ async function startServer() {
     try {
       if (codingAgent === 'jules' || codingAgent === 'mock') {
         const repoTarget = repositoryName || repository || 'MohamedGH/agentTeam';
+        const repoCheck = validateAllowedRepository(repoTarget);
+        if (!repoCheck.valid) {
+          res.write(`data: ${JSON.stringify({ type: 'error', error: repoCheck.error })}\n\n`);
+          return res.end();
+        }
+        const branchCheck = validateGitBranch(branch || 'main');
+        if (!branchCheck.valid) {
+          res.write(`data: ${JSON.stringify({ type: 'error', error: branchCheck.error })}\n\n`);
+          return res.end();
+        }
+
         const workflow = await workflowOrchestrator.startWorkflow({
           agent: codingAgent,
-          repository: repoTarget,
-          branch: branch || 'main',
+          repository: repoCheck.normalized,
+          branch: branchCheck.normalized,
           taskPrompt: prompt,
           title,
           automationMode,
           createRepository,
-          repositoryName,
+          repositoryName: repoCheck.normalized,
           private: isPrivate,
           git,
           commitAndPush,
           commitPushAndCreatePR,
           testCommand,
           workingDirectory,
-          tier,
+          tier: tierCheck.normalized,
           model,
           provider,
         });
@@ -1433,7 +1706,7 @@ async function startServer() {
 
       const result = await agentTeamEngine.runWorkflow(
         prompt,
-        tier,
+        tierCheck.normalized as any,
         (step) => {
           res.write(`data: ${JSON.stringify({ type: 'step', step })}\n\n`);
         },
@@ -1452,7 +1725,6 @@ async function startServer() {
           commitPushAndCreatePR,
           testCommand,
           workingDirectory,
-          realExecution: req.body?.realExecution ?? (req.query?.realExecution === 'true'),
           git,
         }
       );

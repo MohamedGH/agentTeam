@@ -20,6 +20,8 @@ import {
   Loader2,
 } from 'lucide-react';
 import { useDeliveryState } from '../managers/useDeliveryState';
+import { apiFetch } from '../utils/apiFetch';
+import { CIStatusDashboard } from './CIStatusDashboard';
 
 interface GitHubStatus {
   configured: boolean;
@@ -49,7 +51,7 @@ export const GitHubSettingsModal: React.FC = () => {
   const fetchStatus = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/github/status');
+      const res = await apiFetch('/api/github/status');
       const data = await res.json();
       setStatus(data);
 
@@ -75,7 +77,7 @@ export const GitHubSettingsModal: React.FC = () => {
     setIsLoading(true);
     setFeedback(null);
     try {
-      const res = await fetch('/api/github/config', {
+      const res = await apiFetch('/api/github/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token: tokenInput.trim(), owner: 'MohamedGH' }),
@@ -483,6 +485,12 @@ export const GitHubSettingsModal: React.FC = () => {
         )}
 
         {/* Action Push vers main */}
+        <CIStatusDashboard
+          delivery={delivery}
+          configured={status.configured}
+          onRefresh={() => delivery.fetchCiRuns(delivery.trackedSha)}
+        />
+
         <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
           <div className="text-xs text-slate-400">
             Dernier push enregistré :{' '}

@@ -102,7 +102,7 @@ Managed by agentTeam (Manager, Developer, Tester, Reviewer).
     }
   }
 
-  public isSafePath(filePath: string): { safe: boolean; error?: string } {
+  public validatePath(filePath: string): { safe: boolean; error?: string } {
     if (!filePath || typeof filePath !== 'string' || filePath.trim().length === 0) {
       return { safe: false, error: 'File path must be a non-empty string' };
     }
@@ -166,8 +166,12 @@ Managed by agentTeam (Manager, Developer, Tester, Reviewer).
     return { safe: true };
   }
 
+  public isSafePath(filePath: string): boolean {
+    return this.validatePath(filePath).safe;
+  }
+
   public readFile(filePath: string): string {
-    const check = this.isSafePath(filePath);
+    const check = this.validatePath(filePath);
     if (!check.safe) return `ERROR: ${check.error}`;
 
     const normalized = filePath.replace(/\\/g, '/').replace(/^\/+/, '');
@@ -179,7 +183,7 @@ Managed by agentTeam (Manager, Developer, Tester, Reviewer).
   }
 
   public writeFile(filePath: string, content: string): string {
-    const check = this.isSafePath(filePath);
+    const check = this.validatePath(filePath);
     if (!check.safe) return `ERROR: ${check.error}`;
 
     const normalized = filePath.replace(/\\/g, '/').replace(/^\/+/, '');
@@ -192,7 +196,7 @@ Managed by agentTeam (Manager, Developer, Tester, Reviewer).
   }
 
   public patchFile(filePath: string, oldText: string, newText: string): string {
-    const check = this.isSafePath(filePath);
+    const check = this.validatePath(filePath);
     if (!check.safe) return `ERROR: ${check.error}`;
 
     const normalized = filePath.replace(/\\/g, '/').replace(/^\/+/, '');
@@ -457,18 +461,18 @@ ${testFiles.map(t => `${t} .`).join('\n')}
   }
 
   public setFile(filePath: string, content: string) {
-    const check = this.isSafePath(filePath);
+    const check = this.validatePath(filePath);
     if (!check.safe) {
-      throw new Error(check.error || `Unsafe file path: ${filePath}`);
+      throw new Error(`Unsafe file path: ${filePath}${check.error ? ` (${check.error})` : ''}`);
     }
     const normalized = filePath.replace(/\\/g, '/').replace(/^\/+/, '');
     this.files.set(normalized, content);
   }
 
   public deleteFile(filePath: string) {
-    const check = this.isSafePath(filePath);
+    const check = this.validatePath(filePath);
     if (!check.safe) {
-      throw new Error(check.error || `Unsafe file path: ${filePath}`);
+      throw new Error(`Unsafe file path: ${filePath}${check.error ? ` (${check.error})` : ''}`);
     }
     const normalized = filePath.replace(/\\/g, '/').replace(/^\/+/, '');
     this.files.delete(normalized);

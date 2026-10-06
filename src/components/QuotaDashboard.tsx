@@ -19,6 +19,7 @@ import {
   Layers,
   AlertTriangle,
 } from 'lucide-react';
+import { apiFetch } from '../utils/apiFetch';
 
 interface QuotaDashboardProps {
   models: Record<string, ModelQuotaStatus>;
@@ -162,7 +163,7 @@ export const QuotaDashboard: React.FC<QuotaDashboardProps> = ({
   const handleSimulateCooldown = async (targetModel = 'gemini-3.7-flash') => {
     setIsSimulatingCooldown(true);
     try {
-      const res = await fetch('/api/quota/simulate-cooldown', {
+      const res = await apiFetch('/api/quota/simulate-cooldown', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ model: targetModel, durationSeconds: 30 }),

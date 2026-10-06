@@ -21,6 +21,7 @@ import { useWorkflowState } from './managers/useWorkflowState';
 import { useDeliveryState } from './managers/useDeliveryState';
 import { useSelfImprovementState } from './managers/useSelfImprovementState';
 import { useJulesState } from './managers/useJulesState';
+import { apiFetch } from './utils/apiFetch';
 import {
   Play,
   Sparkles,
@@ -139,7 +140,7 @@ export default function App() {
   // Load initial workspace files, quota stats, and provider catalog
   const fetchWorkspace = async () => {
     try {
-      const res = await fetch('/api/workspace/files');
+      const res = await apiFetch('/api/workspace/files');
       if (res.ok) {
         const data = await res.json();
         setFiles(data.files || {});
@@ -153,7 +154,7 @@ export default function App() {
 
   const fetchProviders = async () => {
     try {
-      const res = await fetch('/api/providers/list');
+      const res = await apiFetch('/api/providers/list');
       if (res.ok) {
         const data = await res.json();
         const provs = data.providers || [];
@@ -177,7 +178,7 @@ export default function App() {
       const isModelValid = targetProvider && model ? targetProvider.models.some((m) => m.name === model) : false;
       const targetModel = isModelValid ? model : (targetProvider ? targetProvider.defaultModel : undefined);
 
-      const res = await fetch('/api/providers/select', {
+      const res = await apiFetch('/api/providers/select', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ provider: providerId, model: targetModel }),
@@ -198,7 +199,7 @@ export default function App() {
 
   const fetchQuotaStatus = async (tier = selectedTier, refresh = false) => {
     try {
-      const res = await fetch(`/api/quota/status?tier=${tier}${refresh ? '&refresh=true' : ''}`);
+      const res = await apiFetch(`/api/quota/status?tier=${tier}${refresh ? '&refresh=true' : ''}`);
       if (res.ok) {
         const data = await res.json();
         setQuotaModels(data.models || {});
@@ -250,7 +251,7 @@ export default function App() {
 
     try {
       // Attempt Server-Sent Events (SSE) streaming execution
-      const streamRes = await fetch('/api/team/run-stream', {
+      const streamRes = await apiFetch('/api/team/run-stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestPayload),
@@ -304,7 +305,7 @@ export default function App() {
         }
       } else {
         // Fallback to standard batch POST /api/team/run
-        const res = await fetch('/api/team/run', {
+        const res = await apiFetch('/api/team/run', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(requestPayload),
@@ -348,7 +349,7 @@ export default function App() {
   };
 
   const handleSaveFile = async (path: string, content: string) => {
-    await fetch('/api/workspace/file', {
+    await apiFetch('/api/workspace/file', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ path, content }),
@@ -357,7 +358,7 @@ export default function App() {
   };
 
   const handleDeleteFile = async (path: string) => {
-    await fetch('/api/workspace/file', {
+    await apiFetch('/api/workspace/file', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ path }),
@@ -366,7 +367,7 @@ export default function App() {
   };
 
   const handleResetWorkspace = async () => {
-    await fetch('/api/workspace/reset', { method: 'POST' });
+    await apiFetch('/api/workspace/reset', { method: 'POST' });
     await fetchWorkspace();
   };
 
@@ -374,7 +375,7 @@ export default function App() {
     setIsResettingQuota(true);
     setQuotaResetError(null);
     try {
-      const res = await fetch('/api/quota/reset-state', {
+      const res = await apiFetch('/api/quota/reset-state', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ model }),

@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { errorManager } from '../managers/errorManager';
 import { ActionableErrorCard } from './ActionableErrorCard';
+import { apiFetch } from '../utils/apiFetch';
 
 export interface ModelMetadata {
   modelId: string;
@@ -82,8 +83,8 @@ export function AdaptiveLLMDashboard() {
     setBenchmarkError(null);
     try {
       const [modelsRes, rankingsRes] = await Promise.all([
-        fetch('/api/llm/models').then((r) => r.json()),
-        fetch('/api/llm/rankings').then((r) => r.json()),
+        apiFetch('/api/llm/models').then((r) => r.json()),
+        apiFetch('/api/llm/rankings').then((r) => r.json()),
       ]);
 
       if (modelsRes.success) {
@@ -102,7 +103,7 @@ export function AdaptiveLLMDashboard() {
   const fetchOperationalDecision = async () => {
     setIsLoadingOperational(true);
     try {
-      const res = await fetch('/api/llm/last-operational-decision');
+      const res = await apiFetch('/api/llm/last-operational-decision');
       if (res.ok) {
         const data = await res.json();
         if (data.success && data.decision) {
@@ -122,7 +123,7 @@ export function AdaptiveLLMDashboard() {
     setIsSelecting(true);
     setSelectionError(null);
     try {
-      const res = await fetch('/api/llm/select', {
+      const res = await apiFetch('/api/llm/select', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt: targetPrompt }),
@@ -150,7 +151,7 @@ export function AdaptiveLLMDashboard() {
     setBenchmarkResult(null);
     setBenchmarkError(null);
     try {
-      const res = await fetch('/api/llm/benchmark/run', {
+      const res = await apiFetch('/api/llm/benchmark/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ category: selectedCategory, isLive: false }),

@@ -235,6 +235,32 @@ export async function runDeliveryStateManagerTests() {
     assert.strictEqual(manager.getState().ciRunId, null, 'Stale async response must be discarded when trackedSha changed');
     console.log('✅ PASS: Concurrency guard strictly discards stale responses when trackedSha changes');
 
+    // Test 11b: In-flight request deduplication prevents overlapping fetches for the same SHA
+    manager.reset();
+    (manager as any).state.trackedSha = 'sha-dedup';
+    let fetchCallCount = 0;
+    let resolveDedup: (value: any) => void;
+    const dedupPromise = new Promise((resolve) => {
+      resolveDedup = resolve;
+    });
+    globalThis.fetch = async () => {
+      fetchCallCount++;
+      return dedupPromise as any;
+    };
+    const p1 = manager.fetchCiRuns('sha-dedup');
+    const p2 = manager.fetchCiRuns('sha-dedup');
+    resolveDedup!({
+      ok: true,
+      json: async () => ({
+        success: true,
+        selectedRun: { id: 888, head_sha: 'sha-dedup', status: 'completed', conclusion: 'success' },
+      }),
+    });
+    await Promise.all([p1, p2]);
+    assert.strictEqual(fetchCallCount, 1, 'Concurrent fetchCiRuns for the same SHA must share a single in-flight request');
+    assert.strictEqual(manager.getState().ciRunId, 888);
+    console.log('✅ PASS: In-flight guard deduplicates concurrent polling requests for the same SHA');
+
     // Test 12: Reset restores state to IDLE
     manager.reset();
     assert.strictEqual(manager.getState().ciStatus, 'IDLE');

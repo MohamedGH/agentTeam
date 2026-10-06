@@ -1,4 +1,5 @@
 import { errorManager, AppError } from './errorManager';
+import { apiFetch } from '../utils/apiFetch';
 
 export type CyclePhase =
   | 'OBSERVE'
@@ -183,7 +184,7 @@ class SelfImprovementStateManager {
 
   public async fetchStatus(): Promise<void> {
     try {
-      const res = await fetch('/api/self-improvement/status');
+      const res = await apiFetch('/api/self-improvement/status');
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       this.state.currentCycle = data.currentCycle || null;
@@ -202,7 +203,7 @@ class SelfImprovementStateManager {
 
   public async fetchHistory(): Promise<void> {
     try {
-      const res = await fetch('/api/self-improvement/history');
+      const res = await apiFetch('/api/self-improvement/history');
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       this.state.cycles = data.cycles || [];
@@ -226,7 +227,7 @@ class SelfImprovementStateManager {
     this.notify();
 
     try {
-      const res = await fetch('/api/self-improvement/run', {
+      const res = await apiFetch('/api/self-improvement/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(options),
@@ -258,7 +259,7 @@ class SelfImprovementStateManager {
     this.notify();
 
     try {
-      const res = await fetch(`/api/self-improvement/rollback/${cycleId}`, {
+      const res = await apiFetch(`/api/self-improvement/rollback/${encodeURIComponent(cycleId)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });

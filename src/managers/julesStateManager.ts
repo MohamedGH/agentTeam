@@ -6,6 +6,7 @@
 import { JulesSession, JulesActivity, CodingAgentTask } from '../types';
 import { errorManager, AppError } from './errorManager';
 import { deduplicateById, sortActivitiesChronologically } from '../utils/functional';
+import { apiFetch } from '../utils/apiFetch';
 
 export interface JulesStoreState {
   activeSession: JulesSession | null;
@@ -107,7 +108,7 @@ class JulesStateManager {
 
     try {
       const endpoint = task.agent === 'mock' ? '/api/coding-agents/sessions' : '/api/coding-agents/jules/sessions';
-      const res = await fetch(endpoint, {
+      const res = await apiFetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(task),
@@ -159,7 +160,7 @@ class JulesStateManager {
     try {
       const cleanId = sessionId.replace(/^sessions\//, '');
       const endpoint = `/api/coding-agents/jules/sessions/${encodeURIComponent(cleanId)}`;
-      const res = await fetch(endpoint);
+      const res = await apiFetch(endpoint);
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
@@ -241,7 +242,7 @@ class JulesStateManager {
     try {
       const cleanId = sessionId.replace(/^sessions\//, '');
       const endpoint = `/api/coding-agents/jules/sessions/${encodeURIComponent(cleanId)}/activities`;
-      const res = await fetch(endpoint);
+      const res = await apiFetch(endpoint);
 
       if (!res.ok) {
         return this.state.activities;
@@ -269,7 +270,7 @@ class JulesStateManager {
     try {
       const cleanId = sessionId.replace(/^sessions\//, '');
       const endpoint = `/api/coding-agents/jules/sessions/${encodeURIComponent(cleanId)}/message`;
-      const res = await fetch(endpoint, {
+      const res = await apiFetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: message.trim() }),
@@ -318,7 +319,7 @@ class JulesStateManager {
     try {
       const cleanId = sessionId.replace(/^sessions\//, '');
       const endpoint = `/api/coding-agents/jules/sessions/${encodeURIComponent(cleanId)}/approve-plan`;
-      const res = await fetch(endpoint, {
+      const res = await apiFetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
@@ -380,25 +381,34 @@ class JulesStateManager {
     this.stopPolling();
     if (!this.state.isPolling) return;
 
-    this.timer = setInterval(async () => {
-      if (!this.state.activeSession || this.state.activeSession.id !== sessionId) {
-        this.stopPolling();
+    const scheduleNext = () => {
+      if (!this.state.isPolling || !this.state.activeSession || this.state.activeSession.id !== sessionId) {
         return;
       }
+      this.timer = setTimeout(async () => {
+        if (!this.state.isPolling || !this.state.activeSession || this.state.activeSession.id !== sessionId) {
+          this.stopPolling();
+          return;
+        }
 
-      await this.fetchSession(sessionId, agent);
-      await this.fetchActivities(sessionId, agent);
+        await this.fetchSession(sessionId, agent);
+        await this.fetchActivities(sessionId, agent);
 
-      const state = this.state.activeSession?.state;
-      // Stop polling when terminal
-      if (state === 'COMPLETED' || state === 'FAILED' || state === 'CANCELLED') {
-        this.stopPolling();
-      }
-    }, this.state.pollIntervalSeconds * 1000);
+        const state = this.state.activeSession?.state;
+        if (state === 'COMPLETED' || state === 'FAILED' || state === 'CANCELLED') {
+          this.stopPolling();
+          return;
+        }
+        scheduleNext();
+      }, this.state.pollIntervalSeconds * 1000);
+    };
+
+    scheduleNext();
   }
 
   public stopPolling(): void {
     if (this.timer) {
+      clearTimeout(this.timer);
       clearInterval(this.timer);
       this.timer = null;
     }

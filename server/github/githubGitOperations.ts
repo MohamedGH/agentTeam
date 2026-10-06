@@ -94,7 +94,7 @@ export function resolveSafeWorkspacePath(cwd: string, relPath: string): string {
   }
 
   if (decoded.includes('\0') || decoded.includes('..')) {
-    throw new Error(`Path traversal attempt blocked in "${relPath}"`);
+    throw new Error(`Path traversal detected and blocked in "${relPath}"`);
   }
 
   // Windows-style drive letters (C:\, C:/, C:, etc.) or UNC network shares (\\server\share, //server/share)
@@ -116,7 +116,7 @@ export function resolveSafeWorkspacePath(cwd: string, relPath: string): string {
   const PROTECTED_DIRS = new Set(['.git', 'node_modules', '.venv', '__pycache__']);
   for (const seg of segments) {
     if (seg === '..' || seg === '.') {
-      throw new Error(`Path traversal attempt blocked: "${relPath}"`);
+      throw new Error(`Path traversal detected and blocked: "${relPath}"`);
     }
     if (PROTECTED_DIRS.has(seg)) {
       throw new Error(`Access to protected directory "${seg}" is forbidden: "${relPath}"`);

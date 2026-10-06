@@ -34,6 +34,12 @@ export function parseCookies(cookieHeader?: string): Record<string, string> {
   }, {} as Record<string, string>);
 }
 
+export interface OriginValidationOptions {
+  env?: string;
+  allowedOriginsEnv?: string;
+  allowedOrigins?: string[];
+}
+
 /**
  * Strict CORS Origin validator using URL parsing.
  * - Never uses substring matching (.includes() / .endsWith()).
@@ -43,8 +49,8 @@ export function parseCookies(cookieHeader?: string): Record<string, string> {
  */
 export function isOriginAllowed(
   origin: string | undefined,
-  allowedOrigins: string[],
-  env: string = process.env.NODE_ENV || 'development'
+  allowedOriginsOrOptions: string[] | OriginValidationOptions = {},
+  envArg?: string
 ): boolean {
   // Requests without Origin header (e.g., CLI/API clients with X-API-Key/Bearer or same-origin GET)
   if (!origin) {
@@ -53,6 +59,25 @@ export function isOriginAllowed(
 
   if (typeof origin !== 'string' || origin === 'null' || origin.trim() === '*') {
     return false;
+  }
+
+  let env = envArg || process.env.NODE_ENV || 'development';
+  let allowedOrigins: string[] = [];
+
+  if (Array.isArray(allowedOriginsOrOptions)) {
+    allowedOrigins = allowedOriginsOrOptions;
+  } else if (allowedOriginsOrOptions && typeof allowedOriginsOrOptions === 'object') {
+    if (allowedOriginsOrOptions.env) {
+      env = allowedOriginsOrOptions.env;
+    }
+    if (Array.isArray(allowedOriginsOrOptions.allowedOrigins)) {
+      allowedOrigins = allowedOriginsOrOptions.allowedOrigins;
+    } else if (typeof allowedOriginsOrOptions.allowedOriginsEnv === 'string') {
+      allowedOrigins = allowedOriginsOrOptions.allowedOriginsEnv
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
   }
 
   let parsedOrigin: URL;

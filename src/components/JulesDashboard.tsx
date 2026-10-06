@@ -27,6 +27,7 @@ import {
 import { useJulesState } from '../managers/useJulesState';
 import { formatDate, truncate } from '../utils/functional';
 import { CodingAgentInfo } from '../types';
+import { apiFetch } from '../utils/apiFetch';
 
 interface JulesDashboardProps {
   onNotify?: (msg: string) => void;
@@ -84,7 +85,7 @@ export const JulesDashboard: React.FC<JulesDashboardProps> = ({ onNotify }) => {
   const fetchAgentInfo = async () => {
     setIsLoadingAgents(true);
     try {
-      const res = await fetch('/api/coding-agents/list');
+      const res = await apiFetch('/api/coding-agents/list');
       if (res.ok) {
         const data = await res.json();
         setAgents(data.agents || []);
@@ -94,7 +95,7 @@ export const JulesDashboard: React.FC<JulesDashboardProps> = ({ onNotify }) => {
         }
       }
 
-      const healthRes = await fetch('/api/health');
+      const healthRes = await apiFetch('/api/health');
       if (healthRes.ok) {
         const health = await healthRes.json();
         setHasApiKey(Boolean(health.hasJulesApiKey));

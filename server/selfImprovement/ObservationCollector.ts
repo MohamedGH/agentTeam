@@ -166,10 +166,10 @@ export class ObservationCollector {
         };
       }
 
-      this.validateSafeCommand(testCmd);
+      const parsedCmd = this.parseSafeCommand(testCmd);
 
       // If testCmd is an npm command and package.json doesn't exist in workingDir, skip
-      if (testCmd.startsWith('npm') && !fs.existsSync(path.join(workingDir, 'package.json'))) {
+      if (parsedCmd.file === 'npm' && !fs.existsSync(path.join(workingDir, 'package.json'))) {
         return {
           command: testCmd,
           passed: true,
@@ -182,7 +182,7 @@ export class ObservationCollector {
         };
       }
 
-      const output = execSync(testCmd, {
+      const output = execFileSync(parsedCmd.file, parsedCmd.args, {
         cwd: workingDir,
         encoding: 'utf8',
         stdio: ['ignore', 'pipe', 'pipe'],
@@ -230,11 +230,11 @@ export class ObservationCollector {
     const buildCmd = this.config.buildCommand || 'npm run build';
     const startTime = Date.now();
     try {
-      this.validateSafeCommand(buildCmd);
+      const parsedCmd = this.parseSafeCommand(buildCmd);
       const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
       if (!pkg.scripts?.build) return undefined;
 
-      const output = execSync(buildCmd, {
+      const output = execFileSync(parsedCmd.file, parsedCmd.args, {
         cwd: workingDir,
         encoding: 'utf8',
         stdio: ['ignore', 'pipe', 'pipe'],
@@ -272,11 +272,11 @@ export class ObservationCollector {
     const lintCmd = this.config.lintCommand || 'npm run lint';
     const startTime = Date.now();
     try {
-      this.validateSafeCommand(lintCmd);
+      const parsedCmd = this.parseSafeCommand(lintCmd);
       const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
       if (!pkg.scripts?.lint) return undefined;
 
-      const output = execSync(lintCmd, {
+      const output = execFileSync(parsedCmd.file, parsedCmd.args, {
         cwd: workingDir,
         encoding: 'utf8',
         stdio: ['ignore', 'pipe', 'pipe'],

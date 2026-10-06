@@ -1,4 +1,5 @@
 import { errorManager } from './errorManager';
+import { apiFetch } from '../utils/apiFetch';
 
 export type PushStatus = 'IDLE' | 'RUNNING' | 'COMPLETED' | 'FAILED';
 export type CiStatus =
@@ -66,6 +67,8 @@ type DeliveryListener = (state: DeliveryState) => void;
 export class DeliveryStateManager {
   private listeners: Set<DeliveryListener> = new Set();
   private pollTimer: any = null;
+  private inFlightPromise: Promise<void> | null = null;
+  private inFlightSha: string | null = null;
   private readonly MAX_POLL_ATTEMPTS = 20; // 20 * 3s = 60s
   private readonly POLL_INTERVAL_MS = 3000;
 
@@ -172,7 +175,7 @@ export class DeliveryStateManager {
     this.notify();
 
     try {
-      const res = await fetch('/api/github/push-main', {
+      const res = await apiFetch('/api/github/push-main', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -259,7 +262,9 @@ export class DeliveryStateManager {
   /**
    * Fetches CI status for a specific SHA or latest run.
    * STRICT INVARIANT: If targetSha is provided, NEVER fall back to runs[0].
-   * Concurrency invariant: Discard response if trackedSha has changed during fetch.
+   * Concurrency invariant:
+   * - Deduplicate concurrent calls for the same SHA (in-flight guard).
+   * - Discard response if trackedSha has changed during fetch.
    */
   public async fetchCiRuns(targetSha?: string | null): Promise<void> {
     if (targetSha !== undefined) {
@@ -269,154 +274,171 @@ export class DeliveryStateManager {
       };
     }
     const sha = this.state.trackedSha;
+
+    // In-flight guard: prevent overlapping concurrent polls for the same SHA
+    if (this.inFlightPromise && this.inFlightSha === sha) {
+      return this.inFlightPromise;
+    }
+
     const trackedShaAtStart = sha;
+    const executeFetch = async (): Promise<void> => {
+      try {
+        const shaQuery = sha ? `&head_sha=${encodeURIComponent(sha)}` : '';
+        const repo = encodeURIComponent(this.state.repository);
 
-    try {
-      const shaQuery = sha ? `&head_sha=${encodeURIComponent(sha)}` : '';
-      const repo = encodeURIComponent(this.state.repository);
+        const res = await apiFetch(`/api/github/ci-runs?repository=${repo}${shaQuery}`);
 
-      const res = await fetch(`/api/github/ci-runs?repository=${repo}${shaQuery}`);
-
-      // Concurrency guard: Discard response if trackedSha changed while fetch was in-flight
-      if (this.state.trackedSha !== trackedShaAtStart) {
-        return;
-      }
-
-      if (!res.ok) {
-        const attempts = this.state.pollAttempts + 1;
-        const isTimedOut = attempts >= this.MAX_POLL_ATTEMPTS;
-        this.state = {
-          ...this.state,
-          pollAttempts: attempts,
-          ciStatus: isTimedOut ? 'POLLING_FAILED_TIMEOUT' : 'POLLING_FAILED_NETWORK',
-        };
-        this.notify();
-        if (isTimedOut) {
-          this.stopCiPolling();
+        // Concurrency guard: Discard response if trackedSha changed while fetch was in-flight
+        if (this.state.trackedSha !== trackedShaAtStart) {
+          return;
         }
-        return;
-      }
 
-      const data = await res.json();
-
-      // Concurrency guard: Check again after awaiting json parse
-      if (this.state.trackedSha !== trackedShaAtStart) {
-        return;
-      }
-
-      if (!data.success) {
-        const attempts = this.state.pollAttempts + 1;
-        const isTimedOut = attempts >= this.MAX_POLL_ATTEMPTS;
-        this.state = {
-          ...this.state,
-          pollAttempts: attempts,
-          ciStatus: isTimedOut ? 'POLLING_FAILED_TIMEOUT' : 'POLLING_FAILED_NETWORK',
-        };
-        this.notify();
-        if (isTimedOut) {
-          this.stopCiPolling();
-        }
-        return;
-      }
-
-      if (sha) {
-        // STRICT: Find ONLY run matching head_sha === sha. ZERO fallback to runs[0]!
-        const matched = data.selectedRun?.head_sha === sha
-          ? data.selectedRun
-          : (data.runs ? data.runs.find((r: any) => r.head_sha === sha) : null);
-
-        if (matched) {
-          const isCompleted = matched.status === 'completed';
-          const conclusion = matched.conclusion || null;
-          let ciStatus: CiStatus;
-          if (isCompleted) {
-            ciStatus = conclusion === 'success' ? 'TERMINAL_SUCCESS' : 'TERMINAL_FAILURE';
-          } else if (matched.status === 'in_progress') {
-            ciStatus = 'RUNNING';
-          } else {
-            ciStatus = 'WAITING_WORKFLOW';
-          }
-
-          this.state = {
-            ...this.state,
-            ciRun: matched,
-            ciRunId: matched.id,
-            jobs: data.jobs || [],
-            ciConclusion: conclusion,
-            ciStatus,
-          };
-          this.notify();
-
-          if (isCompleted) {
-            this.stopCiPolling();
-          }
-        } else {
-          // SHA specified but no workflow run found yet
+        if (!res.ok) {
           const attempts = this.state.pollAttempts + 1;
           const isTimedOut = attempts >= this.MAX_POLL_ATTEMPTS;
-
           this.state = {
             ...this.state,
-            ciRun: null,
-            ciRunId: null,
-            jobs: [],
             pollAttempts: attempts,
-            ciStatus: isTimedOut ? 'RUN_NOT_FOUND_FOR_SHA' : 'WAITING_WORKFLOW',
+            ciStatus: isTimedOut ? 'POLLING_FAILED_TIMEOUT' : 'POLLING_FAILED_NETWORK',
           };
           this.notify();
-
           if (isTimedOut) {
             this.stopCiPolling();
           }
+          return;
         }
-      } else {
-        // No specific SHA tracked, use default selectedRun if available
-        const run = data.selectedRun || (data.runs && data.runs.length > 0 ? data.runs[0] : null);
-        if (run) {
-          const isCompleted = run.status === 'completed';
-          const conclusion = run.conclusion || null;
-          let ciStatus: CiStatus;
-          if (isCompleted) {
-            ciStatus = conclusion === 'success' ? 'TERMINAL_SUCCESS' : 'TERMINAL_FAILURE';
-          } else if (run.status === 'in_progress') {
-            ciStatus = 'RUNNING';
-          } else {
-            ciStatus = 'WAITING_WORKFLOW';
-          }
 
+        const data = await res.json();
+
+        // Concurrency guard: Check again after awaiting json parse
+        if (this.state.trackedSha !== trackedShaAtStart) {
+          return;
+        }
+
+        if (!data.success) {
+          const attempts = this.state.pollAttempts + 1;
+          const isTimedOut = attempts >= this.MAX_POLL_ATTEMPTS;
           this.state = {
             ...this.state,
-            ciRun: run,
-            ciRunId: run.id,
-            jobs: data.jobs || [],
-            ciConclusion: conclusion,
-            ciStatus,
+            pollAttempts: attempts,
+            ciStatus: isTimedOut ? 'POLLING_FAILED_TIMEOUT' : 'POLLING_FAILED_NETWORK',
           };
           this.notify();
+          if (isTimedOut) {
+            this.stopCiPolling();
+          }
+          return;
+        }
+
+        if (sha) {
+          // STRICT: Find ONLY run matching head_sha === sha. ZERO fallback to runs[0]!
+          const matched = data.selectedRun?.head_sha === sha
+            ? data.selectedRun
+            : (data.runs ? data.runs.find((r: any) => r.head_sha === sha) : null);
+
+          if (matched) {
+            const isCompleted = matched.status === 'completed';
+            const conclusion = matched.conclusion || null;
+            let ciStatus: CiStatus;
+            if (isCompleted) {
+              ciStatus = conclusion === 'success' ? 'TERMINAL_SUCCESS' : 'TERMINAL_FAILURE';
+            } else if (matched.status === 'in_progress') {
+              ciStatus = 'RUNNING';
+            } else {
+              ciStatus = 'WAITING_WORKFLOW';
+            }
+
+            this.state = {
+              ...this.state,
+              ciRun: matched,
+              ciRunId: matched.id,
+              jobs: data.jobs || [],
+              ciConclusion: conclusion,
+              ciStatus,
+            };
+            this.notify();
+
+            if (isCompleted) {
+              this.stopCiPolling();
+            }
+          } else {
+            // SHA specified but no workflow run found yet
+            const attempts = this.state.pollAttempts + 1;
+            const isTimedOut = attempts >= this.MAX_POLL_ATTEMPTS;
+
+            this.state = {
+              ...this.state,
+              ciRun: null,
+              ciRunId: null,
+              jobs: [],
+              pollAttempts: attempts,
+              ciStatus: isTimedOut ? 'RUN_NOT_FOUND_FOR_SHA' : 'WAITING_WORKFLOW',
+            };
+            this.notify();
+
+            if (isTimedOut) {
+              this.stopCiPolling();
+            }
+          }
+        } else {
+          // No specific SHA tracked, use default selectedRun if available
+          const run = data.selectedRun || (data.runs && data.runs.length > 0 ? data.runs[0] : null);
+          if (run) {
+            const isCompleted = run.status === 'completed';
+            const conclusion = run.conclusion || null;
+            let ciStatus: CiStatus;
+            if (isCompleted) {
+              ciStatus = conclusion === 'success' ? 'TERMINAL_SUCCESS' : 'TERMINAL_FAILURE';
+            } else if (run.status === 'in_progress') {
+              ciStatus = 'RUNNING';
+            } else {
+              ciStatus = 'WAITING_WORKFLOW';
+            }
+
+            this.state = {
+              ...this.state,
+              ciRun: run,
+              ciRunId: run.id,
+              jobs: data.jobs || [],
+              ciConclusion: conclusion,
+              ciStatus,
+            };
+            this.notify();
+          }
+        }
+      } catch (e) {
+        if (this.state.trackedSha !== trackedShaAtStart) {
+          return;
+        }
+        const attempts = this.state.pollAttempts + 1;
+        const isTimedOut = attempts >= this.MAX_POLL_ATTEMPTS;
+        this.state = {
+          ...this.state,
+          pollAttempts: attempts,
+          ciStatus: isTimedOut ? 'POLLING_FAILED_TIMEOUT' : 'POLLING_FAILED_NETWORK',
+        };
+        this.notify();
+        if (isTimedOut) {
+          this.stopCiPolling();
+        }
+        console.warn('[DeliveryStateManager] Failed to fetch CI runs:', e);
+      } finally {
+        if (this.inFlightPromise === currentPromise) {
+          this.inFlightPromise = null;
+          this.inFlightSha = null;
         }
       }
-    } catch (e) {
-      if (this.state.trackedSha !== trackedShaAtStart) {
-        return;
-      }
-      const attempts = this.state.pollAttempts + 1;
-      const isTimedOut = attempts >= this.MAX_POLL_ATTEMPTS;
-      this.state = {
-        ...this.state,
-        pollAttempts: attempts,
-        ciStatus: isTimedOut ? 'POLLING_FAILED_TIMEOUT' : 'POLLING_FAILED_NETWORK',
-      };
-      this.notify();
-      if (isTimedOut) {
-        this.stopCiPolling();
-      }
-      console.warn('[DeliveryStateManager] Failed to fetch CI runs:', e);
-    }
+    };
+
+    const currentPromise = executeFetch();
+    this.inFlightPromise = currentPromise;
+    this.inFlightSha = sha;
+    return currentPromise;
   }
 
   /**
-   * Starts a single robust polling loop for a specific SHA.
-   * Cancels any prior interval to guarantee zero concurrent polling.
+   * Starts a single non-concurrent polling loop for a specific SHA using
+   * recursive setTimeout scheduled strictly after each request completes.
    */
   public startCiPolling(targetSha: string): void {
     this.stopCiPolling();
@@ -430,30 +452,41 @@ export class DeliveryStateManager {
     };
     this.notify();
 
-    // Trigger immediate first check
-    this.fetchCiRuns(targetSha);
-
-    this.pollTimer = setInterval(async () => {
-      if (!this.state.isPolling || !this.state.trackedSha) {
-        this.stopCiPolling();
+    const scheduleNext = () => {
+      if (!this.state.isPolling || !this.state.trackedSha || this.state.trackedSha !== targetSha) {
         return;
       }
-      await this.fetchCiRuns(this.state.trackedSha);
-    }, this.POLL_INTERVAL_MS);
+      this.pollTimer = setTimeout(async () => {
+        if (!this.state.isPolling || !this.state.trackedSha || this.state.trackedSha !== targetSha) {
+          this.stopCiPolling();
+          return;
+        }
+        await this.fetchCiRuns(this.state.trackedSha);
+        scheduleNext();
+      }, this.POLL_INTERVAL_MS);
 
-    if (this.pollTimer && typeof this.pollTimer.unref === 'function') {
-      this.pollTimer.unref();
-    }
+      if (this.pollTimer && typeof this.pollTimer.unref === 'function') {
+        this.pollTimer.unref();
+      }
+    };
+
+    // Trigger immediate first check, then schedule next tick only after completion
+    void this.fetchCiRuns(targetSha).finally(() => {
+      scheduleNext();
+    });
   }
 
   /**
-   * Stops any in-flight CI polling loop and cleans up the timer
+   * Stops any active CI polling loop and cleans up the timer
    */
   public stopCiPolling(): void {
     if (this.pollTimer) {
+      clearTimeout(this.pollTimer);
       clearInterval(this.pollTimer);
       this.pollTimer = null;
     }
+    this.inFlightPromise = null;
+    this.inFlightSha = null;
     if (this.state.isPolling) {
       this.state = {
         ...this.state,
