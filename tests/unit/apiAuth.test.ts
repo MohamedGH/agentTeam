@@ -171,7 +171,23 @@ export async function runApiAuthUnitTests() {
     true,
     'Non-browser API request without Origin header is allowed to proceed to header auth'
   );
-  console.log('✅ PASS: Strict CORS origin parser blocks https://legitime.com.evil.example and protocol/port mismatches');
+  assert.strictEqual(
+    isOriginAllowed('https://ais-dev-7j5wusjg2wajzfv3biskiu-480718171162.europe-west2.run.app', {
+      env: 'production',
+      requestHost: 'ais-dev-7j5wusjg2wajzfv3biskiu-480718171162.europe-west2.run.app',
+    }),
+    true,
+    'Same-origin request matching requestHost must be allowed'
+  );
+  assert.strictEqual(
+    isOriginAllowed('https://ais-dev-7j5wusjg2wajzfv3biskiu-480718171162.europe-west2.run.app.evil.example', {
+      env: 'development',
+      requestHost: 'ais-dev-7j5wusjg2wajzfv3biskiu-480718171162.europe-west2.run.app',
+    }),
+    false,
+    'Spoofed Cloud Run preview domain suffix must be strictly rejected'
+  );
+  console.log('✅ PASS: Strict CORS origin parser blocks https://legitime.com.evil.example, allows same-origin requestHost, and rejects protocol/port mismatches');
 
   // 14. Path Traversal & Input Validation Regressions
   assert.strictEqual(workspace.isSafePath('src/math_utils.py'), true);

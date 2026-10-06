@@ -38,6 +38,7 @@ export interface OriginValidationOptions {
   env?: string;
   allowedOriginsEnv?: string;
   allowedOrigins?: string[];
+  requestHost?: string;
 }
 
 /**
@@ -45,7 +46,8 @@ export interface OriginValidationOptions {
  * - Never uses substring matching (.includes() / .endsWith()).
  * - Rejects wildcards ('*') when credentials are enabled.
  * - Compares protocol + hostname + port strictly.
- * - In production, only explicitly configured ALLOWED_ORIGINS are permitted.
+ * - Permits same-origin requests where parsed Origin host strictly equals the request Host header.
+ * - In production, only explicitly configured ALLOWED_ORIGINS (or same-origin requestHost) are permitted.
  */
 export function isOriginAllowed(
   origin: string | undefined,
@@ -63,12 +65,16 @@ export function isOriginAllowed(
 
   let env = envArg || process.env.NODE_ENV || 'development';
   let allowedOrigins: string[] = [];
+  let requestHost: string | undefined;
 
   if (Array.isArray(allowedOriginsOrOptions)) {
     allowedOrigins = allowedOriginsOrOptions;
   } else if (allowedOriginsOrOptions && typeof allowedOriginsOrOptions === 'object') {
     if (allowedOriginsOrOptions.env) {
       env = allowedOriginsOrOptions.env;
+    }
+    if (typeof allowedOriginsOrOptions.requestHost === 'string') {
+      requestHost = allowedOriginsOrOptions.requestHost.split(',')[0].trim();
     }
     if (Array.isArray(allowedOriginsOrOptions.allowedOrigins)) {
       allowedOrigins = allowedOriginsOrOptions.allowedOrigins;
@@ -96,6 +102,13 @@ export function isOriginAllowed(
     return false;
   }
 
+  // Allow same-origin requests where the Origin's host (hostname[:port]) strictly equals the target Host header
+  if (requestHost && /^[a-zA-Z0-9.-]+(?::\d+)?$/.test(requestHost)) {
+    if (parsedOrigin.host.toLowerCase() === requestHost.toLowerCase()) {
+      return true;
+    }
+  }
+
   for (const allowed of allowedOrigins) {
     const trimmed = (allowed || '').trim();
     if (!trimmed || trimmed === '*') continue;
@@ -113,10 +126,17 @@ export function isOriginAllowed(
     }
   }
 
-  // In non-production, allow strict localhost / 127.0.0.1 origins (parsed via URL, never substring match)
+  // In non-production, allow strict localhost / 127.0.0.1 and AI Studio Cloud Run preview origins (parsed via URL)
   if (env !== 'production') {
     const host = parsedOrigin.hostname.toLowerCase();
     if (host === 'localhost' || host === '127.0.0.1') {
+      return true;
+    }
+    if (
+      parsedOrigin.protocol === 'https:' &&
+      parsedOrigin.port === '' &&
+      /^ais-(?:dev|pre)-[a-z0-9-]+-\d+\.[a-z0-9-]+\.run\.app$/.test(host)
+    ) {
       return true;
     }
   }

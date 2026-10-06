@@ -29,20 +29,30 @@ async function startServer() {
   const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
   app.use(
-    cors({
-      origin: (origin, callback) => {
-        if (
-          isOriginAllowed(origin, {
-            env: process.env.NODE_ENV,
-            allowedOriginsEnv: process.env.ALLOWED_ORIGINS,
-          })
-        ) {
-          callback(null, origin || false);
-        } else {
-          callback(new Error('Origin not allowed by CORS policy'));
-        }
-      },
-      credentials: false,
+    cors((req, callback) => {
+      const origin = req.header('Origin');
+      const requestHost =
+        (typeof req.headers['x-forwarded-host'] === 'string' && req.headers['x-forwarded-host']) ||
+        req.headers.host ||
+        undefined;
+      const combinedAllowedOrigins = [
+        process.env.ALLOWED_ORIGINS,
+        process.env.APP_URL,
+        process.env.SHARED_APP_URL,
+      ]
+        .filter(Boolean)
+        .join(',');
+
+      const allowed = isOriginAllowed(origin, {
+        env: process.env.NODE_ENV,
+        allowedOriginsEnv: combinedAllowedOrigins,
+        requestHost,
+      });
+
+      callback(null, {
+        origin: allowed ? origin || false : false,
+        credentials: false,
+      });
     })
   );
   app.use(express.json({ limit: '512kb' }));

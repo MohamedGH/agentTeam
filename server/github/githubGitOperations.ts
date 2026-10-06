@@ -1,9 +1,8 @@
-import { exec, execFile } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
 import { GitCommitResult, GitPushResult, GitStatusResult } from './types';
 
-const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
 
 export interface IGitExecutor {
@@ -253,29 +252,14 @@ export function validateTestCommand(cmd?: string): { file: string; args: string[
 
 export class RealGitExecutor implements IGitExecutor {
   public async exec(command: string, cwd?: string, env?: Record<string, string>): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-    if (command.trim().startsWith('git') && (!cwd || typeof cwd !== 'string' || cwd.trim().length === 0)) {
-      throw new Error('Working directory (cwd) must be explicitly provided for Git execution (no process.cwd fallback allowed)');
+    const trimmed = (command || '').trim();
+    if (!trimmed) {
+      throw new Error('Command cannot be empty');
     }
-    try {
-      const res = await execAsync(command, {
-        cwd: cwd ? cwd.trim() : undefined,
-        env: { ...process.env, ...env, GIT_TERMINAL_PROMPT: '0' },
-      });
-      return {
-        stdout: typeof res.stdout === 'string' ? res.stdout : String(res.stdout || ''),
-        stderr: typeof res.stderr === 'string' ? res.stderr : String(res.stderr || ''),
-        exitCode: 0,
-      };
-    } catch (err: any) {
-      const exitCode = typeof err.code === 'number' ? err.code : (typeof err.status === 'number' ? err.status : 1);
-      const stdout = typeof err.stdout === 'string' ? err.stdout : String(err.stdout || '');
-      const stderr = typeof err.stderr === 'string' ? err.stderr : (err.message || String(err || ''));
-      return {
-        stdout,
-        stderr,
-        exitCode,
-      };
-    }
+    const tokens = trimmed.split(/\s+/);
+    const file = tokens[0];
+    const args = tokens.slice(1);
+    return this.execFile(file, args, { cwd, env: env as NodeJS.ProcessEnv });
   }
 
   public async execFile(file: string, args: string[], options?: { cwd?: string; env?: NodeJS.ProcessEnv }): Promise<{ stdout: string; stderr: string; exitCode: number }> {
