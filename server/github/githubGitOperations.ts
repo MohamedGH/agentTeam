@@ -60,6 +60,19 @@ export function validateFilePath(filePath?: string): void {
   ) {
     throw new Error(`Invalid file path "${filePath}": contains disallowed characters or path traversal`);
   }
+  let decoded = trimmed;
+  for (let i = 0; i < 3; i++) {
+    try {
+      const next = decodeURIComponent(decoded);
+      if (next === decoded) break;
+      decoded = next;
+    } catch {
+      throw new Error(`Invalid file path "${filePath}": malformed percent-encoding`);
+    }
+  }
+  if (decoded.includes('..') || decoded.includes('\0') || /%(?:2e|2f|5c|00)/i.test(decoded)) {
+    throw new Error(`Invalid file path "${filePath}": path traversal detected in decoded path`);
+  }
 }
 
 /**
@@ -80,9 +93,9 @@ export function resolveSafeWorkspacePath(cwd: string, relPath: string): string {
     throw new Error(`Invalid file path "${relPath}": contains null bytes or encoded path traversal sequences`);
   }
 
-  // Decode up to 2 times to catch multi-encoded traversal attempts
+  // Decode up to 3 times to catch multi-encoded traversal attempts
   let decoded = relPath;
-  for (let i = 0; i < 2; i++) {
+  for (let i = 0; i < 3; i++) {
     try {
       const next = decodeURIComponent(decoded);
       if (next === decoded) break;
@@ -92,7 +105,7 @@ export function resolveSafeWorkspacePath(cwd: string, relPath: string): string {
     }
   }
 
-  if (decoded.includes('\0') || decoded.includes('..')) {
+  if (decoded.includes('\0') || decoded.includes('..') || /%(?:2e|2f|5c|00)/i.test(decoded)) {
     throw new Error(`Path traversal detected and blocked in "${relPath}"`);
   }
 

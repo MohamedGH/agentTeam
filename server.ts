@@ -27,14 +27,27 @@ import {
 async function startServer() {
   const app = express();
   const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+  const trustProxy = process.env.TRUST_PROXY === 'true';
+
+  if (trustProxy) {
+    app.set('trust proxy', true);
+  }
 
   app.use(
     cors((req, callback) => {
       const origin = req.header('Origin');
-      const requestHost =
-        (typeof req.headers['x-forwarded-host'] === 'string' && req.headers['x-forwarded-host']) ||
-        req.headers.host ||
-        undefined;
+      const forwardedHost = req.headers['x-forwarded-host'];
+      const rawHost = (trustProxy && typeof forwardedHost === 'string' && forwardedHost)
+        ? forwardedHost.split(',')[0].trim()
+        : req.headers.host;
+      const requestHost = (typeof rawHost === 'string' && rawHost.trim()) ? rawHost.trim() : undefined;
+
+      const forwardedProto = req.headers['x-forwarded-proto'];
+      const rawProto = (trustProxy && typeof forwardedProto === 'string' && forwardedProto)
+        ? forwardedProto.split(',')[0].trim()
+        : req.protocol;
+      const requestProtocol = (typeof rawProto === 'string' && rawProto.trim()) ? rawProto.trim() : undefined;
+
       const combinedAllowedOrigins = [
         process.env.ALLOWED_ORIGINS,
         process.env.APP_URL,
@@ -47,6 +60,7 @@ async function startServer() {
         env: process.env.NODE_ENV,
         allowedOriginsEnv: combinedAllowedOrigins,
         requestHost,
+        requestProtocol,
       });
 
       callback(null, {

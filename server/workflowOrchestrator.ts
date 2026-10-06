@@ -1191,44 +1191,59 @@ export class WorkflowOrchestrator {
   }
 
   /**
-   * Background polling worker loop
+   * Background polling worker loop using recursive setTimeout (never overlapping setInterval)
    */
   public ensurePollerRunning(): void {
     if (this.pollerTimer || this.activeWorkflows.size === 0) {
       return;
     }
 
-    this.pollerTimer = setInterval(async () => {
-      if (this.isPollingActive) return;
-      this.isPollingActive = true;
-
-      try {
-        const sessionsToPoll = Array.from(new Set(Array.from(this.activeWorkflows.values()).map((s) => s.sessionId)));
-        if (sessionsToPoll.length === 0) {
-          this.stopBackgroundPoller();
+    const scheduleNext = () => {
+      if (this.activeWorkflows.size === 0) {
+        this.stopBackgroundPoller();
+        return;
+      }
+      this.pollerTimer = setTimeout(async () => {
+        if (this.isPollingActive) {
+          scheduleNext();
           return;
         }
+        this.isPollingActive = true;
+        try {
+          const sessionsToPoll = Array.from(
+            new Set(Array.from(this.activeWorkflows.values()).map((s) => s.sessionId))
+          );
+          if (sessionsToPoll.length === 0) {
+            this.stopBackgroundPoller();
+            return;
+          }
 
-        for (const sessionId of sessionsToPoll) {
-          try {
-            await this.pollWorkflow(sessionId);
-          } catch (err: any) {
-            console.warn(`[WorkflowOrchestrator] Poller error on ${sessionId}:`, err.message);
+          for (const sessionId of sessionsToPoll) {
+            try {
+              await this.pollWorkflow(sessionId);
+            } catch (err: any) {
+              console.warn(`[WorkflowOrchestrator] Poller error on ${sessionId}:`, err.message);
+            }
+          }
+        } finally {
+          this.isPollingActive = false;
+          if (this.pollerTimer !== null) {
+            scheduleNext();
           }
         }
-      } finally {
-        this.isPollingActive = false;
-      }
-    }, this.pollIntervalMs);
+      }, this.pollIntervalMs);
 
-    if (this.pollerTimer && typeof this.pollerTimer.unref === 'function') {
-      this.pollerTimer.unref();
-    }
+      if (this.pollerTimer && typeof this.pollerTimer.unref === 'function') {
+        this.pollerTimer.unref();
+      }
+    };
+
+    scheduleNext();
   }
 
   public stopBackgroundPoller(): void {
     if (this.pollerTimer) {
-      clearInterval(this.pollerTimer);
+      clearTimeout(this.pollerTimer);
       this.pollerTimer = null;
     }
   }

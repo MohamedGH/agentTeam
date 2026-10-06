@@ -112,7 +112,7 @@ Managed by agentTeam (Manager, Developer, Tester, Reviewer).
     }
 
     let decoded = filePath;
-    for (let i = 0; i < 2; i++) {
+    for (let i = 0; i < 3; i++) {
       try {
         const next = decodeURIComponent(decoded);
         if (next === decoded) break;
@@ -122,7 +122,7 @@ Managed by agentTeam (Manager, Developer, Tester, Reviewer).
       }
     }
 
-    if (decoded.includes('\0') || decoded.includes('..') || filePath.includes('..')) {
+    if (decoded.includes('\0') || decoded.includes('..') || filePath.includes('..') || /%(?:2e|2f|5c|00)/i.test(decoded)) {
       return { safe: false, error: 'Path traversal forbidden' };
     }
 

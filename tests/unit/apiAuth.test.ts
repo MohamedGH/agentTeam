@@ -193,17 +193,25 @@ export async function runApiAuthUnitTests() {
   assert.strictEqual(workspace.isSafePath('src/math_utils.py'), true);
   assert.strictEqual(workspace.isSafePath('../etc/passwd'), false);
   assert.strictEqual(workspace.isSafePath('..\\windows\\system32'), false);
-  assert.strictEqual(workspace.isSafePath('%2e%2e%2fsecret.txt'), false);
+  assert.strictEqual(workspace.isSafePath('%2e%2e%2fsecret'), false);
+  assert.strictEqual(workspace.isSafePath('%252e%252e%252fsecret'), false);
   assert.strictEqual(workspace.isSafePath('/etc/passwd'), false);
+  assert.strictEqual(workspace.isSafePath('C:\\Windows\\System32'), false);
   assert.strictEqual(workspace.isSafePath('C:\\Users\\admin\\secret'), false);
+  assert.strictEqual(workspace.isSafePath('\\\\server\\share'), false);
   assert.strictEqual(workspace.isSafePath('\\\\server\\share\\file.txt'), false);
   assert.strictEqual(workspace.isSafePath('src/file\0.py'), false);
   assert.strictEqual(workspace.isSafePath('.env'), false);
+  assert.strictEqual(workspace.isSafePath('.env.local'), false);
   assert.strictEqual(workspace.isSafePath('.env.production'), false);
   assert.strictEqual(workspace.isSafePath('.git/config'), false);
+  assert.strictEqual(workspace.isSafePath('node_modules/package.json'), false);
   assert.strictEqual(workspace.isSafePath('node_modules/pkg/index.js'), false);
+  assert.strictEqual(workspace.isSafePath('__pycache__'), false);
+  assert.strictEqual(workspace.isSafePath('__pycache__/module.cpython-311.pyc'), false);
   assert.throws(() => workspace.setFile('../escape.txt', 'bad'), /Unsafe file path/);
   assert.throws(() => workspace.deleteFile('.env'), /Unsafe file path/);
+  assert.throws(() => workspace.deleteFile('.env.local'), /Unsafe file path/);
   console.log('✅ PASS: VirtualWorkspace blocks all path traversal, UNC, drive letter, encoded, and sensitive dotfile paths');
 
   // 15. Repository allowlist, Git branch, and testCommand validation

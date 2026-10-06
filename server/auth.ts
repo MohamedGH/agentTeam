@@ -39,6 +39,7 @@ export interface OriginValidationOptions {
   allowedOriginsEnv?: string;
   allowedOrigins?: string[];
   requestHost?: string;
+  requestProtocol?: string;
 }
 
 /**
@@ -46,8 +47,8 @@ export interface OriginValidationOptions {
  * - Never uses substring matching (.includes() / .endsWith()).
  * - Rejects wildcards ('*') when credentials are enabled.
  * - Compares protocol + hostname + port strictly.
- * - Permits same-origin requests where parsed Origin host strictly equals the request Host header.
- * - In production, only explicitly configured ALLOWED_ORIGINS (or same-origin requestHost) are permitted.
+ * - Permits same-origin requests where parsed Origin host, protocol, and port strictly match the request.
+ * - In production, only explicitly configured ALLOWED_ORIGINS (or valid same-origin requests) are permitted.
  */
 export function isOriginAllowed(
   origin: string | undefined,
@@ -66,6 +67,7 @@ export function isOriginAllowed(
   let env = envArg || process.env.NODE_ENV || 'development';
   let allowedOrigins: string[] = [];
   let requestHost: string | undefined;
+  let requestProtocol: string | undefined;
 
   if (Array.isArray(allowedOriginsOrOptions)) {
     allowedOrigins = allowedOriginsOrOptions;
@@ -75,6 +77,9 @@ export function isOriginAllowed(
     }
     if (typeof allowedOriginsOrOptions.requestHost === 'string') {
       requestHost = allowedOriginsOrOptions.requestHost.split(',')[0].trim();
+    }
+    if (typeof allowedOriginsOrOptions.requestProtocol === 'string') {
+      requestProtocol = allowedOriginsOrOptions.requestProtocol.split(',')[0].trim().toLowerCase();
     }
     if (Array.isArray(allowedOriginsOrOptions.allowedOrigins)) {
       allowedOrigins = allowedOriginsOrOptions.allowedOrigins;
@@ -102,9 +107,31 @@ export function isOriginAllowed(
     return false;
   }
 
-  // Allow same-origin requests where the Origin's host (hostname[:port]) strictly equals the target Host header
+  // Allow same-origin requests where parsed Origin strictly matches request protocol + hostname + port
   if (requestHost && /^[a-zA-Z0-9.-]+(?::\d+)?$/.test(requestHost)) {
-    if (parsedOrigin.host.toLowerCase() === requestHost.toLowerCase()) {
+    const hostParts = requestHost.split(':');
+    const expectedHostname = hostParts[0].toLowerCase();
+    const expectedPort = hostParts.length > 1 ? hostParts[1] : '';
+
+    const protocolMatches = !requestProtocol || (
+      parsedOrigin.protocol === (requestProtocol.endsWith(':') ? requestProtocol : `${requestProtocol}:`)
+    );
+    const hostnameMatches = parsedOrigin.hostname.toLowerCase() === expectedHostname;
+    const originPort = parsedOrigin.port; // empty string for default ports in WHATWG URL
+    const portMatches = (originPort === expectedPort) || (
+      originPort === '' && (
+        (parsedOrigin.protocol === 'http:' && expectedPort === '80') ||
+        (parsedOrigin.protocol === 'https:' && expectedPort === '443') ||
+        expectedPort === ''
+      )
+    ) || (
+      expectedPort === '' && (
+        (parsedOrigin.protocol === 'http:' && originPort === '80') ||
+        (parsedOrigin.protocol === 'https:' && originPort === '443')
+      )
+    );
+
+    if (protocolMatches && hostnameMatches && portMatches) {
       return true;
     }
   }
