@@ -3,10 +3,26 @@
  * Manages active application views, query parameters, deep links, and browser hash navigation.
  */
 
-export type AppRoute = 'studio' | 'workspace' | 'quota' | 'roles' | 'jules' | 'auto-improve' | 'adaptive-llm' | 'github-settings';
+export type AppRoute =
+  | 'dashboard'
+  | 'build'
+  | 'intelligence'
+  | 'system'
+  | 'activity'
+  // Legacy & Deep-link aliases
+  | 'studio'
+  | 'workspace'
+  | 'quota'
+  | 'roles'
+  | 'jules'
+  | 'auto-improve'
+  | 'adaptive-llm'
+  | 'github-settings';
 
 export interface RouteState {
   currentRoute: AppRoute;
+  primaryPage: 'dashboard' | 'build' | 'intelligence' | 'system' | 'activity';
+  subTab?: string;
   params: Record<string, string>;
 }
 
@@ -26,9 +42,34 @@ class RouteManager {
     }
   }
 
+  public getPrimaryPage(route: AppRoute): 'dashboard' | 'build' | 'intelligence' | 'system' | 'activity' {
+    switch (route) {
+      case 'dashboard':
+      case 'studio':
+        return 'dashboard';
+      case 'build':
+      case 'workspace':
+        return 'build';
+      case 'intelligence':
+      case 'jules':
+      case 'auto-improve':
+      case 'adaptive-llm':
+        return 'intelligence';
+      case 'system':
+      case 'quota':
+      case 'roles':
+      case 'github-settings':
+        return 'system';
+      case 'activity':
+        return 'activity';
+      default:
+        return 'dashboard';
+    }
+  }
+
   private parseCurrentHash(): RouteState {
     if (typeof window === 'undefined') {
-      return { currentRoute: 'studio', params: {} };
+      return { currentRoute: 'dashboard', primaryPage: 'dashboard', params: {} };
     }
 
     const hash = window.location.hash.replace(/^#\/?/, '');
@@ -42,10 +83,33 @@ class RouteManager {
       });
     }
 
-    const validRoutes: AppRoute[] = ['studio', 'workspace', 'quota', 'roles', 'jules', 'auto-improve', 'adaptive-llm', 'github-settings'];
-    const currentRoute = validRoutes.includes(path as AppRoute) ? (path as AppRoute) : 'studio';
+    const validRoutes: AppRoute[] = [
+      'dashboard',
+      'build',
+      'intelligence',
+      'system',
+      'activity',
+      'studio',
+      'workspace',
+      'quota',
+      'roles',
+      'jules',
+      'auto-improve',
+      'adaptive-llm',
+      'github-settings',
+    ];
+    const currentRoute: AppRoute = validRoutes.includes(path as AppRoute)
+      ? (path as AppRoute)
+      : 'dashboard';
 
-    return { currentRoute, params };
+    const primaryPage = this.getPrimaryPage(currentRoute);
+
+    return {
+      currentRoute,
+      primaryPage,
+      subTab: params.subTab || (currentRoute !== primaryPage ? currentRoute : undefined),
+      params,
+    };
   }
 
   public getState(): RouteState {
@@ -61,7 +125,13 @@ class RouteManager {
       window.location.hash = newHash;
     }
 
-    this.state = { currentRoute: route, params };
+    const primaryPage = this.getPrimaryPage(route);
+    this.state = {
+      currentRoute: route,
+      primaryPage,
+      subTab: params.subTab || (route !== primaryPage ? route : undefined),
+      params,
+    };
     this.notify();
   }
 

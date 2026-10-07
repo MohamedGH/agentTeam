@@ -15,6 +15,7 @@ import { runAdaptiveRoutingHardeningTests } from './adaptiveRoutingHardening.tes
 import { runWorkflowStateManagerUnitTests } from './workflowStateManager.test';
 import { runDeliveryStateManagerTests } from './deliveryStateManager.test';
 import { runApiAuthUnitTests } from './apiAuth.test';
+import { runUxRouteManagerUnitTests } from './uxRouteManager.test';
 
 export async function runAllUnitTests() {
   console.log('====================================================');
@@ -38,6 +39,7 @@ export async function runAllUnitTests() {
   await runWorkflowStateManagerUnitTests();
   await runDeliveryStateManagerTests();
   await runApiAuthUnitTests();
+  await runUxRouteManagerUnitTests();
 
   console.log('\n🎉 ALL UNIT TESTS PASSED (100%)\n');
 }
