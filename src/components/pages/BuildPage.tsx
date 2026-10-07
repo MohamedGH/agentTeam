@@ -18,6 +18,8 @@ import {
   ChevronDown,
   ChevronUp,
   Settings2,
+  Code2,
+  Check,
 } from 'lucide-react';
 import {
   StatusBadge,
@@ -107,11 +109,11 @@ export const BuildPage: React.FC<BuildPageProps> = ({
   const hasCompleted = workflow.executionState === 'COMPLETED';
   const hasFailed = workflow.executionState === 'FAILED';
 
-  // Build Pipeline visual stages (À faire → En cours → Réussi / Échec)
+  // Human 5-Step Pipeline (Analyse → Développement → Tests → Revue → Livraison)
   const pipelineSteps: PipelineStep[] = [
     {
       id: 'step-plan',
-      label: '1. Architecture & Plan',
+      label: '1. Analyse & Plan',
       status:
         workflow.currentPhase > 1 || hasCompleted
           ? 'COMPLETED'
@@ -124,7 +126,7 @@ export const BuildPage: React.FC<BuildPageProps> = ({
     },
     {
       id: 'step-dev',
-      label: '2. Développement & Code',
+      label: '2. Développement',
       status:
         workflow.currentPhase > 3 || hasCompleted
           ? 'COMPLETED'
@@ -133,11 +135,11 @@ export const BuildPage: React.FC<BuildPageProps> = ({
           : hasFailed && (workflow.currentPhase === 2 || workflow.currentPhase === 3)
           ? 'FAILED'
           : 'PENDING',
-      detail: codingAgentOption !== 'none' ? `Agent ${codingAgentOption}` : 'Developer LLM',
+      detail: codingAgentOption !== 'none' ? `Agent ${codingAgentOption}` : 'Developer',
     },
     {
       id: 'step-qa',
-      label: '3. Tests & Validation QA',
+      label: '3. Tests QA',
       status:
         workflow.currentPhase > 5 || hasCompleted
           ? 'COMPLETED'
@@ -146,11 +148,11 @@ export const BuildPage: React.FC<BuildPageProps> = ({
           : hasFailed && (workflow.currentPhase === 4 || workflow.currentPhase === 5)
           ? 'FAILED'
           : 'PENDING',
-      detail: 'Tester QA (Hermétique)',
+      detail: 'Tester QA',
     },
     {
       id: 'step-review',
-      label: '4. Revue de Sécurité',
+      label: '4. Revue & Sécurité',
       status:
         workflow.currentPhase > 6 || hasCompleted
           ? 'COMPLETED'
@@ -159,11 +161,11 @@ export const BuildPage: React.FC<BuildPageProps> = ({
           : hasFailed && workflow.currentPhase === 6
           ? 'FAILED'
           : 'PENDING',
-      detail: 'Reviewer (Quality Gate)',
+      detail: 'Reviewer',
     },
     {
       id: 'step-delivery',
-      label: '5. Commit, Push & CI',
+      label: '5. Livraison CI',
       status:
         delivery.ciStatus === 'TERMINAL_SUCCESS'
           ? 'COMPLETED'
@@ -180,16 +182,16 @@ export const BuildPage: React.FC<BuildPageProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* 1. VIEW HEADER WITH SUB-NAVIGATION */}
+      {/* 1. VIEW HEADER WITH 3 SUB-DOMAINS */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
         <div>
-          <h2 className="text-lg font-bold text-slate-100 tracking-tight">Build & Delivery</h2>
+          <h2 className="text-lg font-bold text-slate-100 tracking-tight">Build & Livraison</h2>
           <p className="text-xs text-slate-400 mt-0.5">
-            Pipeline d'orchestration, espace de code virtuel, exécution hermétique et corrélation CI GitHub.
+            Suivi de l'équipe de développement, espace de code virtuel et validation GitHub CI.
           </p>
         </div>
 
-        {/* Sub-tab segmented control */}
+        {/* 3 Domain Tabs */}
         <div className="flex items-center bg-slate-900 p-1 rounded-xl border border-slate-800 self-start sm:self-auto">
           <button
             type="button"
@@ -214,7 +216,7 @@ export const BuildPage: React.FC<BuildPageProps> = ({
             }`}
           >
             <FolderTree className="w-3.5 h-3.5" />
-            <span>Espace de Code ({Object.keys(files).length})</span>
+            <span>Code & Fichiers ({Object.keys(files).length})</span>
           </button>
 
           <button
@@ -227,7 +229,7 @@ export const BuildPage: React.FC<BuildPageProps> = ({
             }`}
           >
             <Activity className="w-3.5 h-3.5" />
-            <span>CI GitHub Actions</span>
+            <span>Livraison CI</span>
           </button>
         </div>
       </div>
@@ -238,20 +240,20 @@ export const BuildPage: React.FC<BuildPageProps> = ({
           {/* Visual Step-by-Step Pipeline */}
           <div className="space-y-2">
             <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400 block px-1">
-              Progression du Pipeline de Développement
+              Progression de la Mission
             </span>
             <ProgressState steps={pipelineSteps} />
           </div>
 
-          {/* Action & Task Prompt Card */}
+          {/* Prompt & Execution Controls */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xl space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-blue-400" />
-                <h3 className="text-sm font-bold text-slate-100">Définition de la Tâche</h3>
+                <h3 className="text-sm font-bold text-slate-100">Consigne de Développement</h3>
               </div>
-              <div className="flex items-center gap-2 text-xs font-mono text-slate-400">
-                <span>Modèle : <strong className="text-emerald-400">{chosenModel}</strong></span>
+              <div className="text-xs text-slate-400 font-mono">
+                Modèle : <strong className="text-emerald-400">{chosenModel}</strong>
               </div>
             </div>
 
@@ -261,7 +263,7 @@ export const BuildPage: React.FC<BuildPageProps> = ({
                   rows={2}
                   value={taskPrompt}
                   onChange={(e) => setTaskPrompt(e.target.value)}
-                  placeholder="Décrivez la tâche autonome à implémenter..."
+                  placeholder="Décrivez la fonctionnalité ou correction à effectuer..."
                   className="flex-1 bg-slate-950 border border-slate-800 focus:border-blue-500 rounded-xl px-4 py-3 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none transition resize-none"
                 />
 
@@ -283,13 +285,13 @@ export const BuildPage: React.FC<BuildPageProps> = ({
                       className="px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs sm:text-sm font-bold shadow-md transition cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
                     >
                       <Play className="w-4 h-4 fill-white" />
-                      <span>Lancer le Workflow</span>
+                      <span>Lancer la mission</span>
                     </button>
                   )}
                 </div>
               </div>
 
-              {/* Collapsible Advanced Delegation Drawer */}
+              {/* Advanced Delegation Options (Collapsible) */}
               <div className="pt-2 border-t border-slate-800/80">
                 <button
                   type="button"
@@ -298,7 +300,7 @@ export const BuildPage: React.FC<BuildPageProps> = ({
                 >
                   <span className="flex items-center gap-2">
                     <Settings2 className="w-3.5 h-3.5 text-blue-400" />
-                    <span>Options de Délégation (Jules, GitHub & Branches)</span>
+                    <span>Délégation d'Agent (Google Jules / Dépôt GitHub)</span>
                     {codingAgentOption !== 'none' && (
                       <span className="px-2 py-0.5 rounded text-[10px] bg-orange-500/20 text-orange-300 font-mono">
                         Délégation : {codingAgentOption}
@@ -312,7 +314,7 @@ export const BuildPage: React.FC<BuildPageProps> = ({
                   <div className="mt-3 p-4 bg-slate-950 rounded-xl border border-slate-800 space-y-4 text-xs">
                     <div>
                       <span className="text-[10px] font-mono font-bold uppercase text-slate-400 block mb-1.5">
-                        Agent Developer
+                        Cible du Developer
                       </span>
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                         <button
@@ -324,8 +326,8 @@ export const BuildPage: React.FC<BuildPageProps> = ({
                               : 'bg-slate-900 border-slate-800 text-slate-400'
                           }`}
                         >
-                          <strong className="block text-slate-200">Developer Interne LLM</strong>
-                          <span className="text-[10px] text-slate-400">Modèles mémoire hermétiques</span>
+                          <strong className="block text-slate-200">Developer Interne</strong>
+                          <span className="text-[10px] text-slate-400">Modèles orchestrés en mémoire</span>
                         </button>
 
                         <button
@@ -351,7 +353,7 @@ export const BuildPage: React.FC<BuildPageProps> = ({
                           }`}
                         >
                           <strong className="block text-purple-300">Mock Jules</strong>
-                          <span className="text-[10px] text-slate-400">Simulation de test locale</span>
+                          <span className="text-[10px] text-slate-400">Test hermétique local</span>
                         </button>
                       </div>
                     </div>
@@ -387,10 +389,10 @@ export const BuildPage: React.FC<BuildPageProps> = ({
           {/* Actionable Error Card (When Failure occurs) */}
           {hasFailed && workflow.errorMessage && (
             <ErrorState
-              title="Échec de l’exécution du pipeline"
+              title="La mission n’a pas pu être validée"
               cause={workflow.errorMessage}
-              impact="Le Quality Gate a interrompu le workflow pour empêcher tout commit ou push de code non validé."
-              recommendation="Vérifiez le message d’erreur ci-dessus, modifiez votre prompt si nécessaire et relancez."
+              impact="Le Quality Gate a interrompu le cycle. Le code reste dans le workspace sans commit."
+              recommendation="Ajustez les instructions de la tâche ou relancez la validation."
               technicalDetails={workflow.errorMessage}
               onRetry={onRunWorkflow}
             />

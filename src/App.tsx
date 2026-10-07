@@ -377,14 +377,7 @@ export default function App() {
       <Header
         activeTab={activeTab}
         setActiveTab={(tab) => handleTabChange(tab)}
-        selectedTier={selectedTier}
-        setSelectedTier={setSelectedTier}
         isRunning={isRunning}
-        totalModels={Object.keys(quotaModels).length}
-        activeModel={chosenModel}
-        activeProvider={activeProvider}
-        providers={providers}
-        onSelectProvider={handleSelectProvider}
         onOpenActivityCenter={() => setIsActivityCenterOpen(true)}
         activeActivitiesCount={
           (executionState === 'RUNNING' ? 1 : 0) +
@@ -410,6 +403,7 @@ export default function App() {
             stepsCount={steps.length}
             onStop={isRunning ? handleAbortWorkflow : undefined}
             onReset={handleResetMission}
+            onNavigateBuild={() => handleTabChange('build')}
           />
         </div>
       )}

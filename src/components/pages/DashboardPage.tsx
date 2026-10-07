@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   Sparkles,
   Play,
@@ -7,27 +7,18 @@ import {
   CheckCircle2,
   XCircle,
   GitCommit,
-  GitPullRequest,
   Activity,
   ArrowRight,
   ShieldCheck,
   Cpu,
   Layers,
   Clock,
-  Terminal,
-  Server,
-  FolderTree,
-  AlertTriangle,
-  RefreshCw,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import {
   StatusBadge,
-  StatusCard,
-  ResultBanner,
-  NextAction,
-  EmptyState,
   DetailPanel,
-  Metric,
 } from '../ui';
 import { AppRoute } from '../../managers/routeManager';
 import { WorkflowState } from '../../managers/workflowStateManager';
@@ -55,22 +46,16 @@ interface DashboardPageProps {
 
 const PRESET_SUGGESTIONS = [
   {
-    title: 'Fix DeepSeek Provider (Jules)',
-    prompt:
-      'Fix the DeepSeek provider error handling, verify token accounting, and implement retry logic with exponential jitter.',
-    routeHint: 'build' as AppRoute,
+    title: 'Correction de Provider',
+    prompt: 'Corriger la gestion d’erreurs et les retries avec jitter pour les providers d’IA.',
   },
   {
-    title: 'JWT Auth & Rate Limiter',
-    prompt:
-      'Implement a secure JWT token generator and validator in src/auth.py with expiration, HMAC SHA256 signatures, and complete pytest test cases.',
-    routeHint: 'build' as AppRoute,
+    title: 'Authentification JWT',
+    prompt: 'Implémenter un générateur et validateur de tokens JWT avec signatures HMAC et tests pytest.',
   },
   {
-    title: 'Exponential Backoff & Retry',
-    prompt:
-      'Enhance src/math_utils.py with calculate_exponential_backoff function for handling 429 quota retries with jitter and full unit tests.',
-    routeHint: 'build' as AppRoute,
+    title: 'Backoff Exponentiel',
+    prompt: 'Ajouter une fonction de retry avec backoff exponentiel pour les erreurs 429 et tests unitaires.',
   },
 ];
 
@@ -94,410 +79,249 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   const hasCompleted = workflow.executionState === 'COMPLETED';
   const hasFailed = workflow.executionState === 'FAILED';
 
-  // Compute Overall System Health
-  const systemStatus = (() => {
-    if (hasFailed || delivery.ciStatus === 'TERMINAL_FAILURE') return 'WARNING';
-    if (isRunning || delivery.ciStatus === 'RUNNING' || selfImprovement.isRunning) return 'RUNNING';
-    return 'SUCCESS';
-  })();
-
-  const systemStatusLabel = (() => {
-    if (hasFailed) return 'Intervention requise';
-    if (isRunning) return 'Workflow en cours';
-    if (delivery.ciStatus === 'RUNNING') return 'CI GitHub en cours';
-    if (selfImprovement.isRunning) return 'Boucle d’amélioration active';
-    return 'Système opérationnel & prêt';
-  })();
-
-  // Primary Next Action determination
-  const nextActionConfig = (() => {
+  // 1. HERO / ÉTAT GLOBAL (Human Language First)
+  const heroState = (() => {
     if (isRunning) {
       return {
-        title: `Exécution en cours : Phase ${workflow.currentPhase}/7`,
-        description: `L'agent ${workflow.activeAgent || 'Manager'} travaille avec le modèle ${chosenModel}. Vous pouvez suivre l'avancement en temps réel.`,
-        buttonLabel: 'Suivre dans Build & Delivery',
+        badge: '● Mission en cours',
+        badgeColor: 'bg-blue-500/15 text-blue-300 border-blue-500/30',
+        title: 'L’équipe travaille sur votre demande',
+        description: `Étape ${workflow.currentPhase} sur 7 : L’agent ${workflow.activeAgent || 'Developer'} analyse et implémente votre consigne.`,
+        actionLabel: 'Suivre la mission dans Build',
+        actionIcon: ArrowRight,
         onAction: () => onNavigate('build'),
       };
     }
-
     if (hasFailed) {
       return {
-        title: 'Le dernier workflow a rencontré une difficulté',
-        description: workflow.errorMessage || 'Une étape de validation ou de test a échoué. Consultez le diagnostic pour relancer.',
-        buttonLabel: 'Inspecter dans Build & Delivery',
+        badge: '✕ Action requise',
+        badgeColor: 'bg-rose-500/15 text-rose-300 border-rose-500/30',
+        title: 'La dernière mission n’a pas pu être validée',
+        description: workflow.errorMessage || 'Une étape de validation ou de test a échoué. Le code a été préservé sans publication.',
+        actionLabel: 'Voir le problème & Relancer',
+        actionIcon: RotateCcw,
         onAction: () => onNavigate('build'),
       };
     }
-
     if (hasCompleted) {
-      if (delivery.ciStatus === 'TERMINAL_SUCCESS') {
-        return {
-          title: 'Code validé et CI GitHub réussie',
-          description: `Toutes les étapes de test, review et CI pour le commit ${delivery.trackedSha?.slice(0, 7) || ''} sont terminées avec succès.`,
-          buttonLabel: 'Lancer une nouvelle mission',
-          onAction: () => {
-            setTaskPrompt('');
-            onResetWorkflow();
-          },
-        };
-      }
       return {
-        title: 'Workflow terminé avec succès',
-        description: 'Les tests et la revue d’architecture sont validés. Prêt pour la prochaine tâche de développement autonome.',
-        buttonLabel: 'Voir le code & Workspace',
-        onAction: () => onNavigate('build', { subTab: 'workspace' }),
+        badge: '✓ Mission terminée',
+        badgeColor: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+        title: 'Le code a été développé, testé et validé',
+        description: 'Toutes les vérifications d’architecture et de sécurité sont validées. Aucune action requise.',
+        actionLabel: 'Voir le résultat dans Build',
+        actionIcon: ArrowRight,
+        onAction: () => onNavigate('build'),
       };
     }
-
     return {
-      title: 'Prêt pour une nouvelle mission logicielle',
-      description: 'Saisissez votre prompt ci-dessous pour lancer l’équipe autonome (Manager, Developer, Tester, Reviewer).',
-      buttonLabel: 'Démarrer le workflow',
+      badge: 'Prêt',
+      badgeColor: 'bg-slate-800 text-slate-300 border-slate-700',
+      title: 'Prêt pour une nouvelle mission',
+      description: 'Décrivez ce que vous souhaitez développer. L’équipe autonome prendra en charge la conception, le code et les tests.',
+      actionLabel: 'Lancer la mission',
+      actionIcon: Play,
       onAction: onRunWorkflow,
     };
   })();
 
+  const HeroActionIcon = heroState.actionIcon;
+
   return (
-    <div className="space-y-6">
-      {/* 1. HEALTH & OPERATIONAL OVERVIEW STRIP */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-md flex items-center justify-between">
-          <div className="space-y-0.5">
-            <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500">
-              Santé Globale
-            </span>
-            <div className="text-sm font-bold text-slate-100">{systemStatusLabel}</div>
-          </div>
-          <StatusBadge status={systemStatus} size="sm" />
-        </div>
-
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-md flex items-center justify-between">
-          <div className="space-y-0.5">
-            <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500">
-              État Équipe Autonome
-            </span>
-            <div className="text-sm font-bold text-slate-100 font-mono">
-              {isRunning
-                ? `Phase ${workflow.currentPhase}/7`
-                : hasCompleted
-                ? 'Mission terminée'
-                : hasFailed
-                ? 'Mission échouée'
-                : 'En attente'}
-            </div>
-          </div>
-          <StatusBadge status={workflow.executionState} size="sm" />
-        </div>
-
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-md flex items-center justify-between">
-          <div className="space-y-0.5">
-            <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500">
-              Pipeline GitHub CI
-            </span>
-            <div className="text-sm font-bold text-slate-100 font-mono">
-              {delivery.trackedSha
-                ? `SHA ${delivery.trackedSha.slice(0, 7)}`
-                : 'Aucun commit récent'}
-            </div>
-          </div>
-          <StatusBadge
-            status={
-              delivery.ciStatus === 'TERMINAL_SUCCESS'
-                ? 'SUCCESS'
-                : delivery.ciStatus === 'TERMINAL_FAILURE'
-                ? 'FAILED'
-                : delivery.ciStatus === 'RUNNING' || delivery.ciStatus === 'QUEUED'
-                ? 'RUNNING'
-                : 'IDLE'
-            }
-            size="sm"
-          />
-        </div>
-
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-md flex items-center justify-between">
-          <div className="space-y-0.5">
-            <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500">
-              IA & Quotas Actifs
-            </span>
-            <div className="text-sm font-bold text-slate-100 font-mono truncate max-w-[130px]">
-              {chosenModel}
-            </div>
-          </div>
-          <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 uppercase">
-            {activeProvider}
-          </span>
-        </div>
-      </div>
-
-      {/* 2. PRIMARY NEXT ACTION (WHAT TO DO NEXT) */}
-      <NextAction
-        title={nextActionConfig.title}
-        description={nextActionConfig.description}
-        buttonLabel={nextActionConfig.buttonLabel}
-        onAction={nextActionConfig.onAction}
-        disabled={!taskPrompt.trim() && !isRunning && !hasCompleted && !hasFailed}
-      />
-
-      {/* 3. HERO ACTION CARD: QUICK TASK DISPATCH */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-2xl space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-blue-400">
-              <Sparkles className="w-4.5 h-4.5" />
-            </div>
-            <div>
-              <h3 className="text-sm sm:text-base font-bold text-slate-100">
-                Action Principale : Nouvelle Mission
-              </h3>
-              <p className="text-xs text-slate-400">
-                L'orchestrateur déploie l'équipe (Manager, Developer, Tester, Reviewer) pour concevoir et tester le code.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 text-xs text-slate-400 font-mono">
-            <span className="bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800">
-              Tier : <strong className="text-blue-300 uppercase">{selectedTier}</strong>
+    <div className="space-y-6 max-w-4xl mx-auto">
+      {/* 1. HERO STATUS & PRIMARY ACTION CARD (ÉTAT → EXPLICATION → ACTION) */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-2xl space-y-6">
+        {/* Status Badge & Hero Header */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${heroState.badgeColor}`}>
+              {heroState.badge}
             </span>
           </div>
+
+          <h2 className="text-xl sm:text-2xl font-bold text-slate-100 tracking-tight">
+            {heroState.title}
+          </h2>
+
+          <p className="text-sm text-slate-300 leading-relaxed">
+            {heroState.description}
+          </p>
         </div>
 
-        {/* Text Input & Run Controls */}
-        <div className="space-y-3">
-          <div className="flex flex-col sm:flex-row items-stretch gap-3">
-            <div className="relative flex-1">
+        {/* DOMINANT ACTION (Textarea for IDLE, or Follow/Retry button for active/completed) */}
+        {!isRunning && !hasCompleted && !hasFailed ? (
+          <div className="space-y-4 pt-2">
+            <div className="relative">
+              <label htmlFor="dashboard-prompt" className="sr-only">
+                Consigne de mission logicielle
+              </label>
               <textarea
-                id="dashboard-task-input"
-                rows={2}
+                id="dashboard-prompt"
+                rows={3}
                 value={taskPrompt}
                 onChange={(e) => setTaskPrompt(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !isRunning) {
+                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
                     e.preventDefault();
                     onRunWorkflow();
                   }
                 }}
-                placeholder="Ex: Développer un module de validation JWT avec expiration, signature HMAC et tests pytest..."
-                className="w-full bg-slate-950 border border-slate-800 focus:border-blue-500 rounded-xl px-4 py-3 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none transition-all resize-none font-sans"
+                placeholder="Ex: Développer un module de validation JWT avec tests unitaires..."
+                className="w-full bg-slate-950 border border-slate-800 focus:border-blue-500 rounded-xl px-4 py-3 text-sm text-slate-100 placeholder-slate-500 focus:outline-none transition-all resize-none"
               />
-              <span className="hidden sm:inline-block absolute right-3 bottom-2.5 text-[10px] text-slate-500 font-mono">
+              <span className="hidden sm:inline-block absolute right-3 bottom-3 text-[11px] text-slate-500 font-mono">
                 ⌘ + Entrée pour lancer
               </span>
             </div>
 
-            <div className="flex sm:flex-col justify-end gap-2 flex-shrink-0">
-              {isRunning ? (
+            {/* Main CTA */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+              {/* Presets */}
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-xs text-slate-400 font-medium mr-1">Suggestions :</span>
+                {PRESET_SUGGESTIONS.map((preset, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => setTaskPrompt(preset.prompt)}
+                    className="text-xs px-2.5 py-1 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-300 border border-slate-800 transition cursor-pointer"
+                  >
+                    {preset.title}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={onRunWorkflow}
+                disabled={!taskPrompt.trim()}
+                className="px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold shadow-lg shadow-blue-500/20 transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                <HeroActionIcon className="w-4 h-4 fill-white" />
+                <span>{heroState.actionLabel}</span>
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 border-t border-slate-800">
+            <div className="text-xs text-slate-400">
+              {isRunning
+                ? 'Le workflow s’exécute en arrière-plan.'
+                : hasCompleted
+                ? 'Rapport de validation disponible.'
+                : 'Consultez le détail des étapes en échec.'}
+            </div>
+
+            <div className="flex items-center gap-2">
+              {isRunning && onAbortWorkflow && (
                 <button
                   type="button"
                   onClick={onAbortWorkflow}
-                  className="flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs sm:text-sm font-bold shadow-lg shadow-rose-500/20 transition cursor-pointer"
+                  className="px-4 py-2.5 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 text-xs font-bold transition cursor-pointer flex items-center gap-1.5"
                 >
-                  <Square className="w-4 h-4 fill-white" />
-                  Arrêter
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={onRunWorkflow}
-                  disabled={!taskPrompt.trim()}
-                  className="flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs sm:text-sm font-bold shadow-xl shadow-blue-500/20 transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <Play className="w-4 h-4 fill-white" />
-                  Lancer
+                  <Square className="w-3.5 h-3.5 fill-rose-300" />
+                  <span>Arrêter</span>
                 </button>
               )}
-            </div>
-          </div>
 
-          {/* Quick Presets */}
-          <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                Suggestions :
-              </span>
-              {PRESET_SUGGESTIONS.map((preset, idx) => (
+              {(hasCompleted || hasFailed) && onResetWorkflow && (
                 <button
-                  key={idx}
                   type="button"
-                  onClick={() => setTaskPrompt(preset.prompt)}
-                  className="text-xs px-2.5 py-1 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-300 border border-slate-800 hover:border-slate-700 transition text-left truncate max-w-[220px] cursor-pointer"
+                  onClick={() => {
+                    setTaskPrompt('');
+                    onResetWorkflow();
+                  }}
+                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition cursor-pointer"
                 >
-                  {preset.title}
+                  Nouvelle mission
                 </button>
-              ))}
-            </div>
+              )}
 
-            {workflow.steps.length > 0 && !isRunning && (
               <button
                 type="button"
-                onClick={onResetWorkflow}
-                className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-slate-200 px-2.5 py-1 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 transition cursor-pointer"
+                onClick={heroState.onAction}
+                className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs sm:text-sm font-bold shadow-md transition cursor-pointer flex items-center justify-center gap-2"
               >
-                <RotateCcw className="w-3 h-3" />
-                Effacer
+                <span>{heroState.actionLabel}</span>
+                <HeroActionIcon className="w-4 h-4" />
               </button>
-            )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
-      {/* 4. LAST ACTION & RESULT BANNER (ACTION → ÉTAT → RÉSULTAT → DÉTAILS) */}
-      {(hasCompleted || hasFailed || isRunning) && (
-        <ResultBanner
-          actionLabel="Workflow Multi-Agent"
-          status={workflow.executionState}
-          resultSummary={
-            isRunning
-              ? `Phase ${workflow.currentPhase}/7 en cours d'exécution par ${workflow.activeAgent || 'manager'}`
-              : hasCompleted
-              ? `Succès complet : Tests validés (${workflow.finalReport?.tests || '100%'}) · Revue approuvée (${workflow.finalReport?.review || 'Validée'})`
-              : workflow.errorMessage || 'Échec de l’exécution'
-          }
-          nextStep={{
-            label: 'Ouvrir Build & Delivery',
-            onClick: () => onNavigate('build'),
-          }}
-          details={
-            workflow.finalReport ? (
-              <div className="space-y-2">
-                <div className="text-slate-300 font-sans text-xs">
-                  {workflow.finalReport.testSummary || workflow.finalReport.reviewSummary || 'Workflow terminé avec succès.'}
-                </div>
-                {workflow.finalReport.filesChanged && workflow.finalReport.filesChanged.length > 0 && (
-                  <div className="text-[11px] text-slate-400">
-                    Fichiers modifiés : {workflow.finalReport.filesChanged.join(', ')}
-                  </div>
-                )}
-              </div>
-            ) : undefined
-          }
-        />
-      )}
-
-      {/* 5. 2-COLUMN SYNTHESIS: CI & RECENT ACTIVITIES */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Column A: CI & Delivery Snapshot */}
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xl space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-            <div className="flex items-center gap-2">
-              <GitCommit className="w-4 h-4 text-emerald-400" />
-              <h4 className="text-sm font-bold text-slate-100">Intégration & Pipeline CI</h4>
+      {/* 2. SYNTHÈSE CLAIRE (2 BLOCS COMPRÉHENSIBLES) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {/* Block 1: Pipeline & Livraison */}
+        <button
+          type="button"
+          onClick={() => onNavigate('build')}
+          className="bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-slate-700 rounded-2xl p-5 text-left transition shadow-md group cursor-pointer space-y-3"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-bold text-slate-100">
+              <Layers className="w-4 h-4 text-blue-400" />
+              <span>Build & Livraison</span>
             </div>
-            <button
-              type="button"
-              onClick={() => onNavigate('build')}
-              className="text-xs text-blue-400 hover:text-blue-300 font-semibold flex items-center gap-1 cursor-pointer"
-            >
-              <span>Voir tout</span>
-              <ArrowRight className="w-3 h-3" />
-            </button>
+            <ArrowRight className="w-4 h-4 text-slate-500 group-hover:text-blue-400 group-hover:translate-x-0.5 transition-all" />
           </div>
 
-          {delivery.trackedSha ? (
-            <div className="space-y-3">
-              <div className="bg-slate-950/80 p-3 rounded-xl border border-slate-800 space-y-2">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-mono text-slate-400">Commit suivi :</span>
-                  <strong className="font-mono text-emerald-400">{delivery.trackedSha.slice(0, 10)}</strong>
-                </div>
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-400">Statut pipeline :</span>
-                  <StatusBadge
-                    status={
-                      delivery.ciStatus === 'TERMINAL_SUCCESS'
-                        ? 'SUCCESS'
-                        : delivery.ciStatus === 'TERMINAL_FAILURE'
-                        ? 'FAILED'
-                        : delivery.ciStatus === 'RUNNING'
-                        ? 'RUNNING'
-                        : 'PENDING'
-                    }
-                    size="sm"
-                  />
-                </div>
-              </div>
+          <p className="text-xs text-slate-400">
+            {delivery.ciStatus === 'TERMINAL_SUCCESS'
+              ? '✓ Livraison GitHub Actions validée avec succès.'
+              : delivery.ciStatus === 'RUNNING'
+              ? '● Vérification des tests CI en cours sur GitHub.'
+              : delivery.ciStatus === 'TERMINAL_FAILURE'
+              ? '✕ Échec de la CI GitHub — intervention requise.'
+              : 'Pipeline hermétique prêt pour l’exécution.'}
+          </p>
+        </button>
 
-              <div className="text-xs text-slate-400 leading-relaxed">
-                Corrélation stricte garantissant que les statuts affichés correspondent exactement au SHA commit sans extrapolation.
-              </div>
-            </div>
-          ) : (
-            <EmptyState
-              title="Aucune exécution CI active"
-              description="Lancez une mission de développement pour voir le suivi en temps réel du commit et des workflows GitHub Actions."
-              actionButton={
-                <button
-                  type="button"
-                  onClick={() => onNavigate('build')}
-                  className="text-xs text-blue-400 hover:text-blue-300 font-semibold cursor-pointer"
-                >
-                  Aller dans Build & Delivery →
-                </button>
-              }
-            />
-          )}
-        </div>
-
-        {/* Column B: Intelligence & Decision Snapshot */}
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xl space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-            <div className="flex items-center gap-2">
+        {/* Block 2: Intelligence & Décisions */}
+        <button
+          type="button"
+          onClick={() => onNavigate('intelligence')}
+          className="bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-slate-700 rounded-2xl p-5 text-left transition shadow-md group cursor-pointer space-y-3"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-bold text-slate-100">
               <Cpu className="w-4 h-4 text-violet-400" />
-              <h4 className="text-sm font-bold text-slate-100">Intelligence & Routage</h4>
+              <span>Intelligence & Décisions</span>
             </div>
-            <button
-              type="button"
-              onClick={() => onNavigate('intelligence')}
-              className="text-xs text-violet-400 hover:text-violet-300 font-semibold flex items-center gap-1 cursor-pointer"
-            >
-              <span>Voir tout</span>
-              <ArrowRight className="w-3 h-3" />
-            </button>
+            <ArrowRight className="w-4 h-4 text-slate-500 group-hover:text-violet-400 group-hover:translate-x-0.5 transition-all" />
           </div>
 
-          <div className="space-y-3">
-            <div className="bg-slate-950/80 p-3 rounded-xl border border-slate-800 space-y-2">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-400">Modèle actif :</span>
-                <strong className="text-slate-200 font-mono">{chosenModel}</strong>
-              </div>
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-400">Auto-amélioration :</span>
-                <StatusBadge
-                  status={selfImprovement.isRunning ? 'RUNNING' : 'IDLE'}
-                  size="sm"
-                  labelOverride={selfImprovement.isRunning ? 'BOUCLE ACTIVE' : 'PRÊT'}
-                />
-              </div>
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-400">Google Jules :</span>
-                <span className="text-xs font-mono text-orange-400 font-semibold">
-                  {jules.activeSession ? `Session ${jules.activeSession.state}` : 'Prêt (API source validée)'}
-                </span>
-              </div>
-            </div>
-
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Orchestration hermétique multi-modèles avec token accounting réel et failover transparent.
-            </p>
-          </div>
-        </div>
+          <p className="text-xs text-slate-400">
+            {selfImprovement.isRunning
+              ? '● Boucle d’amélioration active en cours d’évaluation.'
+              : jules.activeSession
+              ? `Session Google Jules (${jules.activeSession.state}).`
+              : 'Routage optimal actif avec isolation des quotas.'}
+          </p>
+        </button>
       </div>
 
-      {/* 6. TECHNICAL DETAILS DRAWER (COLLAPSIBLE, ZERO CLUTTER BY DEFAULT) */}
-      <DetailPanel title="Diagnostics Techniques du Système (Repliés par défaut)">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs font-mono">
-          <div className="bg-slate-900 p-3 rounded-xl border border-slate-800 space-y-1">
-            <span className="text-[10px] text-slate-500 uppercase block font-bold">Runtime Engine</span>
-            <span className="text-slate-300 block">Node.js 22 + Express + Vite</span>
+      {/* 3. DÉTAILS TECHNIQUES (STRICTEMENT REPLIÉS PAR DÉFAUT) */}
+      <DetailPanel title="Informations Techniques (Modèle, Quotas & Sécurité)">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono text-slate-400">
+          <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+            <span className="text-[10px] text-slate-500 block uppercase">Modèle actif</span>
+            <span className="text-emerald-400 font-bold truncate block mt-0.5">{chosenModel}</span>
           </div>
-          <div className="bg-slate-900 p-3 rounded-xl border border-slate-800 space-y-1">
-            <span className="text-[10px] text-slate-500 uppercase block font-bold">Auth & Security</span>
-            <span className="text-emerald-400 block">Timing-Safe Bearer / X-API-Key</span>
+
+          <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+            <span className="text-[10px] text-slate-500 block uppercase">Fournisseur</span>
+            <span className="text-blue-400 font-bold uppercase truncate block mt-0.5">{activeProvider}</span>
           </div>
-          <div className="bg-slate-900 p-3 rounded-xl border border-slate-800 space-y-1">
-            <span className="text-[10px] text-slate-500 uppercase block font-bold">Corrélation SHA</span>
-            <span className="text-blue-400 block">Strict head_sha verification</span>
+
+          <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+            <span className="text-[10px] text-slate-500 block uppercase">Niveau (Tier)</span>
+            <span className="text-slate-200 font-bold uppercase truncate block mt-0.5">{selectedTier}</span>
+          </div>
+
+          <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+            <span className="text-[10px] text-slate-500 block uppercase">Sécurité API</span>
+            <span className="text-emerald-400 font-bold truncate block mt-0.5">Bearer / X-API-Key</span>
           </div>
         </div>
       </DetailPanel>

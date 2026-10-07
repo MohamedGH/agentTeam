@@ -12,6 +12,7 @@ import {
   Terminal,
   RefreshCw,
   Sliders,
+  AlertTriangle,
 } from 'lucide-react';
 import {
   StatusBadge,
@@ -61,9 +62,9 @@ export const SystemPage: React.FC<SystemPageProps> = ({
       {/* 1. VIEW HEADER */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
         <div>
-          <h2 className="text-lg font-bold text-slate-100 tracking-tight">Système & Configuration</h2>
+          <h2 className="text-lg font-bold text-slate-100 tracking-tight">System — Diagnostic & Configuration</h2>
           <p className="text-xs text-slate-400 mt-0.5">
-            Quotas réels des fournisseurs, spécification des rôles d'agents, paramètres GitHub et sécurité.
+            Gestion des quotas des fournisseurs IA, configuration GitHub et audit de sécurité.
           </p>
         </div>
 
@@ -79,20 +80,7 @@ export const SystemPage: React.FC<SystemPageProps> = ({
             }`}
           >
             <Gauge className="w-3.5 h-3.5" />
-            <span>Quotas & IA</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveSubTab('roles')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
-              activeSubTab === 'roles'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Users className="w-3.5 h-3.5" />
-            <span>Rôles d'Équipe</span>
+            <span>Quotas & Modèles</span>
           </button>
 
           <button
@@ -118,12 +106,58 @@ export const SystemPage: React.FC<SystemPageProps> = ({
             }`}
           >
             <ShieldCheck className="w-3.5 h-3.5" />
-            <span>Sécurité & Audit</span>
+            <span>Sécurité & Clés</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('roles')}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+              activeSubTab === 'roles'
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Users className="w-3.5 h-3.5" />
+            <span>Rôles d'Équipe</span>
           </button>
         </div>
       </div>
 
-      {/* SUB-VIEW 1: QUOTAS & IA */}
+      {/* 2. OVERVIEW STATUS CARDS (ÉTAT → PROBLÈME → ACTION) */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
+          <div className="space-y-0.5">
+            <span className="text-[10px] uppercase font-mono text-slate-500 font-bold">API Backend</span>
+            <div className="text-slate-200 font-bold text-sm">✓ API Opérationnelle</div>
+          </div>
+          <span className="text-emerald-400 text-xs font-mono font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+            CONNECTÉ
+          </span>
+        </div>
+
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
+          <div className="space-y-0.5">
+            <span className="text-[10px] uppercase font-mono text-slate-500 font-bold">Intégration GitHub</span>
+            <div className="text-slate-200 font-bold text-sm">✓ Dépôt Paramétré</div>
+          </div>
+          <span className="text-blue-400 text-xs font-mono font-bold bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20">
+            PRÊT
+          </span>
+        </div>
+
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
+          <div className="space-y-0.5">
+            <span className="text-[10px] uppercase font-mono text-slate-500 font-bold">Sécurité & Tokens</span>
+            <div className="text-slate-200 font-bold text-sm">✓ Conforme & Masqué</div>
+          </div>
+          <span className="text-emerald-400 text-xs font-mono font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+            SÉCURISÉ
+          </span>
+        </div>
+      </div>
+
+      {/* SUB-VIEW 1: QUOTAS & MODÈLES */}
       {activeSubTab === 'quota' && (
         <QuotaDashboard
           models={quotaModels}
@@ -137,13 +171,10 @@ export const SystemPage: React.FC<SystemPageProps> = ({
         />
       )}
 
-      {/* SUB-VIEW 2: RÔLES & ARCHITECTURE */}
-      {activeSubTab === 'roles' && <RolesGuide />}
-
-      {/* SUB-VIEW 3: GITHUB & CI */}
+      {/* SUB-VIEW 2: GITHUB & CI */}
       {activeSubTab === 'github' && <GitHubSettingsModal />}
 
-      {/* SUB-VIEW 4: SÉCURITÉ & AUDIT */}
+      {/* SUB-VIEW 3: SÉCURITÉ */}
       {activeSubTab === 'security' && (
         <div className="space-y-6">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xl space-y-4">
@@ -153,48 +184,48 @@ export const SystemPage: React.FC<SystemPageProps> = ({
               </div>
               <div>
                 <h3 className="text-sm font-bold text-slate-100">Audit de Sécurité & Conformité Production</h3>
-                <p className="text-xs text-slate-400">Invariants cryptographiques et protections d'exécution hermétiques.</p>
+                <p className="text-xs text-slate-400">Protections hermétiques et intégrité du serveur.</p>
               </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
               <div className="bg-slate-950/80 p-4 rounded-xl border border-slate-800 space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <span className="font-bold text-slate-200">Authentification par En-tête</span>
-                  <StatusBadge status="SUCCESS" size="sm" labelOverride="STRICTE" />
+                  <span className="font-bold text-slate-200">Authentification API</span>
+                  <span className="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">STRICTE</span>
                 </div>
                 <p className="text-slate-400 text-[11px] leading-relaxed">
-                  Autorisation requise exclusivement via <code className="text-slate-300">Authorization: Bearer</code> ou <code className="text-slate-300">X-API-Key</code>. Comparaison timing-safe sans fuite par query param ou cookie.
+                  Autorisation requise via <code className="text-slate-300">Authorization: Bearer</code> ou <code className="text-slate-300">X-API-Key</code>. Comparaison timing-safe.
                 </p>
               </div>
 
               <div className="bg-slate-950/80 p-4 rounded-xl border border-slate-800 space-y-1.5">
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-slate-200">Politique CORS Same-Origin</span>
-                  <StatusBadge status="SUCCESS" size="sm" labelOverride="VERIFIÉE" />
+                  <span className="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">VALIDÉE</span>
                 </div>
                 <p className="text-slate-400 text-[11px] leading-relaxed">
-                  Vérification rigoureuse protocole + hostname + port. Rejet strict des wildcards et des domaines usurpés.
+                  Vérification stricte protocole + hostname + port. Rejet des wildcards et des sous-domaines usurpés.
                 </p>
               </div>
 
               <div className="bg-slate-950/80 p-4 rounded-xl border border-slate-800 space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <span className="font-bold text-slate-200">Exécution de Processus Sécurisée</span>
-                  <StatusBadge status="SUCCESS" size="sm" labelOverride="EXECFILE" />
+                  <span className="font-bold text-slate-200">Exécution de Processus</span>
+                  <span className="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">EXECFILE</span>
                 </div>
                 <p className="text-slate-400 text-[11px] leading-relaxed">
-                  Utilisation stricte de <code className="text-slate-300">execFile</code> / <code className="text-slate-300">execFileSync</code> avec liste d'arguments séparés. Aucune injection shell ou exécution arbitraire possible.
+                  Utilisation stricte de <code className="text-slate-300">execFile</code> / <code className="text-slate-300">execFileSync</code>. Aucune commande arbitraire passée au shell.
                 </p>
               </div>
 
               <div className="bg-slate-950/80 p-4 rounded-xl border border-slate-800 space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <span className="font-bold text-slate-200">Protection Anti-Path Traversal</span>
-                  <StatusBadge status="SUCCESS" size="sm" labelOverride="CANONISÉE" />
+                  <span className="font-bold text-slate-200">Protection Fichiers (Workspace)</span>
+                  <span className="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">ISOLÉ</span>
                 </div>
                 <p className="text-slate-400 text-[11px] leading-relaxed">
-                  Validation et résolution stricte des chemins d'accès au workspace, blocage des chemins Windows/UNC, fichiers cachés et <code className="text-slate-300">.env</code>.
+                  Résolution normalisée et canonisée. Blocage des traversées de répertoires, chemins Windows/UNC et <code className="text-slate-300">.env</code>.
                 </p>
               </div>
             </div>
@@ -210,6 +241,9 @@ export const SystemPage: React.FC<SystemPageProps> = ({
           </DetailPanel>
         </div>
       )}
+
+      {/* SUB-VIEW 4: RÔLES D'ÉQUIPE */}
+      {activeSubTab === 'roles' && <RolesGuide />}
     </div>
   );
 };
