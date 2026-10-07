@@ -242,18 +242,33 @@ export function validateTestCommand(cmd?: string): { file: string; args: string[
     '--experimental-loader',
     '--inspect',
     '--inspect-brk',
+    '--input-type',
+    '--conditions',
+    '--prof',
+    '--test-reporter',
   ]);
   for (const arg of args) {
     const flagName = arg.split('=')[0];
-    if (FORBIDDEN_FLAGS.has(flagName)) {
+    if (FORBIDDEN_FLAGS.has(flagName) || flagName.startsWith('--eval=') || flagName.startsWith('--require=')) {
       throw new Error(`Disallowed test command argument "${arg}" in "${cmd}"`);
     }
   }
 
   if ((binary === 'npm' || binary === 'yarn' || binary === 'pnpm') && args.length > 0) {
     const sub = args[0];
-    if (sub === 'exec' || sub === 'dlx' || sub === 'config' || sub === 'publish') {
+    if (sub === 'exec' || sub === 'dlx' || sub === 'config' || sub === 'publish' || sub === 'install' || sub === 'i' || sub === 'add') {
       throw new Error(`Disallowed ${binary} subcommand "${sub}" in test command`);
+    }
+  }
+
+  // Disallow absolute file paths or path traversal in script targets for node/tsx
+  if (binary === 'node' || binary === 'tsx') {
+    for (const arg of args) {
+      if (!arg.startsWith('-')) {
+        if (arg.includes('..') || arg.startsWith('/') || /^[a-zA-Z]:/.test(arg)) {
+          throw new Error(`Disallowed script path "${arg}" in ${binary} test command`);
+        }
+      }
     }
   }
 
@@ -263,25 +278,70 @@ export function validateTestCommand(cmd?: string): { file: string; args: string[
   };
 }
 
+const ALLOWED_EXECUTOR_BINARIES = new Set([
+  'git',
+  'npm',
+  'npx',
+  'pytest',
+  'yarn',
+  'pnpm',
+  'vitest',
+  'jest',
+  'cargo',
+  'go',
+  'node',
+  'tsx',
+  'echo',
+  'exit',
+]);
+
 export class RealGitExecutor implements IGitExecutor {
   public async exec(command: string, cwd?: string, env?: Record<string, string>): Promise<{ stdout: string; stderr: string; exitCode: number }> {
     const trimmed = (command || '').trim();
     if (!trimmed) {
       throw new Error('Command cannot be empty');
     }
-    const tokens = trimmed.split(/\s+/);
+    if (/[;&|`$<>()\\]/.test(trimmed)) {
+      throw new Error(`Command "${command}" contains forbidden shell metacharacters`);
+    }
+    const tokens = trimmed.split(/\s+/).filter(Boolean);
     const file = tokens[0];
     const args = tokens.slice(1);
     return this.execFile(file, args, { cwd, env: env as NodeJS.ProcessEnv });
   }
 
   public async execFile(file: string, args: string[], options?: { cwd?: string; env?: NodeJS.ProcessEnv }): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-    const cwd = options?.cwd;
-    if (file === 'git' && (!cwd || typeof cwd !== 'string' || cwd.trim().length === 0)) {
-      throw new Error('Working directory (cwd) must be explicitly provided for Git execution (no process.cwd fallback allowed)');
+    const cleanFile = (file || '').trim();
+    if (!cleanFile) {
+      throw new Error('Executable file cannot be empty');
     }
+
+    if (!ALLOWED_EXECUTOR_BINARIES.has(cleanFile)) {
+      throw new Error(`Disallowed executable "${cleanFile}". Execution blocked.`);
+    }
+
+    const cwd = options?.cwd;
+    if (cleanFile === 'git') {
+      if (!cwd || typeof cwd !== 'string' || cwd.trim().length === 0) {
+        throw new Error('Working directory (cwd) must be explicitly provided for Git execution (no process.cwd fallback allowed)');
+      }
+      for (const arg of args) {
+        if (
+          arg.startsWith('--upload-pack=') ||
+          arg.startsWith('--receive-pack=') ||
+          arg.startsWith('--exec=') ||
+          arg.includes('core.fsmonitor') ||
+          arg.includes('core.sshCommand') ||
+          arg.includes('credential.helper') ||
+          arg.includes('diff.external')
+        ) {
+          throw new Error(`Dangerous Git option forbidden: ${arg}`);
+        }
+      }
+    }
+
     try {
-      const res = await execFileAsync(file, args, {
+      const res = await execFileAsync(cleanFile, args, {
         cwd: cwd ? cwd.trim() : undefined,
         env: { ...process.env, ...options?.env, GIT_TERMINAL_PROMPT: '0' },
       });

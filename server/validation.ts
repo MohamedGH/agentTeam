@@ -272,9 +272,10 @@ export function validateSafeTestCommand(input: unknown): TestCommandValidationRe
     };
   }
 
-  const tokens = trimmed.split(/\s+/);
+  const tokens = trimmed.split(/\s+/).filter(Boolean);
   const executable = tokens[0];
-  const allowedExecutables = new Set(['npm', 'npx', 'pnpm', 'yarn', 'pytest', 'vitest', 'jest', 'tsx', 'node']);
+  const args = tokens.slice(1);
+  const allowedExecutables = new Set(['npm', 'npx', 'pnpm', 'yarn', 'pytest', 'vitest', 'jest', 'tsx', 'node', 'cargo', 'go']);
 
   if (!allowedExecutables.has(executable)) {
     return {
@@ -286,15 +287,60 @@ export function validateSafeTestCommand(input: unknown): TestCommandValidationRe
   }
 
   // Disallow inline code execution flags
-  const forbiddenFlags = new Set(['-e', '--eval', '-c', '-p', '--print', '--import', '--require', '-r']);
-  for (const tok of tokens.slice(1)) {
-    if (forbiddenFlags.has(tok) || tok.startsWith('--eval=') || tok.startsWith('--require=')) {
+  const forbiddenFlags = new Set([
+    '-e',
+    '--eval',
+    '-c',
+    '-p',
+    '--print',
+    '--import',
+    '--require',
+    '-r',
+    '--loader',
+    '--experimental-loader',
+    '--inspect',
+    '--inspect-brk',
+    '--input-type',
+    '--conditions',
+    '--prof',
+    '--test-reporter',
+  ]);
+  for (const tok of args) {
+    const flag = tok.split('=')[0];
+    if (forbiddenFlags.has(flag) || flag.startsWith('--eval=') || flag.startsWith('--require=')) {
       return {
         valid: false,
         normalized: '',
         command: '',
         error: `Unsafe testCommand: inline code execution flag "${tok}" is forbidden`,
       };
+    }
+  }
+
+  if ((executable === 'npm' || executable === 'yarn' || executable === 'pnpm') && args.length > 0) {
+    const sub = args[0];
+    if (sub === 'exec' || sub === 'dlx' || sub === 'config' || sub === 'publish' || sub === 'install' || sub === 'i' || sub === 'add') {
+      return {
+        valid: false,
+        normalized: '',
+        command: '',
+        error: `Unsafe testCommand: subcommand "${sub}" is forbidden`,
+      };
+    }
+  }
+
+  if (executable === 'node' || executable === 'tsx') {
+    for (const arg of args) {
+      if (!arg.startsWith('-')) {
+        if (arg.includes('..') || arg.startsWith('/') || /^[a-zA-Z]:/.test(arg)) {
+          return {
+            valid: false,
+            normalized: '',
+            command: '',
+            error: `Unsafe testCommand: path traversal or absolute path "${arg}" is forbidden`,
+          };
+        }
+      }
     }
   }
 

@@ -1,4 +1,5 @@
 import { Router, Request, Response, RequestHandler } from 'express';
+import crypto from 'crypto';
 import { problemClassifier } from './llm/ProblemClassifier';
 import { llmRegistry } from './llm/LLMRegistry';
 import { llmRankingEngine } from './llm/LLMRankingEngine';
@@ -7,6 +8,18 @@ import { llmBenchmarkEngine } from './llm/LLMBenchmarkEngine';
 import { llmPerformanceMemory } from './llm/LLMPerformanceMemory';
 import { llmSelfImprovementAdapter } from './selfImprovement/LLMSelfImprovementAdapter';
 import { ProblemCategory, ProblemComplexity } from './llm/types';
+import { sanitizeGitOutput } from './github/githubGitOperations';
+
+function sendSafeError(res: Response, err: any, status: number = 500, fallback: string = 'Internal server error') {
+  const requestId = `req_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+  const raw = err?.message || String(err || '');
+  console.error(`[LLMRoutes Error ${requestId}] (${status}):`, sanitizeGitOutput(raw), err?.stack ? sanitizeGitOutput(err.stack) : '');
+  res.status(status).json({
+    success: false,
+    error: fallback,
+    requestId,
+  });
+}
 
 export function createLLMRoutes(authMiddleware?: RequestHandler): Router {
   const router = Router();
@@ -31,7 +44,7 @@ export function createLLMRoutes(authMiddleware?: RequestHandler): Router {
       const classified = problemClassifier.classify(taskPrompt, context);
       res.json({ success: true, classified });
     } catch (err: any) {
-      res.status(500).json({ error: err.message || 'Classification failed' });
+      sendSafeError(res, err, 500, 'Classification failed');
     }
   });
 
@@ -41,7 +54,7 @@ export function createLLMRoutes(authMiddleware?: RequestHandler): Router {
       const models = llmRegistry.discoverModels();
       res.json({ success: true, count: models.length, models });
     } catch (err: any) {
-      res.status(500).json({ error: err.message || 'Failed to retrieve models' });
+      sendSafeError(res, err, 500, 'Failed to retrieve models');
     }
   });
 
@@ -66,7 +79,7 @@ export function createLLMRoutes(authMiddleware?: RequestHandler): Router {
       const allRankings = llmRankingEngine.getAllRankings();
       res.json({ success: true, rankings: allRankings });
     } catch (err: any) {
-      res.status(500).json({ error: err.message || 'Failed to retrieve rankings' });
+      sendSafeError(res, err, 500, 'Failed to retrieve rankings');
     }
   });
 
@@ -84,7 +97,7 @@ export function createLLMRoutes(authMiddleware?: RequestHandler): Router {
       const decision = llmSelector.selectModelForTask(taskPrompt, context, constraints);
       res.json({ success: true, decision });
     } catch (err: any) {
-      res.status(500).json({ error: err.message || 'Model selection failed' });
+      sendSafeError(res, err, 500, 'Model selection failed');
     }
   });
 
@@ -94,7 +107,7 @@ export function createLLMRoutes(authMiddleware?: RequestHandler): Router {
       const decision = llmSelector.getLastOperationalDecision();
       res.json({ success: true, decision });
     } catch (err: any) {
-      res.status(500).json({ error: err.message || 'Failed to get operational decision' });
+      sendSafeError(res, err, 500, 'Failed to get operational decision');
     }
   });
 
@@ -117,7 +130,7 @@ export function createLLMRoutes(authMiddleware?: RequestHandler): Router {
       const roles = llmSelector.decomposeAndSelect(taskPrompt, context);
       res.json({ success: true, roles });
     } catch (err: any) {
-      res.status(500).json({ error: err.message || 'Decomposition failed' });
+      sendSafeError(res, err, 500, 'Decomposition failed');
     }
   });
 
@@ -135,7 +148,7 @@ export function createLLMRoutes(authMiddleware?: RequestHandler): Router {
       });
       res.json({ success: true, result });
     } catch (err: any) {
-      res.status(500).json({ error: err.message || 'Benchmark run failed' });
+      sendSafeError(res, err, 500, 'Benchmark run failed');
     }
   });
 
@@ -150,7 +163,7 @@ export function createLLMRoutes(authMiddleware?: RequestHandler): Router {
         stats,
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message || 'Failed to retrieve stats' });
+      sendSafeError(res, err, 500, 'Failed to retrieve stats');
     }
   });
 
@@ -160,7 +173,7 @@ export function createLLMRoutes(authMiddleware?: RequestHandler): Router {
       llmPerformanceMemory.clear();
       res.json({ success: true, message: 'LLM performance memory cleared.' });
     } catch (err: any) {
-      res.status(500).json({ error: err.message || 'Failed to clear memory' });
+      sendSafeError(res, err, 500, 'Failed to clear memory');
     }
   });
 
@@ -170,7 +183,7 @@ export function createLLMRoutes(authMiddleware?: RequestHandler): Router {
       const anomalies = llmSelfImprovementAdapter.detectAnomalies();
       res.json({ success: true, count: anomalies.length, anomalies });
     } catch (err: any) {
-      res.status(500).json({ error: err.message || 'Failed to detect anomalies' });
+      sendSafeError(res, err, 500, 'Failed to detect anomalies');
     }
   });
 
@@ -194,7 +207,7 @@ export function createLLMRoutes(authMiddleware?: RequestHandler): Router {
         records,
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message || 'Adaptation run failed' });
+      sendSafeError(res, err, 500, 'Adaptation run failed');
     }
   });
 
@@ -204,7 +217,7 @@ export function createLLMRoutes(authMiddleware?: RequestHandler): Router {
       const history = llmSelfImprovementAdapter.getHistory();
       res.json({ success: true, count: history.length, history });
     } catch (err: any) {
-      res.status(500).json({ error: err.message || 'Failed to get history' });
+      sendSafeError(res, err, 500, 'Failed to get history');
     }
   });
 
