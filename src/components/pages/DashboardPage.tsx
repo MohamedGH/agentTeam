@@ -20,6 +20,7 @@ import {
   StatusBadge,
   DetailPanel,
 } from '../ui';
+import { Calculator } from '../Calculator';
 import { AppRoute } from '../../managers/routeManager';
 import { WorkflowState } from '../../managers/workflowStateManager';
 import { DeliveryState } from '../../managers/deliveryStateManager';
@@ -250,7 +251,12 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         )}
       </div>
 
-      {/* 2. SYNTHÈSE CLAIRE (2 BLOCS COMPRÉHENSIBLES) */}
+      {/* 2. CALCULATRICE INTÉGRÉE (STANDARD & SCIENTIFIQUE) */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
+        <Calculator />
+      </div>
+
+      {/* 3. SYNTHÈSE CLAIRE (2 BLOCS COMPRÉHENSIBLES) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {/* Block 1: Pipeline & Livraison */}
         <button
@@ -301,7 +307,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         </button>
       </div>
 
-      {/* 3. DÉTAILS TECHNIQUES (STRICTEMENT REPLIÉS PAR DÉFAUT) */}
+      {/* 4. DÉTAILS TECHNIQUES (STRICTEMENT REPLIÉS PAR DÉFAUT) */}
       <DetailPanel title="Informations Techniques (Modèle, Quotas & Sécurité)">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono text-slate-400">
           <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
