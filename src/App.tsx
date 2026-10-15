@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Header } from './components/Header';
 import { DashboardPage } from './components/pages/DashboardPage';
 import { BuildPage } from './components/pages/BuildPage';
+import { CalculatorPage } from './components/pages/CalculatorPage';
 import { IntelligencePage } from './components/pages/IntelligencePage';
 import { SystemPage } from './components/pages/SystemPage';
 import { ActivityPage } from './components/pages/ActivityPage';
@@ -462,6 +463,11 @@ export default function App() {
             setAutomationMode={setAutomationMode}
             initialSubTab={routeManager.getState().subTab}
           />
+        )}
+
+        {/* PAGE: CALCULATOR */}
+        {primaryPage === 'calculator' && (
+          <CalculatorPage />
         )}
 
         {/* PAGE 3: INTELLIGENCE */}
