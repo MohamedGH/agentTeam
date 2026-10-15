@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Sparkles,
   Play,
@@ -15,11 +15,13 @@ import {
   Clock,
   ChevronDown,
   ChevronUp,
+  Calculator as CalcIcon,
 } from 'lucide-react';
 import {
   StatusBadge,
   DetailPanel,
 } from '../ui';
+import { Calculator } from '../Calculator';
 import { AppRoute } from '../../managers/routeManager';
 import { WorkflowState } from '../../managers/workflowStateManager';
 import { DeliveryState } from '../../managers/deliveryStateManager';
@@ -75,6 +77,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   providers,
   selectedTier,
 }) => {
+  const [showCalculatorTool, setShowCalculatorTool] = useState<boolean>(false);
   const isRunning = workflow.executionState === 'RUNNING';
   const hasCompleted = workflow.executionState === 'COMPLETED';
   const hasFailed = workflow.executionState === 'FAILED';
@@ -301,7 +304,37 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         </button>
       </div>
 
-      {/* 3. DÉTAILS TECHNIQUES (STRICTEMENT REPLIÉS PAR DÉFAUT) */}
+      {/* 3. CALCULATOR INTERACTIVE TOOL */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 bg-blue-500/10 text-blue-400 rounded-xl border border-blue-500/20">
+              <CalcIcon className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="font-bold text-slate-100 text-sm">Calculatrice Scientifique Embarquée</h3>
+              <p className="text-xs text-slate-400">Évaluez des expressions mathématiques et vérifiez vos algorithmes</p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowCalculatorTool((prev) => !prev)}
+            className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer"
+          >
+            <span>{showCalculatorTool ? 'Masquer la calculatrice' : 'Ouvrir la calculatrice'}</span>
+            {showCalculatorTool ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </button>
+        </div>
+
+        {showCalculatorTool && (
+          <div className="pt-2 animate-fadeIn">
+            <Calculator />
+          </div>
+        )}
+      </div>
+
+      {/* 4. DÉTAILS TECHNIQUES (STRICTEMENT REPLIÉS PAR DÉFAUT) */}
       <DetailPanel title="Informations Techniques (Modèle, Quotas & Sécurité)">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono text-slate-400">
           <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
