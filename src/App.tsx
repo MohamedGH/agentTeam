@@ -5,6 +5,7 @@ import { BuildPage } from './components/pages/BuildPage';
 import { IntelligencePage } from './components/pages/IntelligencePage';
 import { SystemPage } from './components/pages/SystemPage';
 import { ActivityPage } from './components/pages/ActivityPage';
+import { CalculatorPage } from './components/pages/CalculatorPage';
 import { ExecutionStatusBanner } from './components/ExecutionStatusBanner';
 import { GlobalActivityCenter } from './components/GlobalActivityCenter';
 import { AgentStep, ModelQuotaStatus, AIProviderId, ProviderInfo } from './types';
@@ -496,6 +497,11 @@ export default function App() {
           <ActivityPage
             onNavigate={(route, params) => handleTabChange(route, params)}
           />
+        )}
+
+        {/* PAGE 6: CALCULATOR */}
+        {primaryPage === 'calculator' && (
+          <CalculatorPage />
         )}
       </main>
 
