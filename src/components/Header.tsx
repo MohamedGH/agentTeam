@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import {
+  Calculator as CalculatorIcon,
   LayoutDashboard,
   Layers,
   Brain,
@@ -23,13 +24,19 @@ interface HeaderProps {
 }
 
 interface NavItem {
-  id: 'dashboard' | 'build' | 'intelligence' | 'system' | 'activity';
+  id: 'calculator' | 'dashboard' | 'build' | 'intelligence' | 'system' | 'activity';
   label: string;
   description: string;
   icon: React.ComponentType<{ className?: string }>;
 }
 
 const PRIMARY_NAV_ITEMS: NavItem[] = [
+  {
+    id: 'calculator',
+    label: 'Calculatrice',
+    description: 'Calculatrice standard & mémoire',
+    icon: CalculatorIcon,
+  },
   {
     id: 'dashboard',
     label: 'Dashboard',

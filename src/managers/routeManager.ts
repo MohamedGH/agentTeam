@@ -4,6 +4,7 @@
  */
 
 export type AppRoute =
+  | 'calculator'
   | 'dashboard'
   | 'build'
   | 'intelligence'
@@ -21,7 +22,7 @@ export type AppRoute =
 
 export interface RouteState {
   currentRoute: AppRoute;
-  primaryPage: 'dashboard' | 'build' | 'intelligence' | 'system' | 'activity';
+  primaryPage: 'calculator' | 'dashboard' | 'build' | 'intelligence' | 'system' | 'activity';
   subTab?: string;
   params: Record<string, string>;
 }
@@ -42,8 +43,10 @@ class RouteManager {
     }
   }
 
-  public getPrimaryPage(route: AppRoute): 'dashboard' | 'build' | 'intelligence' | 'system' | 'activity' {
+  public getPrimaryPage(route: AppRoute): 'calculator' | 'dashboard' | 'build' | 'intelligence' | 'system' | 'activity' {
     switch (route) {
+      case 'calculator':
+        return 'calculator';
       case 'dashboard':
       case 'studio':
         return 'dashboard';
@@ -84,6 +87,7 @@ class RouteManager {
     }
 
     const validRoutes: AppRoute[] = [
+      'calculator',
       'dashboard',
       'build',
       'intelligence',

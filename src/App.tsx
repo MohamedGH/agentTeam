@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Header } from './components/Header';
+import { CalculatorPage } from './components/pages/CalculatorPage';
 import { DashboardPage } from './components/pages/DashboardPage';
 import { BuildPage } from './components/pages/BuildPage';
 import { IntelligencePage } from './components/pages/IntelligencePage';
@@ -410,6 +411,11 @@ export default function App() {
 
       {/* Main Viewport Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 lg:px-6 py-6 space-y-6">
+        {/* CALCULATOR PAGE */}
+        {primaryPage === 'calculator' && (
+          <CalculatorPage />
+        )}
+
         {/* PAGE 1: DASHBOARD */}
         {primaryPage === 'dashboard' && (
           <DashboardPage
