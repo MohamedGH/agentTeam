@@ -5,6 +5,7 @@ import {
   Brain,
   Sliders,
   Activity,
+  Calculator as CalculatorIcon,
   Menu,
   X,
   Users,
@@ -23,7 +24,7 @@ interface HeaderProps {
 }
 
 interface NavItem {
-  id: 'dashboard' | 'build' | 'intelligence' | 'system' | 'activity';
+  id: 'dashboard' | 'build' | 'intelligence' | 'system' | 'activity' | 'calculator';
   label: string;
   description: string;
   icon: React.ComponentType<{ className?: string }>;
@@ -47,6 +48,12 @@ const PRIMARY_NAV_ITEMS: NavItem[] = [
     label: 'Intelligence',
     description: 'Routage LLM, Jules & Auto-Amélioration',
     icon: Brain,
+  },
+  {
+    id: 'calculator',
+    label: 'Calculatrice',
+    description: 'Outil de calcul standard & scientifique',
+    icon: CalculatorIcon,
   },
   {
     id: 'system',

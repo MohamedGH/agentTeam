@@ -9,6 +9,7 @@ export type AppRoute =
   | 'intelligence'
   | 'system'
   | 'activity'
+  | 'calculator'
   // Legacy & Deep-link aliases
   | 'studio'
   | 'workspace'
@@ -21,7 +22,7 @@ export type AppRoute =
 
 export interface RouteState {
   currentRoute: AppRoute;
-  primaryPage: 'dashboard' | 'build' | 'intelligence' | 'system' | 'activity';
+  primaryPage: 'dashboard' | 'build' | 'intelligence' | 'system' | 'activity' | 'calculator';
   subTab?: string;
   params: Record<string, string>;
 }
@@ -42,7 +43,7 @@ class RouteManager {
     }
   }
 
-  public getPrimaryPage(route: AppRoute): 'dashboard' | 'build' | 'intelligence' | 'system' | 'activity' {
+  public getPrimaryPage(route: AppRoute): 'dashboard' | 'build' | 'intelligence' | 'system' | 'activity' | 'calculator' {
     switch (route) {
       case 'dashboard':
       case 'studio':
@@ -62,6 +63,8 @@ class RouteManager {
         return 'system';
       case 'activity':
         return 'activity';
+      case 'calculator':
+        return 'calculator';
       default:
         return 'dashboard';
     }
@@ -89,6 +92,7 @@ class RouteManager {
       'intelligence',
       'system',
       'activity',
+      'calculator',
       'studio',
       'workspace',
       'quota',
