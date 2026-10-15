@@ -13,6 +13,7 @@ import {
   RefreshCw,
   Sliders,
   AlertTriangle,
+  Calculator as CalcIcon,
 } from 'lucide-react';
 import {
   StatusBadge,
@@ -22,6 +23,7 @@ import {
 import { QuotaDashboard } from '../QuotaDashboard';
 import { RolesGuide } from '../RolesGuide';
 import { GitHubSettingsModal } from '../GitHubSettingsModal';
+import { Calculator } from '../Calculator';
 import { ModelQuotaStatus, AIProviderId, ProviderInfo } from '../../types';
 
 interface SystemPageProps {
@@ -47,13 +49,15 @@ export const SystemPage: React.FC<SystemPageProps> = ({
   onSelectProvider,
   initialSubTab = 'quota',
 }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'quota' | 'roles' | 'github' | 'security'>(
+  const [activeSubTab, setActiveSubTab] = useState<'quota' | 'roles' | 'github' | 'security' | 'calculator'>(
     initialSubTab === 'roles'
       ? 'roles'
       : initialSubTab === 'github' || initialSubTab === 'github-settings'
       ? 'github'
       : initialSubTab === 'security'
       ? 'security'
+      : initialSubTab === 'calculator'
+      ? 'calculator'
       : 'quota'
   );
 
@@ -107,6 +111,19 @@ export const SystemPage: React.FC<SystemPageProps> = ({
           >
             <ShieldCheck className="w-3.5 h-3.5" />
             <span>Sécurité & Clés</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('calculator')}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+              activeSubTab === 'calculator'
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <CalcIcon className="w-3.5 h-3.5" />
+            <span>Calculatrice</span>
           </button>
 
           <button
@@ -242,7 +259,14 @@ export const SystemPage: React.FC<SystemPageProps> = ({
         </div>
       )}
 
-      {/* SUB-VIEW 4: RÔLES D'ÉQUIPE */}
+      {/* SUB-VIEW 4: CALCULATRICE */}
+      {activeSubTab === 'calculator' && (
+        <div className="py-2">
+          <Calculator />
+        </div>
+      )}
+
+      {/* SUB-VIEW 5: RÔLES D'ÉQUIPE */}
       {activeSubTab === 'roles' && <RolesGuide />}
     </div>
   );
