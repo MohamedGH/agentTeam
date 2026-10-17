@@ -15,6 +15,7 @@ import { SelectionDecision, SelectionConstraints, FailureClass } from './llm/typ
 import { AIProviderId } from './providers/types';
 
 export interface TeamRunOptions {
+  workflowId?: string;
   provider?: any;
   model?: string;
   maxLatencyMs?: number;
@@ -90,7 +91,7 @@ export class AgentTeamEngine {
     options: TeamRunOptions = {}
   ): Promise<TeamRunResult> {
     const startTime = Date.now();
-    const taskId = 'task_' + Math.random().toString(36).substring(2, 9);
+    const taskId = options.workflowId || ('task_' + Math.random().toString(36).substring(2, 9));
     const steps: AgentStep[] = [];
 
     // -------------------------------------------------------------

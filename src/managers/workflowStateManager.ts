@@ -2,6 +2,14 @@ import { AgentRole, AgentStep, AIProviderId, FinalReport } from '../types';
 
 export type ExecutionState = 'IDLE' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
 
+export type TransportStatus =
+  | 'CONNECTED'
+  | 'RECONNECTING'
+  | 'RECOVERING_REPORT'
+  | 'RECOVERED'
+  | 'DISCONNECTED'
+  | null;
+
 export interface WorkflowState {
   readonly executionState: ExecutionState;
   readonly activeAgent: AgentRole | null;
@@ -14,6 +22,9 @@ export interface WorkflowState {
   readonly errorMessage: string | null;
   readonly errorDetails: string | null;
   readonly hasExplicitCompletion: boolean;
+  readonly workflowId: string | null;
+  readonly transportStatus: TransportStatus;
+  readonly transportMessage: string | null;
 }
 
 export type WorkflowStateListener = (state: WorkflowState) => void;
@@ -30,6 +41,9 @@ export const INITIAL_WORKFLOW_STATE: WorkflowState = Object.freeze({
   errorMessage: null,
   errorDetails: null,
   hasExplicitCompletion: false,
+  workflowId: null,
+  transportStatus: null,
+  transportMessage: null,
 });
 
 /**
@@ -38,7 +52,9 @@ export const INITIAL_WORKFLOW_STATE: WorkflowState = Object.freeze({
 export function workflowReducer(
   state: WorkflowState,
   action:
-    | { type: 'START'; chosenModel: string; activeProvider: AIProviderId }
+    | { type: 'START'; chosenModel: string; activeProvider: AIProviderId; workflowId?: string }
+    | { type: 'SET_WORKFLOW_ID'; workflowId: string }
+    | { type: 'SET_TRANSPORT_STATUS'; status: TransportStatus; message: string | null }
     | { type: 'UPDATE_MODEL_AND_PROVIDER'; chosenModel: string; activeProvider: AIProviderId }
     | { type: 'TICK'; delta: number }
     | { type: 'ADD_STEP'; step: AgentStep }
@@ -63,6 +79,22 @@ export function workflowReducer(
         errorMessage: null,
         errorDetails: null,
         hasExplicitCompletion: false,
+        workflowId: action.workflowId || state.workflowId,
+        transportStatus: 'CONNECTED',
+        transportMessage: null,
+      };
+
+    case 'SET_WORKFLOW_ID':
+      return {
+        ...state,
+        workflowId: action.workflowId,
+      };
+
+    case 'SET_TRANSPORT_STATUS':
+      return {
+        ...state,
+        transportStatus: action.status,
+        transportMessage: action.message,
       };
 
     case 'UPDATE_MODEL_AND_PROVIDER':
@@ -108,6 +140,8 @@ export function workflowReducer(
           executionState: 'FAILED',
           errorMessage: 'Le workflow a retourné un rapport final invalide ou corrompu.',
           hasExplicitCompletion: false,
+          transportStatus: 'DISCONNECTED',
+          transportMessage: 'Rapport invalide',
         };
       }
 
@@ -117,6 +151,14 @@ export function workflowReducer(
         finalReport: report,
         hasExplicitCompletion: true,
         errorMessage: null,
+        transportStatus:
+          state.transportStatus === 'RECOVERING_REPORT' || state.transportStatus === 'RECONNECTING'
+            ? 'RECOVERED'
+            : state.transportStatus,
+        transportMessage:
+          state.transportStatus === 'RECOVERING_REPORT' || state.transportStatus === 'RECONNECTING'
+            ? 'Rapport récupéré'
+            : state.transportMessage,
       };
     }
 
@@ -127,6 +169,8 @@ export function workflowReducer(
         errorMessage: action.errorMessage,
         errorDetails: action.errorDetails || null,
         hasExplicitCompletion: false,
+        transportStatus: state.transportStatus === 'RECOVERING_REPORT' ? 'DISCONNECTED' : state.transportStatus,
+        transportMessage: state.transportStatus === 'RECOVERING_REPORT' ? 'Impossible de récupérer le rapport' : state.transportMessage,
       };
 
     case 'CANCEL':
@@ -135,6 +179,8 @@ export function workflowReducer(
         ...state,
         executionState: 'CANCELLED',
         hasExplicitCompletion: false,
+        transportStatus: 'DISCONNECTED',
+        transportMessage: 'Workflow annulé',
       };
 
     case 'STREAM_ABORTED_UNEXPECTEDLY':
@@ -145,6 +191,8 @@ export function workflowReducer(
           executionState: 'FAILED',
           errorMessage: 'Flux SSE interrompu avant réception du rapport de fin de workflow.',
           hasExplicitCompletion: false,
+          transportStatus: 'DISCONNECTED',
+          transportMessage: 'Impossible de récupérer le rapport',
         };
       }
       return state;
@@ -200,9 +248,9 @@ export class WorkflowStateManager {
     });
   }
 
-  public startExecution(chosenModel: string, activeProvider: AIProviderId): void {
+  public startExecution(chosenModel: string, activeProvider: AIProviderId, workflowId?: string): void {
     this.stopTimer();
-    this.dispatch({ type: 'START', chosenModel, activeProvider });
+    this.dispatch({ type: 'START', chosenModel, activeProvider, workflowId });
 
     // Start 100ms precision elapsed ticker
     this.timerId = setInterval(() => {
@@ -212,6 +260,20 @@ export class WorkflowStateManager {
     if (this.timerId && typeof this.timerId.unref === 'function') {
       this.timerId.unref();
     }
+  }
+
+  public setWorkflowId(workflowId: string): void {
+    this.dispatch({ type: 'SET_WORKFLOW_ID', workflowId });
+  }
+
+  public setTransportStatus(status: TransportStatus, message: string | null): void {
+    this.dispatch({ type: 'SET_TRANSPORT_STATUS', status, message });
+  }
+
+  public recoverExecution(finalReport: FinalReport): void {
+    this.stopTimer();
+    this.dispatch({ type: 'SET_TRANSPORT_STATUS', status: 'RECOVERED', message: 'Rapport récupéré' });
+    this.dispatch({ type: 'COMPLETE', finalReport });
   }
 
   public setModelAndProvider(chosenModel: string, activeProvider: AIProviderId): void {
@@ -235,6 +297,23 @@ export class WorkflowStateManager {
   public cancelExecution(): void {
     this.stopTimer();
     this.dispatch({ type: 'CANCEL' });
+  }
+
+  public handleTransportReconnect(): void {
+    this.dispatch({ type: 'SET_TRANSPORT_STATUS', status: 'RECONNECTING', message: 'Reconnexion…' });
+  }
+
+  public handleTransportRecovering(): void {
+    this.dispatch({ type: 'SET_TRANSPORT_STATUS', status: 'RECOVERING_REPORT', message: 'Récupération du rapport…' });
+  }
+
+  public handleTransportFailed(errorMessage?: string): void {
+    this.stopTimer();
+    this.dispatch({ type: 'SET_TRANSPORT_STATUS', status: 'DISCONNECTED', message: 'Impossible de récupérer le rapport' });
+    this.dispatch({
+      type: 'FAIL',
+      errorMessage: errorMessage || 'Impossible de récupérer le rapport de fin de workflow après interruption.',
+    });
   }
 
   public handleStreamAborted(): void {

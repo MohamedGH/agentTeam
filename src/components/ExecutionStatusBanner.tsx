@@ -15,8 +15,11 @@ import {
   ArrowRight,
   Code2,
   Check,
+  RefreshCw,
 } from 'lucide-react';
 import { AgentRole, AIProviderId, FinalReport } from '../types';
+import { DeliveryState } from '../managers/deliveryStateManager';
+import { TransportStatus } from '../managers/workflowStateManager';
 
 export type ExecutionState = 'IDLE' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
 
@@ -30,6 +33,9 @@ interface ExecutionStatusBannerProps {
   finalReport?: FinalReport | null;
   errorMessage?: string | null;
   stepsCount?: number;
+  delivery?: DeliveryState | null;
+  transportStatus?: TransportStatus;
+  transportMessage?: string | null;
   onStop?: () => void;
   onReset?: () => void;
   onNavigateBuild?: () => void;
@@ -55,6 +61,9 @@ export const ExecutionStatusBanner: React.FC<ExecutionStatusBannerProps> = ({
   finalReport,
   errorMessage,
   stepsCount = 0,
+  delivery,
+  transportStatus,
+  transportMessage,
   onStop,
   onReset,
   onNavigateBuild,
@@ -129,6 +138,12 @@ export const ExecutionStatusBanner: React.FC<ExecutionStatusBannerProps> = ({
             <p className="text-xs text-slate-300">
               L'agent <strong className="text-blue-300">{phaseInfo.agent}</strong> travaille actuellement sur votre demande. {phaseInfo.desc}
             </p>
+            {transportMessage && (
+              <div className="flex items-center gap-2 mt-2 px-3 py-1.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-semibold animate-pulse w-fit">
+                <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-400 shrink-0" />
+                <span>{transportMessage}</span>
+              </div>
+            )}
           </div>
 
           {/* Controls */}
@@ -200,31 +215,126 @@ export const ExecutionStatusBanner: React.FC<ExecutionStatusBannerProps> = ({
     );
   }
 
-  // 3. COMPLETED STATE (HUMAN FIRST: ÉTAT → EXPLICATION → ACTION → DÉTAILS)
+  // 3. COMPLETED STATE (HUMAN FIRST: ÉTAT RÉEL → EXPLICATION HONNÊTE → ACTION → DÉTAILS)
   if (executionState === 'COMPLETED') {
-    const testsPassed = finalReport?.tests === 'PASS';
-    const reviewApproved = finalReport?.review === 'APPROVED';
+    const implStatus = finalReport?.implementation;
+    const codeDeveloped = implStatus === 'PASS';
+    const testsStatus = finalReport?.tests;
+    const testsPassed = testsStatus === 'PASS';
+    const testsFailed = testsStatus === 'FAIL';
+    const reviewStatus = finalReport?.review;
+    const reviewApproved = reviewStatus === 'APPROVED';
+    const reviewRejected = reviewStatus === 'CHANGES_REQUIRED';
+
+    const localGateValid = Boolean(codeDeveloped && testsPassed && reviewApproved);
+    const hasExplicitFailure = testsFailed || reviewRejected || implStatus === 'FAIL';
+
+    const trackedSha = delivery?.trackedSha || delivery?.commitSha || null;
+    const ciStatus = delivery?.ciStatus || 'IDLE';
+    const ciConfirmed = Boolean(
+      ciStatus === 'TERMINAL_SUCCESS' && (!delivery?.trackedSha || delivery?.ciRun?.head_sha === delivery?.trackedSha)
+    );
+    const ciInProgress = Boolean(
+      delivery?.pushStatus === 'RUNNING' ||
+        (trackedSha && (ciStatus === 'QUEUED' || ciStatus === 'WAITING_WORKFLOW' || ciStatus === 'RUNNING'))
+    );
+    const ciFailed = Boolean(
+      delivery?.pushStatus === 'FAILED' ||
+        ciStatus === 'TERMINAL_FAILURE' ||
+        ciStatus === 'RUN_NOT_FOUND_FOR_SHA' ||
+        ciStatus === 'NOT_FOUND' ||
+        ciStatus === 'POLLING_FAILED_TIMEOUT' ||
+        ciStatus === 'POLLING_FAILED_NETWORK'
+    );
+
+    // Compute honest summary hierarchy
+    let statusBadgeText = 'Mission terminée';
+    let statusBadgeColor = 'text-emerald-400';
+    let headerTitle = 'Le code a été développé, testé, revu et validé';
+    let headerDescription = 'La livraison est confirmée.';
+    let isWarningOrFailure = false;
+
+    if (hasExplicitFailure) {
+      isWarningOrFailure = true;
+      statusBadgeText = 'Action requise';
+      statusBadgeColor = 'text-rose-400';
+      headerTitle = 'La mission n’a pas pu être validée';
+      headerDescription = testsFailed
+        ? 'Les tests QA automatisés ont échoué. Le code a été préservé sans publication.'
+        : reviewRejected
+        ? 'La revue d’architecture & sécurité a rejeté les modifications.'
+        : 'L’implémentation du code ne satisfait pas les critères requis.';
+    } else if (localGateValid && ciConfirmed) {
+      statusBadgeText = 'Mission terminée';
+      statusBadgeColor = 'text-emerald-400';
+      headerTitle = 'Mission terminée';
+      headerDescription = 'Le code a été développé, testé, revu et validé. La livraison est confirmée.';
+    } else if (localGateValid && ciInProgress) {
+      statusBadgeText = 'Mission terminée — validation GitHub en cours';
+      statusBadgeColor = 'text-amber-400';
+      headerTitle = 'Mission terminée — validation GitHub en cours';
+      headerDescription = 'Le travail local est terminé. GitHub vérifie encore le commit.';
+    } else if (localGateValid && ciFailed) {
+      isWarningOrFailure = true;
+      statusBadgeText = 'Action requise sur la livraison';
+      statusBadgeColor = 'text-rose-400';
+      headerTitle = 'Travail local validé, mais la vérification CI a échoué';
+      headerDescription = delivery?.pushError || `La vérification GitHub Actions n'a pas abouti (${ciStatus}).`;
+    } else if (localGateValid && !trackedSha) {
+      statusBadgeText = 'Mission terminée';
+      statusBadgeColor = 'text-emerald-400';
+      headerTitle = 'Mission terminée — validation locale confirmée';
+      headerDescription = 'Le code a été développé, testé et revu localement. Aucune livraison GitHub n’a été déclenchée.';
+    } else if (testsPassed && !reviewApproved) {
+      statusBadgeText = 'Mission terminée — validation partielle';
+      statusBadgeColor = 'text-amber-400';
+      headerTitle = 'Mission terminée — validation partielle';
+      headerDescription = 'Les tests sont validés, mais certaines vérifications restent à confirmer.';
+    } else {
+      statusBadgeText = 'Mission terminée — validation partielle';
+      statusBadgeColor = 'text-amber-400';
+      headerTitle = 'Mission terminée — vérifications à confirmer';
+      headerDescription = 'Le cycle est achevé mais certaines validations (tests, revue) restent à confirmer.';
+    }
 
     return (
       <div
         role="status"
         aria-live="polite"
-        className="bg-gradient-to-r from-emerald-950/40 via-slate-900 to-slate-900 border border-emerald-500/30 rounded-2xl p-5 sm:p-6 shadow-xl space-y-4"
+        className={`bg-gradient-to-r ${
+          isWarningOrFailure
+            ? 'from-rose-950/40 via-slate-900 to-slate-900 border-rose-500/30'
+            : ciInProgress
+            ? 'from-amber-950/30 via-slate-900 to-slate-900 border-amber-500/30'
+            : 'from-emerald-950/40 via-slate-900 to-slate-900 border-emerald-500/30'
+        } border rounded-2xl p-5 sm:p-6 shadow-xl space-y-4`}
       >
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-              <span className="text-xs font-mono font-bold uppercase tracking-wider text-emerald-400">
-                Mission terminée
+              {isWarningOrFailure ? (
+                <XCircle className="w-4 h-4 text-rose-400 shrink-0" />
+              ) : ciInProgress ? (
+                <Loader2 className="w-4 h-4 text-amber-400 shrink-0 animate-spin" />
+              ) : (
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              )}
+              <span className={`text-xs font-mono font-bold uppercase tracking-wider ${statusBadgeColor}`}>
+                {statusBadgeText}
               </span>
             </div>
             <h3 className="text-base sm:text-lg font-bold text-slate-100">
-              Le code a été développé, testé et validé avec succès
+              {headerTitle}
             </h3>
             <p className="text-xs text-slate-300">
-              Toutes les vérifications d'architecture et de sécurité sont validées. Aucune action requise.
+              {headerDescription}
             </p>
+            {transportMessage === 'Rapport récupéré' && (
+              <div className="flex items-center gap-1.5 mt-2 px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-semibold w-fit">
+                <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span>Rapport récupéré avec succès après reconnexion</span>
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
@@ -232,7 +342,7 @@ export const ExecutionStatusBanner: React.FC<ExecutionStatusBannerProps> = ({
               <button
                 type="button"
                 onClick={onReset}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-md transition cursor-pointer flex items-center gap-1.5"
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl shadow-md transition cursor-pointer flex items-center gap-1.5"
               >
                 <span>Nouvelle mission</span>
                 <RotateCcw className="w-3.5 h-3.5" />
@@ -241,26 +351,94 @@ export const ExecutionStatusBanner: React.FC<ExecutionStatusBannerProps> = ({
           </div>
         </div>
 
-        {/* 4 Summary Verification Checkmarks */}
+        {/* 4 Real Verification Indicators (No false PASS or 100% fallbacks) */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+          {/* Card 1: Code développé */}
           <div className="bg-slate-950/80 p-3 rounded-xl border border-slate-800 flex items-center gap-2">
-            <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span className="font-semibold text-slate-200">Code développé</span>
+            {codeDeveloped ? (
+              <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+            ) : implStatus === 'FAIL' ? (
+              <XCircle className="w-4 h-4 text-rose-400 shrink-0" />
+            ) : (
+              <Clock className="w-4 h-4 text-slate-400 shrink-0" />
+            )}
+            <span className="font-semibold text-slate-200">
+              {codeDeveloped ? 'Code développé (PASS)' : implStatus === 'FAIL' ? 'Code en échec (FAIL)' : `Code : ${implStatus || 'À confirmer'}`}
+            </span>
           </div>
 
+          {/* Card 2: Tests validés */}
           <div className="bg-slate-950/80 p-3 rounded-xl border border-slate-800 flex items-center gap-2">
-            <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span className="font-semibold text-slate-200">Tests validés ({finalReport?.tests || '100%'})</span>
+            {testsPassed ? (
+              <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+            ) : testsFailed ? (
+              <XCircle className="w-4 h-4 text-rose-400 shrink-0" />
+            ) : testsStatus === 'SKIPPED' ? (
+              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+            ) : (
+              <Clock className="w-4 h-4 text-slate-400 shrink-0" />
+            )}
+            <span className="font-semibold text-slate-200">
+              {testsPassed
+                ? 'Tests validés (PASS)'
+                : testsFailed
+                ? 'Tests en échec (FAIL)'
+                : testsStatus === 'SKIPPED'
+                ? 'Tests ignorés (SKIPPED)'
+                : 'Tests : Non disponible'}
+            </span>
           </div>
 
+          {/* Card 3: Revue */}
           <div className="bg-slate-950/80 p-3 rounded-xl border border-slate-800 flex items-center gap-2">
-            <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span className="font-semibold text-slate-200">Revue approuvée</span>
+            {reviewApproved ? (
+              <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+            ) : reviewRejected ? (
+              <XCircle className="w-4 h-4 text-rose-400 shrink-0" />
+            ) : reviewStatus === 'SKIPPED' ? (
+              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+            ) : (
+              <Clock className="w-4 h-4 text-slate-400 shrink-0" />
+            )}
+            <span className="font-semibold text-slate-200">
+              {reviewApproved
+                ? 'Revue approuvée (APPROVED)'
+                : reviewRejected
+                ? 'Modifications requises (CHANGES_REQUIRED)'
+                : reviewStatus === 'SKIPPED'
+                ? 'Revue ignorée (SKIPPED)'
+                : 'Revue : À confirmer'}
+            </span>
           </div>
 
+          {/* Card 4: Quality Gate & Livraison */}
           <div className="bg-slate-950/80 p-3 rounded-xl border border-slate-800 flex items-center gap-2">
-            <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span className="font-semibold text-slate-200">Quality Gate OK</span>
+            {localGateValid && ciConfirmed ? (
+              <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+            ) : localGateValid && ciInProgress ? (
+              <Loader2 className="w-4 h-4 text-amber-400 shrink-0 animate-spin" />
+            ) : localGateValid && ciFailed ? (
+              <XCircle className="w-4 h-4 text-rose-400 shrink-0" />
+            ) : localGateValid ? (
+              <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+            ) : hasExplicitFailure ? (
+              <XCircle className="w-4 h-4 text-rose-400 shrink-0" />
+            ) : (
+              <Clock className="w-4 h-4 text-slate-400 shrink-0" />
+            )}
+            <span className="font-semibold text-slate-200">
+              {localGateValid && ciConfirmed
+                ? 'Livraison confirmée'
+                : localGateValid && ciInProgress
+                ? 'CI GitHub en cours'
+                : localGateValid && ciFailed
+                ? 'Échec livraison CI'
+                : localGateValid
+                ? 'Quality Gate local OK'
+                : hasExplicitFailure
+                ? 'Quality Gate refusé'
+                : 'Quality Gate : En attente'}
+            </span>
           </div>
         </div>
 
@@ -283,6 +461,9 @@ export const ExecutionStatusBanner: React.FC<ExecutionStatusBannerProps> = ({
             <div>Provider : <span className="text-blue-400 uppercase">{activeProvider}</span></div>
             {finalReport?.filesChanged && (
               <div>Fichiers modifiés : <span className="text-slate-200">{finalReport.filesChanged.join(', ')}</span></div>
+            )}
+            {trackedSha && (
+              <div>Commit/SHA associé : <span className="text-indigo-300">{trackedSha}</span> (CI : <span className="text-amber-300">{ciStatus}</span>)</div>
             )}
           </div>
         )}
@@ -312,6 +493,12 @@ export const ExecutionStatusBanner: React.FC<ExecutionStatusBannerProps> = ({
             <p className="text-xs text-slate-300">
               Le système a arrêté l'exécution pour protéger votre dépôt. Consultez l'analyse ci-dessous.
             </p>
+            {transportMessage && (
+              <div className="flex items-center gap-1.5 mt-2 px-2.5 py-1 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-semibold w-fit">
+                <AlertTriangle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                <span>{transportMessage}</span>
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-2 shrink-0">

@@ -54,38 +54,74 @@ export const IntelligencePage: React.FC<IntelligencePageProps> = ({
     why: string;
     status: string;
     nextStep: string;
+    badgeStatus: 'IDLE' | 'SUCCESS' | 'WARNING' | 'FAILED' | 'RUNNING' | 'UNKNOWN';
+    badgeLabel: string;
     timestamp?: string;
-  } | null>(null);
+  }>({
+    decision: 'Chargement de la décision...',
+    why: 'Interrogation de l’historique opérationnel du serveur...',
+    status: 'Interrogation',
+    nextStep: 'En attente des données serveur.',
+    badgeStatus: 'IDLE',
+    badgeLabel: 'CHARGEMENT',
+  });
 
   useEffect(() => {
     let cancelled = false;
     apiFetch('/api/llm/last-operational-decision')
       .then((r) => r.json())
       .then((d) => {
-        if (!cancelled && d.success && d.decision) {
+        if (cancelled) return;
+        if (d.success && d.decision) {
+          const dec = d.decision;
+          const model = dec.selectedModelId || chosenModel;
+          const provider = (dec.selectedProviderId || activeProvider).toUpperCase();
+          const decType = dec.decisionType || 'EXPLOITATION';
+
+          let badgeStatus: 'IDLE' | 'SUCCESS' | 'WARNING' | 'FAILED' | 'RUNNING' = 'SUCCESS';
+          let badgeLabel = `DÉCISION : ${decType}`;
+
+          if (decType === 'NO_FEASIBLE_MODEL') {
+            badgeStatus = 'FAILED';
+            badgeLabel = 'AUCUN MODÈLE ÉLIGIBLE';
+          } else if (decType === 'FALLBACK' || decType === 'CONSTRAINT_FALLBACK') {
+            badgeStatus = 'WARNING';
+            badgeLabel = `REPLI (${decType})`;
+          } else if (decType === 'EXPLORATION') {
+            badgeStatus = 'RUNNING';
+            badgeLabel = 'EXPLORATION ADAPTATIVE';
+          }
+
           setLastDecision({
-            decision: `Sélection du modèle ${d.decision.model || chosenModel} via ${d.decision.provider || activeProvider}`,
-            why: d.decision.rationale || `Score empirique optimal (elo/fiabilité) avec latence contrôlée.`,
-            status: 'Nominal',
-            nextStep: 'Prêt pour l’attribution de la prochaine tâche de code.',
-            timestamp: d.decision.timestamp,
+            decision: `${model} via ${provider}`,
+            why: dec.reason || 'Sélection algorithmique selon la matrice de performance empirique.',
+            status: `Routage ${decType} (${dec.candidateEvaluatedCount ?? 0} candidats évalués)`,
+            nextStep: dec.classifiedProblem?.category
+              ? `Catégorie identifiée : ${dec.classifiedProblem.category} (${dec.classifiedProblem.complexity || 'MEDIUM'})`
+              : 'Prêt pour l’attribution des tâches aux agents.',
+            badgeStatus,
+            badgeLabel,
           });
-        } else if (!cancelled) {
+        } else {
           setLastDecision({
-            decision: `Routage actif : ${chosenModel} (${activeProvider.toUpperCase()})`,
-            why: `Évaluation empirique hermétique et isolation des quotas respectée.`,
-            status: 'Nominal',
-            nextStep: 'Orchestration prête pour le dispatching des agents.',
+            decision: `Modèle par défaut : ${chosenModel} (${activeProvider.toUpperCase()})`,
+            why: 'Aucun workflow n’a encore sollicité le sélecteur adaptatif en conditions réelles.',
+            status: 'En attente de première exécution',
+            nextStep: 'Exécutez une mission dans Build pour observer une décision opérationnelle réelle.',
+            badgeStatus: 'IDLE',
+            badgeLabel: 'AUCUNE DÉCISION ENREGISTRÉE',
           });
         }
       })
       .catch(() => {
         if (!cancelled) {
           setLastDecision({
-            decision: `Modèle courant : ${chosenModel}`,
-            why: `Sélection par défaut avec basculement automatique en cas d'erreur.`,
-            status: 'Nominal',
-            nextStep: 'Exécuter un workflow pour actualiser la matrice empirique.',
+            decision: 'Non disponible',
+            why: 'Impossible d’interroger le service de routage décisionnel.',
+            status: 'Erreur de connexion',
+            nextStep: 'Vérifiez la disponibilité de l’API dans la page System.',
+            badgeStatus: 'UNKNOWN',
+            badgeLabel: 'ÉTAT NON DISPONIBLE',
           });
         }
       });
@@ -158,31 +194,35 @@ export const IntelligencePage: React.FC<IntelligencePageProps> = ({
             </div>
             <div>
               <h3 className="text-sm font-bold text-slate-100">Synthèse Décisionnelle Opérationnelle</h3>
-              <p className="text-xs text-slate-400">Pourquoi et comment l'orchestrateur a sélectionné les modèles.</p>
+              <p className="text-xs text-slate-400">Décision réelle issue de l'orchestration autonome.</p>
             </div>
           </div>
-          <StatusBadge status="SUCCESS" size="sm" labelOverride="DÉCISION NOMINALE" />
+          <StatusBadge
+            status={lastDecision.badgeStatus}
+            size="sm"
+            labelOverride={lastDecision.badgeLabel}
+          />
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
           <div className="bg-slate-950/80 p-3.5 rounded-xl border border-slate-800 space-y-1">
             <span className="text-[10px] font-mono font-bold uppercase text-blue-400 block">1. Décision</span>
-            <div className="font-semibold text-slate-200">{lastDecision?.decision || `Modèle : ${chosenModel}`}</div>
+            <div className="font-semibold text-slate-200">{lastDecision.decision}</div>
           </div>
 
           <div className="bg-slate-950/80 p-3.5 rounded-xl border border-slate-800 space-y-1">
             <span className="text-[10px] font-mono font-bold uppercase text-emerald-400 block">2. Pourquoi</span>
-            <div className="text-slate-300">{lastDecision?.why || 'Meilleur ratio performance / fiabilité.'}</div>
+            <div className="text-slate-300">{lastDecision.why}</div>
           </div>
 
           <div className="bg-slate-950/80 p-3.5 rounded-xl border border-slate-800 space-y-1">
             <span className="text-[10px] font-mono font-bold uppercase text-purple-400 block">3. État</span>
-            <div className="text-slate-300 font-mono">{lastDecision?.status || 'Prêt & Calibré'}</div>
+            <div className="text-slate-300 font-mono">{lastDecision.status}</div>
           </div>
 
           <div className="bg-slate-950/80 p-3.5 rounded-xl border border-slate-800 space-y-1">
             <span className="text-[10px] font-mono font-bold uppercase text-amber-400 block">4. Prochaine Étape</span>
-            <div className="text-slate-300">{lastDecision?.nextStep || 'Attribution au Manager.'}</div>
+            <div className="text-slate-300">{lastDecision.nextStep}</div>
           </div>
         </div>
       </div>

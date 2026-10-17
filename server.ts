@@ -9,6 +9,8 @@ import { quotaManager } from './server/quotaManager';
 import { workspace } from './server/virtualWorkspace';
 import { agentTeamEngine } from './server/agentTeam';
 import { codingAgentManager } from './server/codingAgents';
+import { WorkflowState, isTerminalState } from './server/codingAgents/types';
+import { AgentStep } from './src/types';
 import { workflowOrchestrator } from './server/workflowOrchestrator';
 import { cloudMonitoringQuotaService } from './server/cloudMonitoring';
 import { githubManager, evaluateQualityGate } from './server/github';
@@ -839,8 +841,15 @@ async function startServer() {
   });
 
   // -------------------------------------------------------------
-  // WORKFLOW ORCHESTRATOR APIS
+  // WORKFLOW ORCHESTRATOR APIS & IN-FLIGHT REGISTRY
   // -------------------------------------------------------------
+  interface InFlightWorkflowExecution {
+    promise: Promise<any>;
+    steps: AgentStep[];
+    listeners: Set<(event: any) => void>;
+  }
+  const inFlightWorkflowExecutions = new Map<string, InFlightWorkflowExecution>();
+
   app.post('/api/workflows', requireApiKey, async (req, res) => {
     try {
       const {
@@ -951,6 +960,32 @@ async function startServer() {
     }
   });
 
+  app.get('/api/workflows/:id/report', requireApiKey, async (req, res) => {
+    try {
+      const idCheck = validateSafeId(req.params.id, 'id');
+      if (!idCheck.valid) {
+        return res.status(400).json({ error: idCheck.error });
+      }
+      const id = idCheck.normalized;
+      const workflow = await workflowOrchestrator.getWorkflow(id);
+      if (!workflow) {
+        return res.status(404).json({ error: `Workflow "${id}" not found` });
+      }
+      res.json({
+        success: true,
+        workflowId: id,
+        status: workflow.status,
+        stage: workflow.stage,
+        executionStatus: workflow.executionStatus,
+        finalReport: workflow.finalReport || null,
+        steps: workflow.steps || [],
+        error: workflow.error || null,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.post('/api/workflows/:id/poll', requireApiKey, async (req, res) => {
     try {
       const idCheck = validateSafeId(req.params.id, 'id');
@@ -975,6 +1010,30 @@ async function startServer() {
       const workflow = await workflowOrchestrator.resumeWorkflow(id);
       if (!workflow) {
         return res.status(404).json({ error: `Workflow "${id}" not found` });
+      }
+      res.json({ success: true, workflow });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/workflows/:id/cancel', requireApiKey, async (req, res) => {
+    try {
+      const idCheck = validateSafeId(req.params.id, 'id');
+      if (!idCheck.valid) {
+        return res.status(400).json({ error: idCheck.error });
+      }
+      const id = idCheck.normalized;
+      const workflow = await workflowOrchestrator.cancelWorkflow(id);
+      if (!workflow) {
+        return res.status(404).json({ error: `Workflow "${id}" not found` });
+      }
+      // Broadcast cancellation to in-flight SSE stream listeners
+      const inFlight = inFlightWorkflowExecutions.get(id);
+      if (inFlight) {
+        for (const l of inFlight.listeners) {
+          l({ type: 'cancelled', workflowId: id, error: 'Workflow annulé par l’utilisateur.' });
+        }
       }
       res.json({ success: true, workflow });
     } catch (err: any) {
@@ -1602,24 +1661,89 @@ async function startServer() {
         });
       }
 
-      const result = await agentTeamEngine.runWorkflow(prompt, tierCheck.normalized as any, undefined, {
-        provider,
-        model,
-        codingAgent,
-        repository,
-        branch,
-        automationMode,
-        title,
-        createRepository,
-        repositoryName,
-        private: isPrivate,
-        commitAndPush,
-        commitPushAndCreatePR,
-        testCommand,
-        workingDirectory,
-        git,
-      });
-      res.json(result);
+      const runWorkflowId = req.body?.workflowId || `wf_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      console.log(`[WorkflowLog] [created] workflowId=${runWorkflowId}`);
+
+      const initialWorkflowState: WorkflowState = {
+        workflowId: runWorkflowId,
+        sessionId: runWorkflowId.replace(/^wf_/, ''),
+        agentId: codingAgent || 'team',
+        repository: repository || 'MohamedGH/agentTeam',
+        branch: branch || 'main',
+        task: prompt,
+        stage: 'TESTING',
+        status: 'IN_PROGRESS',
+        executionStatus: 'RUNNING',
+        options: {
+          workflowId: runWorkflowId,
+          taskPrompt: prompt,
+          repository: repository || 'MohamedGH/agentTeam',
+          branch: branch || 'main',
+        },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        steps: [],
+      };
+      await workflowOrchestrator.registerWorkflow(initialWorkflowState);
+      console.log(`[WorkflowLog] [registered] workflowId=${runWorkflowId}`);
+      console.log(`[WorkflowLog] [started] workflowId=${runWorkflowId}`);
+
+      try {
+        const stepsAccum: AgentStep[] = [];
+        const result = await agentTeamEngine.runWorkflow(prompt, tierCheck.normalized as any, (step) => {
+          stepsAccum.push(step);
+          workflowOrchestrator.updateWorkflow(runWorkflowId, { steps: [...stepsAccum] }).catch(() => {});
+        }, {
+          workflowId: runWorkflowId,
+          provider,
+          model,
+          codingAgent,
+          repository,
+          branch,
+          automationMode,
+          title,
+          createRepository,
+          repositoryName,
+          private: isPrivate,
+          commitAndPush,
+          commitPushAndCreatePR,
+          testCommand,
+          workingDirectory,
+          git,
+        });
+
+        const isSuccess = result.success && result.executionStatus !== 'FAILED';
+        const finalReport = result.finalReport;
+
+        await workflowOrchestrator.updateWorkflow(runWorkflowId, {
+          status: isSuccess ? 'COMPLETED' : 'FAILED',
+          stage: isSuccess ? 'COMPLETED' : 'FAILED',
+          executionStatus: isSuccess ? 'COMPLETED' : 'FAILED',
+          finalReport,
+          steps: result.steps || stepsAccum,
+          summary: finalReport?.testSummary || (result as any).summary || (isSuccess ? 'Workflow completed' : 'Workflow validation failed'),
+          prUrl: result.prUrl || result.pullRequestUrl,
+          commitSha: result.commitSha,
+          testsPassed: result.testsPassed,
+        });
+
+        if (isSuccess) {
+          console.log(`[WorkflowLog] [completed] workflowId=${runWorkflowId}`);
+        } else {
+          console.log(`[WorkflowLog] [failed] workflowId=${runWorkflowId}`);
+        }
+
+        res.json({ ...result, workflowId: runWorkflowId, taskId: runWorkflowId, workflow: await workflowOrchestrator.getWorkflow(runWorkflowId) });
+      } catch (err: any) {
+        await workflowOrchestrator.updateWorkflow(runWorkflowId, {
+          status: 'FAILED',
+          stage: 'FAILED',
+          executionStatus: 'FAILED',
+          error: err.message,
+        });
+        console.log(`[WorkflowLog] [failed] workflowId=${runWorkflowId} error=${err.message}`);
+        res.status(500).json({ error: err.message, workflowId: runWorkflowId });
+      }
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -1644,6 +1768,19 @@ async function startServer() {
     const testCommand = (req.body?.testCommand || req.query?.testCommand) as string | undefined;
     const workingDirectory = (req.body?.workingDirectory || req.query?.workingDirectory) as string | undefined;
     const git = req.body?.git;
+    const rawWorkflowId = (req.body?.workflowId || req.query?.workflowId) as string | undefined;
+
+    let workflowId = rawWorkflowId && rawWorkflowId.trim().length > 0
+      ? rawWorkflowId.trim()
+      : `wf_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+    if (rawWorkflowId) {
+      const idCheck = validateSafeId(rawWorkflowId.trim(), 'workflowId');
+      if (!idCheck.valid) {
+        return res.status(400).json({ error: idCheck.error });
+      }
+      workflowId = idCheck.normalized;
+    }
 
     if (typeof prompt !== 'string' || prompt.trim().length === 0 || prompt.length > 50_000) {
       return res.status(400).json({ error: 'Valid task prompt (1..50000 chars) is required' });
@@ -1660,104 +1797,393 @@ async function startServer() {
     }
 
     res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
     res.flushHeaders();
 
+    let isClientConnected = true;
+    const safeWrite = (data: string): boolean => {
+      if (!isClientConnected || res.writableEnded || !res.writable) return false;
+      try {
+        res.write(data);
+        return true;
+      } catch {
+        isClientConnected = false;
+        return false;
+      }
+    };
+
+    console.log(`[WorkflowLog] [created] workflowId=${workflowId}`);
+
+    req.on('close', () => {
+      isClientConnected = false;
+      console.log(`[WorkflowLog] [sse_disconnected] workflowId=${workflowId}`);
+    });
+
+    // 1. Emit init event immediately so client knows stable workflowId
+    safeWrite(`data: ${JSON.stringify({ type: 'init', workflowId })}\n\n`);
+
+    // 2. Start heartbeat timer every 8 seconds to prevent proxy/browser timeout during long steps
+    const heartbeatTimer = setInterval(() => {
+      if (!isClientConnected || res.writableEnded) {
+        clearInterval(heartbeatTimer);
+        return;
+      }
+      safeWrite(`: heartbeat\n\n`);
+      safeWrite(`data: ${JSON.stringify({ type: 'heartbeat', timestamp: Date.now() })}\n\n`);
+    }, 8_000);
+    if (heartbeatTimer && typeof heartbeatTimer.unref === 'function') {
+      heartbeatTimer.unref();
+    }
+
     try {
-      if (codingAgent === 'jules' || codingAgent === 'mock') {
-        const repoTarget = repositoryName || repository || 'MohamedGH/agentTeam';
-        const repoCheck = validateAllowedRepository(repoTarget);
-        if (!repoCheck.valid) {
-          res.write(`data: ${JSON.stringify({ type: 'error', error: repoCheck.error })}\n\n`);
-          return res.end();
-        }
-        const branchCheck = validateGitBranch(branch || 'main');
-        if (!branchCheck.valid) {
-          res.write(`data: ${JSON.stringify({ type: 'error', error: branchCheck.error })}\n\n`);
-          return res.end();
-        }
-
-        const workflow = await workflowOrchestrator.startWorkflow({
-          agent: codingAgent,
-          repository: repoCheck.normalized,
-          branch: branchCheck.normalized,
-          taskPrompt: prompt,
-          title,
-          automationMode,
-          createRepository,
-          repositoryName: repoCheck.normalized,
-          private: isPrivate,
-          git,
-          commitAndPush,
-          commitPushAndCreatePR,
-          testCommand,
-          workingDirectory,
-          tier: tierCheck.normalized,
-          model,
-          provider,
-        });
-
-        // Emit initial steps to SSE stream
-        if (Array.isArray(workflow.steps)) {
-          for (const step of workflow.steps) {
-            res.write(`data: ${JSON.stringify({ type: 'step', step })}\n\n`);
+      // 3. Check if workflow already completed or in-flight (Idempotent Reconnection)
+      const existing = await workflowOrchestrator.getWorkflow(workflowId);
+      if (existing) {
+        console.log(`[WorkflowLog] [reconnected] workflowId=${workflowId} status=${existing.status}`);
+        // Stream all accumulated steps first
+        if (Array.isArray(existing.steps)) {
+          for (const step of existing.steps) {
+            safeWrite(`data: ${JSON.stringify({ type: 'step', step })}\n\n`);
           }
         }
 
-        const streamResult = {
-          success: workflow.status === 'COMPLETED',
-          executionStatus: workflow.executionStatus,
-          taskId: workflow.workflowId,
-          sessionId: workflow.sessionId,
-          workflowId: workflow.workflowId,
-          stage: workflow.stage,
-          status: workflow.status,
-          prUrl: workflow.prUrl,
-          gitBranch: workflow.gitBranch,
-          commitSha: workflow.commitSha,
-          commitUrl: workflow.commitUrl,
-          pullRequestUrl: workflow.pullRequestUrl,
-          testsPassed: workflow.testsPassed,
-          steps: workflow.steps,
-          finalReport: workflow.finalReport,
-          workflow,
-        };
+        // If already terminal, return persisted final report immediately without re-execution
+        if (
+          existing.stage === 'COMPLETED' ||
+          existing.status === 'COMPLETED' ||
+          existing.stage === 'FAILED' ||
+          existing.status === 'FAILED' ||
+          existing.stage === 'CANCELLED' ||
+          existing.status === 'CANCELLED'
+        ) {
+          if (existing.stage === 'COMPLETED' || existing.status === 'COMPLETED') {
+            safeWrite(
+              `data: ${JSON.stringify({
+                type: 'complete',
+                result: {
+                  success: true,
+                  taskId: existing.workflowId,
+                  workflowId: existing.workflowId,
+                  status: existing.status,
+                  finalReport: existing.finalReport,
+                  steps: existing.steps,
+                  prUrl: existing.prUrl,
+                  commitSha: existing.commitSha,
+                  testsPassed: existing.testsPassed,
+                },
+              })}\n\n`
+            );
+          } else if (existing.stage === 'CANCELLED' || existing.status === 'CANCELLED') {
+            safeWrite(`data: ${JSON.stringify({ type: 'cancelled', workflowId: existing.workflowId, error: 'Workflow annulé par l’utilisateur.' })}\n\n`);
+          } else {
+            safeWrite(`data: ${JSON.stringify({ type: 'error', workflowId: existing.workflowId, error: existing.error || 'Workflow terminé en échec.' })}\n\n`);
+          }
+          clearInterval(heartbeatTimer);
+          await new Promise((r) => setImmediate(r));
+          if (!res.writableEnded) res.end();
+          return;
+        }
 
-        res.write(`data: ${JSON.stringify({ type: 'complete', result: streamResult })}\n\n`);
-        return res.end();
+        // If currently in flight in memory, attach to existing execution
+        const inFlight = inFlightWorkflowExecutions.get(workflowId);
+        if (inFlight) {
+          const listener = (event: any) => {
+            safeWrite(`data: ${JSON.stringify(event)}\n\n`);
+          };
+          inFlight.listeners.add(listener);
+          req.on('close', () => inFlight.listeners.delete(listener));
+
+          await inFlight.promise.catch(() => {});
+          clearInterval(heartbeatTimer);
+          await new Promise((r) => setImmediate(r));
+          if (!res.writableEnded) res.end();
+          return;
+        }
+
+        // If existing is recorded in orchestrator but not in local inFlight map:
+        let currentExisting = existing;
+        let lastEmittedStepsCount = Array.isArray(existing.steps) ? existing.steps.length : 0;
+        while (
+          !res.writableEnded &&
+          isClientConnected &&
+          currentExisting.status !== 'COMPLETED' &&
+          currentExisting.stage !== 'COMPLETED' &&
+          currentExisting.status !== 'FAILED' &&
+          currentExisting.stage !== 'FAILED' &&
+          currentExisting.status !== 'CANCELLED' &&
+          currentExisting.stage !== 'CANCELLED'
+        ) {
+          await new Promise((r) => setTimeout(r, 600));
+          const refreshed = await workflowOrchestrator.getWorkflow(workflowId);
+          if (refreshed) {
+            currentExisting = refreshed;
+            if (Array.isArray(refreshed.steps) && refreshed.steps.length > lastEmittedStepsCount) {
+              for (let i = lastEmittedStepsCount; i < refreshed.steps.length; i++) {
+                safeWrite(`data: ${JSON.stringify({ type: 'step', step: refreshed.steps[i] })}\n\n`);
+              }
+              lastEmittedStepsCount = refreshed.steps.length;
+            }
+          }
+        }
+
+        if (currentExisting.status === 'COMPLETED' || currentExisting.stage === 'COMPLETED') {
+          safeWrite(
+            `data: ${JSON.stringify({
+              type: 'complete',
+              result: {
+                success: true,
+                taskId: currentExisting.workflowId,
+                workflowId: currentExisting.workflowId,
+                status: currentExisting.status,
+                finalReport: currentExisting.finalReport,
+                steps: currentExisting.steps,
+                prUrl: currentExisting.prUrl,
+                commitSha: currentExisting.commitSha,
+                testsPassed: currentExisting.testsPassed,
+              },
+            })}\n\n`
+          );
+        } else if (currentExisting.status === 'CANCELLED' || currentExisting.stage === 'CANCELLED') {
+          safeWrite(`data: ${JSON.stringify({ type: 'cancelled', workflowId: currentExisting.workflowId, error: 'Workflow annulé par l’utilisateur.' })}\n\n`);
+        } else {
+          safeWrite(`data: ${JSON.stringify({ type: 'error', workflowId: currentExisting.workflowId, error: currentExisting.error || 'Workflow terminé en échec.' })}\n\n`);
+        }
+        clearInterval(heartbeatTimer);
+        await new Promise((r) => setImmediate(r));
+        if (!res.writableEnded) res.end();
+        return;
       }
 
-      const result = await agentTeamEngine.runWorkflow(
-        prompt,
-        tierCheck.normalized as any,
-        (step) => {
-          res.write(`data: ${JSON.stringify({ type: 'step', step })}\n\n`);
-        },
-        {
-          provider,
-          model,
-          codingAgent,
-          repository,
-          branch,
-          automationMode,
-          title,
-          createRepository,
-          repositoryName,
-          private: isPrivate,
-          commitAndPush,
-          commitPushAndCreatePR,
-          testCommand,
-          workingDirectory,
-          git,
-        }
-      );
+      // 4. Start execution if not already running
+      const repoTarget = repositoryName || repository || 'MohamedGH/agentTeam';
+      const repoCheck = validateAllowedRepository(repoTarget);
+      if (!repoCheck.valid) {
+        safeWrite(`data: ${JSON.stringify({ type: 'error', error: repoCheck.error, workflowId })}\n\n`);
+        clearInterval(heartbeatTimer);
+        await new Promise((r) => setImmediate(r));
+        if (!res.writableEnded) res.end();
+        return;
+      }
+      const branchCheck = validateGitBranch(branch || 'main');
+      if (!branchCheck.valid) {
+        safeWrite(`data: ${JSON.stringify({ type: 'error', error: branchCheck.error, workflowId })}\n\n`);
+        clearInterval(heartbeatTimer);
+        await new Promise((r) => setImmediate(r));
+        if (!res.writableEnded) res.end();
+        return;
+      }
 
-      res.write(`data: ${JSON.stringify({ type: 'complete', result })}\n\n`);
-      res.end();
+      const accumulatedSteps: AgentStep[] = [];
+      const listeners = new Set<(event: any) => void>();
+
+      const clientListener = (event: any) => {
+        safeWrite(`data: ${JSON.stringify(event)}\n\n`);
+      };
+      listeners.add(clientListener);
+      req.on('close', () => listeners.delete(clientListener));
+
+      // Register initial WorkflowState in workflowOrchestrator
+      const initialWorkflowState: WorkflowState = {
+        workflowId,
+        sessionId: workflowId.replace(/^wf_/, ''),
+        agentId: codingAgent || 'team',
+        repository: repoCheck.normalized,
+        branch: branchCheck.normalized,
+        task: prompt,
+        stage: codingAgent === 'jules' || codingAgent === 'mock' ? 'JULES_RUNNING' : 'TESTING',
+        status: 'IN_PROGRESS',
+        executionStatus: 'RUNNING',
+        options: {
+          workflowId,
+          taskPrompt: prompt,
+          repository: repoCheck.normalized,
+          branch: branchCheck.normalized,
+          agent: codingAgent,
+          tier: tierCheck.normalized,
+          model,
+          provider,
+        },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        steps: accumulatedSteps,
+      };
+      await workflowOrchestrator.registerWorkflow(initialWorkflowState);
+
+      // Create execution promise based on agent type
+      let runPromise: Promise<any>;
+
+      if (codingAgent === 'jules' || codingAgent === 'mock') {
+        runPromise = (async () => {
+          const wf = await workflowOrchestrator.startWorkflow({
+            workflowId,
+            agent: codingAgent,
+            repository: repoCheck.normalized,
+            branch: branchCheck.normalized,
+            taskPrompt: prompt,
+            title,
+            automationMode,
+            createRepository,
+            repositoryName: repoCheck.normalized,
+            private: isPrivate,
+            git,
+            commitAndPush,
+            commitPushAndCreatePR,
+            testCommand,
+            workingDirectory,
+            tier: tierCheck.normalized,
+            model,
+            provider,
+          });
+
+          if (Array.isArray(wf.steps)) {
+            for (const st of wf.steps) {
+              accumulatedSteps.push(st);
+              for (const l of listeners) l({ type: 'step', step: st });
+            }
+          }
+
+          let currentWf = wf;
+          while (
+            !isTerminalState(currentWf.status) &&
+            currentWf.stage !== 'COMPLETED' &&
+            currentWf.stage !== 'FAILED' &&
+            currentWf.stage !== 'CANCELLED'
+          ) {
+            await new Promise((r) => setTimeout(r, 800));
+            currentWf = await workflowOrchestrator.pollWorkflow(workflowId);
+            if (Array.isArray(currentWf.steps) && currentWf.steps.length > accumulatedSteps.length) {
+              for (let i = accumulatedSteps.length; i < currentWf.steps.length; i++) {
+                const st = currentWf.steps[i];
+                accumulatedSteps.push(st);
+                for (const l of listeners) l({ type: 'step', step: st });
+              }
+            }
+          }
+
+          const isSuccess = currentWf.status === 'COMPLETED' || currentWf.stage === 'COMPLETED';
+          return {
+            taskId: currentWf.workflowId,
+            workflowId: currentWf.workflowId,
+            success: isSuccess,
+            status: currentWf.status,
+            finalReport: currentWf.finalReport,
+            steps: currentWf.steps,
+            prUrl: currentWf.prUrl,
+            gitBranch: currentWf.gitBranch,
+            commitSha: currentWf.commitSha,
+            commitUrl: currentWf.commitUrl,
+            pullRequestUrl: currentWf.pullRequestUrl,
+            testsPassed: currentWf.testsPassed,
+            git: currentWf.git,
+          };
+        })();
+      } else {
+        runPromise = agentTeamEngine.runWorkflow(
+          prompt,
+          tierCheck.normalized as any,
+          (step) => {
+            accumulatedSteps.push(step);
+            workflowOrchestrator.updateWorkflow(workflowId, { steps: [...accumulatedSteps] }).catch(() => {});
+            for (const l of listeners) l({ type: 'step', step });
+          },
+          {
+            workflowId,
+            provider,
+            model,
+            codingAgent,
+            repository,
+            branch,
+            automationMode,
+            title,
+            createRepository,
+            repositoryName,
+            private: isPrivate,
+            commitAndPush,
+            commitPushAndCreatePR,
+            testCommand,
+            workingDirectory,
+            git,
+          }
+        );
+      }
+
+      // Track in-flight execution for reconnections
+      inFlightWorkflowExecutions.set(workflowId, {
+        promise: runPromise,
+        steps: accumulatedSteps,
+        listeners,
+      });
+
+      try {
+        const result = await runPromise;
+
+        // Invariant: Persist to storage BEFORE emitting terminal complete event
+        const finalReport = result.finalReport || (result.workflow && result.workflow.finalReport);
+        const isSuccess = Boolean(
+          result.success &&
+            result.executionStatus !== 'FAILED' &&
+            (!finalReport || finalReport.implementation !== 'FAIL')
+        );
+
+        await workflowOrchestrator.updateWorkflow(workflowId, {
+          status: isSuccess ? 'COMPLETED' : 'FAILED',
+          stage: isSuccess ? 'COMPLETED' : 'FAILED',
+          executionStatus: isSuccess ? 'COMPLETED' : 'FAILED',
+          finalReport,
+          steps: accumulatedSteps,
+          summary:
+            finalReport?.testSummary ||
+            result.summary ||
+            (isSuccess ? 'Workflow completed' : 'Workflow validation failed'),
+          prUrl: result.prUrl || result.pullRequestUrl,
+          commitSha: result.commitSha,
+          testsPassed: result.testsPassed,
+        });
+
+        // Broadcast complete event
+        for (const l of listeners) {
+          l({
+            type: 'complete',
+            result: {
+              ...result,
+              success: isSuccess,
+              finalReport,
+              workflowId,
+              status: isSuccess ? 'COMPLETED' : 'FAILED',
+            },
+          });
+        }
+      } catch (runErr: any) {
+        // Persist failure to storage BEFORE emitting error event
+        await workflowOrchestrator.updateWorkflow(workflowId, {
+          status: 'FAILED',
+          stage: 'FAILED',
+          executionStatus: 'FAILED',
+          error: runErr.message || 'Workflow execution error',
+          steps: accumulatedSteps,
+        });
+
+        for (const l of listeners) {
+          l({ type: 'error', error: runErr.message, workflowId });
+        }
+      } finally {
+        inFlightWorkflowExecutions.delete(workflowId);
+        clearInterval(heartbeatTimer);
+        // Ensure write buffer is flushed before closing connection
+        await new Promise((r) => setImmediate(r));
+        if (!res.writableEnded) {
+          res.end();
+        }
+      }
     } catch (err: any) {
-      res.write(`data: ${JSON.stringify({ type: 'error', error: err.message })}\n\n`);
-      res.end();
+      safeWrite(`data: ${JSON.stringify({ type: 'error', error: err.message, workflowId })}\n\n`);
+      clearInterval(heartbeatTimer);
+      await new Promise((r) => setImmediate(r));
+      if (!res.writableEnded) {
+        res.end();
+      }
     }
   };
 

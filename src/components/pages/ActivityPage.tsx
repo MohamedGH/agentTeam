@@ -60,35 +60,45 @@ export const ActivityPage: React.FC<ActivityPageProps> = ({ onNavigate }) => {
   const activities: ActivityEntry[] = [];
 
   // 1. Workflow AgentTeam
+  const report = workflow.finalReport;
+  const isWorkflowCompleted = workflow.executionState === 'COMPLETED';
+  const testsPassed = report?.tests === 'PASS';
+  const reviewApproved = report?.review === 'APPROVED';
+  const isAllValid = Boolean(isWorkflowCompleted && testsPassed && reviewApproved);
+
   activities.push({
     id: 'act-workflow',
     category: 'Build',
-    action:
-      workflow.executionState === 'COMPLETED'
+    action: isWorkflowCompleted
+      ? isAllValid
         ? '✓ Mission de développement terminée'
-        : workflow.executionState === 'RUNNING'
-        ? '● Développement de code en cours'
-        : workflow.executionState === 'FAILED'
-        ? '✕ Échec de validation du code'
-        : 'Système en attente de mission',
+        : '● Mission terminée — validation partielle'
+      : workflow.executionState === 'RUNNING'
+      ? '● Développement de code en cours'
+      : workflow.executionState === 'FAILED'
+      ? '✕ Échec de validation du code'
+      : 'Système en attente de mission',
     status:
       workflow.executionState === 'RUNNING'
         ? 'RUNNING'
-        : workflow.executionState === 'COMPLETED'
-        ? 'COMPLETED'
+        : isWorkflowCompleted
+        ? isAllValid
+          ? 'COMPLETED'
+          : 'FAILED'
         : workflow.executionState === 'FAILED'
         ? 'FAILED'
         : workflow.executionState === 'CANCELLED'
         ? 'CANCELLED'
         : 'IDLE',
-    summary:
-      workflow.executionState === 'COMPLETED'
-        ? '7 étapes validées : Code développé, tests QA réussis et revue de sécurité approuvée.'
-        : workflow.executionState === 'RUNNING'
-        ? `Étape ${workflow.currentPhase}/7 en cours d’exécution par l’agent ${workflow.activeAgent || 'Developer'}.`
-        : workflow.executionState === 'FAILED'
-        ? workflow.errorMessage || 'Le Quality Gate a interrompu le pipeline suite à une anomalie.'
-        : 'Aucune exécution en cours.',
+    summary: isWorkflowCompleted
+      ? isAllValid
+        ? 'Code développé, tests QA réussis et revue de sécurité approuvée.'
+        : `Validation partielle : Tests (${report?.tests || 'À confirmer'}), Revue (${report?.review || 'À confirmer'}).`
+      : workflow.executionState === 'RUNNING'
+      ? `Étape ${workflow.currentPhase}/7 en cours d’exécution par l’agent ${workflow.activeAgent || 'Developer'}.`
+      : workflow.executionState === 'FAILED'
+      ? workflow.errorMessage || 'Le Quality Gate a interrompu le pipeline suite à une anomalie.'
+      : 'Aucune exécution en cours.',
     timeAgo: workflow.elapsedSeconds > 0 ? `${workflow.elapsedSeconds.toFixed(1)}s d’exécution` : 'Récent',
     route: 'build',
     icon: Sparkles,
@@ -96,25 +106,45 @@ export const ActivityPage: React.FC<ActivityPageProps> = ({ onNavigate }) => {
   });
 
   // 2. GitHub CI Delivery
+  const isCiSuccess = delivery.ciStatus === 'TERMINAL_SUCCESS';
+  const isCiRunning = Boolean(
+    delivery.ciStatus === 'RUNNING' ||
+      delivery.ciStatus === 'QUEUED' ||
+      delivery.ciStatus === 'WAITING_WORKFLOW' ||
+      delivery.pushStatus === 'RUNNING'
+  );
+  const isCiFailed = Boolean(
+    delivery.pushStatus === 'FAILED' ||
+      [
+        'TERMINAL_FAILURE',
+        'RUN_NOT_FOUND_FOR_SHA',
+        'NOT_FOUND',
+        'POLLING_FAILED_TIMEOUT',
+        'POLLING_FAILED_NETWORK',
+      ].includes(delivery.ciStatus)
+  );
+
   activities.push({
     id: 'act-ci',
     category: 'CI',
-    action:
-      delivery.ciStatus === 'TERMINAL_SUCCESS'
-        ? '✓ Livraison GitHub Actions validée'
-        : delivery.ciStatus === 'RUNNING'
-        ? '● Vérification CI en cours sur GitHub'
-        : delivery.ciStatus === 'TERMINAL_FAILURE'
-        ? '✕ Échec des tests CI sur GitHub'
-        : 'Pipeline GitHub Actions',
-    status:
-      delivery.ciStatus === 'TERMINAL_SUCCESS'
-        ? 'COMPLETED'
-        : delivery.ciStatus === 'TERMINAL_FAILURE'
-        ? 'FAILED'
-        : delivery.ciStatus === 'RUNNING' || delivery.ciStatus === 'QUEUED'
-        ? 'RUNNING'
-        : 'IDLE',
+    action: isCiSuccess
+      ? '✓ Livraison GitHub Actions validée'
+      : isCiRunning
+      ? '● Vérification CI en cours sur GitHub'
+      : isCiFailed
+      ? delivery.ciStatus === 'RUN_NOT_FOUND_FOR_SHA' || delivery.ciStatus === 'NOT_FOUND'
+        ? '✕ Run CI introuvable pour le SHA'
+        : delivery.ciStatus === 'POLLING_FAILED_TIMEOUT'
+        ? '✕ Délai dépassé lors du suivi CI'
+        : '✕ Échec des tests CI sur GitHub'
+      : 'Pipeline GitHub Actions',
+    status: isCiSuccess
+      ? 'COMPLETED'
+      : isCiFailed
+      ? 'FAILED'
+      : isCiRunning
+      ? 'RUNNING'
+      : 'IDLE',
     summary: delivery.trackedSha
       ? `Commit SHA ${delivery.trackedSha.slice(0, 7)} · ${delivery.jobs.length} jobs exécutés.`
       : 'Aucun commit récemment soumis à la CI.',
@@ -136,7 +166,11 @@ export const ActivityPage: React.FC<ActivityPageProps> = ({ onNavigate }) => {
     category: 'Intelligence',
     action: selfImprovement.isRunning
       ? '● Boucle d’amélioration active'
-      : '✓ Boucle d’amélioration prête',
+      : selfImprovement.currentCycle?.status === 'COMPLETED'
+      ? '✓ Cycle d’amélioration terminé'
+      : selfImprovement.currentCycle?.status === 'FAILED'
+      ? '✕ Cycle d’amélioration en échec'
+      : 'Boucle d’amélioration prête',
     status: selfImprovement.isRunning
       ? 'RUNNING'
       : selfImprovement.currentCycle?.status === 'COMPLETED'
@@ -146,7 +180,9 @@ export const ActivityPage: React.FC<ActivityPageProps> = ({ onNavigate }) => {
       : 'IDLE',
     summary: selfImprovement.isRunning
       ? `Cycle #${selfImprovement.currentCycle?.id.slice(0, 8) || '1'} en cours d’évaluation hermétique.`
-      : `${selfImprovement.cycles.length} cycles historisés · ${selfImprovement.currentCycle?.detectedProblems.length || 0} problèmes analysés.`,
+      : selfImprovement.cycles.length > 0
+      ? `${selfImprovement.cycles.length} cycles historisés · ${selfImprovement.currentCycle?.detectedProblems.length || 0} problèmes analysés.`
+      : 'Prêt pour l’analyse continue des régressions.',
     timeAgo: selfImprovement.lastUpdated ? new Date(selfImprovement.lastUpdated).toLocaleTimeString() : 'Prêt',
     route: 'intelligence',
     icon: Cpu,
@@ -163,7 +199,7 @@ export const ActivityPage: React.FC<ActivityPageProps> = ({ onNavigate }) => {
     category: 'Intelligence',
     action: jules.activeSession
       ? `● Agent Cloud Google Jules (${jules.activeSession.state})`
-      : '✓ Agent Cloud Google Jules disponible',
+      : 'Agent Cloud Google Jules disponible',
     status: jules.isStartingSession
       ? 'RUNNING'
       : jules.activeSession?.state === 'COMPLETED'

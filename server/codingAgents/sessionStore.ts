@@ -300,8 +300,29 @@ export class FileBackedCodingAgentSessionStore implements ICodingAgentSessionSto
   }
 
   public async saveWorkflowState(sessionId: string, workflowState: WorkflowState): Promise<StoredCodingSession | null> {
+    this.loadFromDisk();
     const cleanId = sessionId.replace(/^sessions\//, '');
-    const current = this.cache.get(cleanId) || this.cache.get(sessionId);
+    let current = this.cache.get(cleanId) || this.cache.get(sessionId);
+    if (!current) {
+      current = {
+        sessionId: cleanId,
+        agentId: workflowState.agentId || 'team',
+        repository: workflowState.repository || 'MohamedGH/agentTeam',
+        branch: workflowState.branch || 'main',
+        task: workflowState.task || '',
+        status: workflowState.status || 'QUEUED',
+        createdAt: workflowState.createdAt || new Date().toISOString(),
+        updatedAt: workflowState.updatedAt || new Date().toISOString(),
+        metadata: {
+          workflowId: workflowState.workflowId,
+        },
+        workflowState,
+      };
+      this.cache.set(cleanId, current);
+      this.flushToDisk();
+      return current;
+    }
+
     const updates: Partial<StoredCodingSession> = {
       workflowState,
       metadata: {

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ShieldCheck,
   Gauge,
@@ -23,6 +23,7 @@ import { QuotaDashboard } from '../QuotaDashboard';
 import { RolesGuide } from '../RolesGuide';
 import { GitHubSettingsModal } from '../GitHubSettingsModal';
 import { ModelQuotaStatus, AIProviderId, ProviderInfo } from '../../types';
+import { apiFetch } from '../../utils/apiFetch';
 
 interface SystemPageProps {
   quotaModels: Record<string, ModelQuotaStatus>;
@@ -56,6 +57,34 @@ export const SystemPage: React.FC<SystemPageProps> = ({
       ? 'security'
       : 'quota'
   );
+
+  const [apiHealthy, setApiHealthy] = useState<boolean | null>(null);
+  const [githubConfigured, setGithubConfigured] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiFetch('/api/health')
+      .then((r: Response) => r.json())
+      .then((d: { status?: string; healthy?: boolean }) => {
+        if (!cancelled) setApiHealthy(d.status === 'ok' || d.healthy === true);
+      })
+      .catch(() => {
+        if (!cancelled) setApiHealthy(false);
+      });
+
+    apiFetch('/api/github/status')
+      .then((r: Response) => r.json())
+      .then((d: { configured?: boolean }) => {
+        if (!cancelled) setGithubConfigured(Boolean(d.configured));
+      })
+      .catch(() => {
+        if (!cancelled) setGithubConfigured(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -129,30 +158,50 @@ export const SystemPage: React.FC<SystemPageProps> = ({
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
           <div className="space-y-0.5">
             <span className="text-[10px] uppercase font-mono text-slate-500 font-bold">API Backend</span>
-            <div className="text-slate-200 font-bold text-sm">✓ API Opérationnelle</div>
+            <div className="text-slate-200 font-bold text-sm">
+              {apiHealthy === null ? 'Vérification...' : apiHealthy ? 'API Opérationnelle' : 'API Inaccessible'}
+            </div>
           </div>
-          <span className="text-emerald-400 text-xs font-mono font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-            CONNECTÉ
+          <span
+            className={`text-xs font-mono font-bold px-2 py-0.5 rounded border ${
+              apiHealthy === null
+                ? 'bg-slate-800 text-slate-400 border-slate-700'
+                : apiHealthy
+                ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
+                : 'text-rose-400 bg-rose-500/10 border-rose-500/20'
+            }`}
+          >
+            {apiHealthy === null ? 'EN COURS' : apiHealthy ? 'CONNECTÉ' : 'ERREUR'}
           </span>
         </div>
 
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
           <div className="space-y-0.5">
             <span className="text-[10px] uppercase font-mono text-slate-500 font-bold">Intégration GitHub</span>
-            <div className="text-slate-200 font-bold text-sm">✓ Dépôt Paramétré</div>
+            <div className="text-slate-200 font-bold text-sm">
+              {githubConfigured === null ? 'Vérification...' : githubConfigured ? 'Dépôt Connecté' : 'Non Configuré'}
+            </div>
           </div>
-          <span className="text-blue-400 text-xs font-mono font-bold bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20">
-            PRÊT
+          <span
+            className={`text-xs font-mono font-bold px-2 py-0.5 rounded border ${
+              githubConfigured === null
+                ? 'bg-slate-800 text-slate-400 border-slate-700'
+                : githubConfigured
+                ? 'text-blue-400 bg-blue-500/10 border-blue-500/20'
+                : 'text-amber-400 bg-amber-500/10 border-amber-500/20'
+            }`}
+          >
+            {githubConfigured === null ? 'EN COURS' : githubConfigured ? 'CONFIGURÉ' : 'NON CONNECTÉ'}
           </span>
         </div>
 
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
           <div className="space-y-0.5">
             <span className="text-[10px] uppercase font-mono text-slate-500 font-bold">Sécurité & Tokens</span>
-            <div className="text-slate-200 font-bold text-sm">✓ Conforme & Masqué</div>
+            <div className="text-slate-200 font-bold text-sm">Masquage & Redaction</div>
           </div>
-          <span className="text-emerald-400 text-xs font-mono font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-            SÉCURISÉ
+          <span className="text-cyan-400 text-xs font-mono font-bold bg-cyan-500/10 px-2 py-0.5 rounded border border-cyan-500/20">
+            POLITIQUE ACTIVE
           </span>
         </div>
       </div>

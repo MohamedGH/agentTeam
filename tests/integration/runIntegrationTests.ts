@@ -5,6 +5,7 @@ import { runJulesAsyncMonitoringIntegrationTests } from './julesAsyncMonitoring.
 import { runJulesComprehensiveScenariosTest } from './julesComprehensiveScenarios.test';
 import { runGitHubWorkflowIntegrationTests } from './githubWorkflow.test';
 import { runWorkflowOrchestratorIntegrationTests } from './workflowOrchestratorIntegration.test';
+import { runWorkflowPersistenceAndRecoveryIntegrationTest } from './workflowPersistenceAndRecovery.test';
 
 export async function runAllIntegrationTests() {
   console.log('====================================================');
@@ -18,6 +19,7 @@ export async function runAllIntegrationTests() {
   await runJulesComprehensiveScenariosTest();
   await runGitHubWorkflowIntegrationTests();
   await runWorkflowOrchestratorIntegrationTests();
+  await runWorkflowPersistenceAndRecoveryIntegrationTest();
 
   console.log('\n🎉 ALL INTEGRATION TESTS PASSED (100%)\n');
 }

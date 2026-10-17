@@ -35,6 +35,7 @@ import { ExecutionTimeline } from '../ExecutionTimeline';
 import { FinalReportCard } from '../FinalReportCard';
 import { WorkspaceExplorer } from '../WorkspaceExplorer';
 import { CIStatusDashboard } from '../CIStatusDashboard';
+import { ExecutionStatusBanner } from '../ExecutionStatusBanner';
 import { WorkflowState } from '../../managers/workflowStateManager';
 import { DeliveryState } from '../../managers/deliveryStateManager';
 import { AgentStep, AIProviderId, ProviderInfo } from '../../types';
@@ -110,17 +111,36 @@ export const BuildPage: React.FC<BuildPageProps> = ({
   const hasFailed = workflow.executionState === 'FAILED';
 
   // Human 5-Step Pipeline (Analyse → Développement → Tests → Revue → Livraison)
+  const isCiFailed = Boolean(
+    delivery.pushStatus === 'FAILED' ||
+      [
+        'TERMINAL_FAILURE',
+        'RUN_NOT_FOUND_FOR_SHA',
+        'NOT_FOUND',
+        'POLLING_FAILED_TIMEOUT',
+        'POLLING_FAILED_NETWORK',
+      ].includes(delivery.ciStatus)
+  );
+  const isCiRunning = Boolean(
+    delivery.pushStatus === 'RUNNING' ||
+      ['QUEUED', 'WAITING_WORKFLOW', 'RUNNING'].includes(delivery.ciStatus)
+  );
+  const isCiSuccess = Boolean(
+    delivery.ciStatus === 'TERMINAL_SUCCESS' &&
+      (!delivery.trackedSha || delivery.ciRun?.head_sha === delivery.trackedSha)
+  );
+
   const pipelineSteps: PipelineStep[] = [
     {
       id: 'step-plan',
       label: '1. Analyse & Plan',
       status:
-        workflow.currentPhase > 1 || hasCompleted
-          ? 'COMPLETED'
+        hasFailed && workflow.currentPhase === 1
+          ? 'FAILED'
           : workflow.currentPhase === 1 && isRunning
           ? 'RUNNING'
-          : hasFailed && workflow.currentPhase === 1
-          ? 'FAILED'
+          : workflow.currentPhase > 1 || hasCompleted
+          ? 'COMPLETED'
           : 'PENDING',
       detail: workflow.currentPhase >= 1 ? 'Manager' : undefined,
     },
@@ -128,55 +148,91 @@ export const BuildPage: React.FC<BuildPageProps> = ({
       id: 'step-dev',
       label: '2. Développement',
       status:
-        workflow.currentPhase > 3 || hasCompleted
-          ? 'COMPLETED'
+        (hasFailed && (workflow.currentPhase === 2 || workflow.currentPhase === 3)) ||
+        (hasCompleted && workflow.finalReport?.implementation === 'FAIL')
+          ? 'FAILED'
           : (workflow.currentPhase === 2 || workflow.currentPhase === 3) && isRunning
           ? 'RUNNING'
-          : hasFailed && (workflow.currentPhase === 2 || workflow.currentPhase === 3)
-          ? 'FAILED'
+          : workflow.currentPhase > 3 ||
+            (hasCompleted && workflow.finalReport?.implementation === 'PASS')
+          ? 'COMPLETED'
           : 'PENDING',
-      detail: codingAgentOption !== 'none' ? `Agent ${codingAgentOption}` : 'Developer',
+      detail:
+        workflow.finalReport?.implementation
+          ? `Code : ${workflow.finalReport.implementation}`
+          : codingAgentOption !== 'none'
+          ? `Agent ${codingAgentOption}`
+          : 'Developer',
     },
     {
       id: 'step-qa',
       label: '3. Tests QA',
       status:
-        workflow.currentPhase > 5 || hasCompleted
-          ? 'COMPLETED'
+        (hasFailed && (workflow.currentPhase === 4 || workflow.currentPhase === 5)) ||
+        (hasCompleted && workflow.finalReport?.tests === 'FAIL')
+          ? 'FAILED'
           : (workflow.currentPhase === 4 || workflow.currentPhase === 5) && isRunning
           ? 'RUNNING'
-          : hasFailed && (workflow.currentPhase === 4 || workflow.currentPhase === 5)
-          ? 'FAILED'
+          : workflow.currentPhase > 5 || (hasCompleted && workflow.finalReport?.tests === 'PASS')
+          ? 'COMPLETED'
           : 'PENDING',
-      detail: 'Tester QA',
+      detail:
+        workflow.finalReport?.tests
+          ? `Tests : ${workflow.finalReport.tests}`
+          : 'Tester QA',
     },
     {
       id: 'step-review',
       label: '4. Revue & Sécurité',
       status:
-        workflow.currentPhase > 6 || hasCompleted
-          ? 'COMPLETED'
+        (hasFailed && workflow.currentPhase === 6) ||
+        (hasCompleted && workflow.finalReport?.review === 'CHANGES_REQUIRED')
+          ? 'FAILED'
           : workflow.currentPhase === 6 && isRunning
           ? 'RUNNING'
-          : hasFailed && workflow.currentPhase === 6
-          ? 'FAILED'
+          : workflow.currentPhase > 6 ||
+            (hasCompleted && workflow.finalReport?.review === 'APPROVED')
+          ? 'COMPLETED'
           : 'PENDING',
-      detail: 'Reviewer',
+      detail:
+        workflow.finalReport?.review
+          ? `Revue : ${workflow.finalReport.review}`
+          : 'Reviewer',
     },
     {
       id: 'step-delivery',
       label: '5. Livraison CI',
-      status:
-        delivery.ciStatus === 'TERMINAL_SUCCESS'
-          ? 'COMPLETED'
+      status: isCiFailed
+        ? 'FAILED'
+        : isCiRunning
+        ? 'RUNNING'
+        : isCiSuccess
+        ? 'COMPLETED'
+        : 'PENDING',
+      detail:
+        delivery.pushStatus === 'FAILED'
+          ? 'Échec du push'
+          : delivery.pushStatus === 'RUNNING'
+          ? 'Push en cours'
+          : isCiSuccess
+          ? delivery.trackedSha
+            ? `SHA ${delivery.trackedSha.slice(0, 7)} (validé)`
+            : 'CI validée'
           : delivery.ciStatus === 'TERMINAL_FAILURE'
-          ? 'FAILED'
-          : delivery.ciStatus === 'RUNNING' || (hasCompleted && delivery.trackedSha)
-          ? 'RUNNING'
-          : hasCompleted
-          ? 'COMPLETED'
-          : 'PENDING',
-      detail: delivery.trackedSha ? `SHA ${delivery.trackedSha.slice(0, 7)}` : 'GitHub Actions',
+          ? 'Échec CI GitHub'
+          : delivery.ciStatus === 'RUN_NOT_FOUND_FOR_SHA' || delivery.ciStatus === 'NOT_FOUND'
+          ? 'Workflow non trouvé'
+          : delivery.ciStatus === 'POLLING_FAILED_TIMEOUT'
+          ? 'Délai CI dépassé'
+          : delivery.ciStatus === 'POLLING_FAILED_NETWORK'
+          ? 'Erreur réseau'
+          : delivery.ciStatus === 'QUEUED' || delivery.ciStatus === 'WAITING_WORKFLOW'
+          ? 'En attente workflow'
+          : delivery.ciStatus === 'RUNNING'
+          ? 'CI en cours'
+          : delivery.trackedSha
+          ? `SHA ${delivery.trackedSha.slice(0, 7)} (en attente)`
+          : 'Non lancée',
     },
   ];
 
@@ -237,6 +293,26 @@ export const BuildPage: React.FC<BuildPageProps> = ({
       {/* SUB-VIEW 1: PIPELINE & AGENTS */}
       {activeSubTab === 'pipeline' && (
         <div className="space-y-6">
+          {/* Real-time Status Banner across all states */}
+          {workflow.executionState !== 'IDLE' && (
+            <ExecutionStatusBanner
+              executionState={workflow.executionState}
+              activeAgent={workflow.activeAgent}
+              currentPhase={workflow.currentPhase}
+              chosenModel={chosenModel}
+              activeProvider={activeProvider}
+              elapsedSeconds={workflow.elapsedSeconds}
+              finalReport={workflow.finalReport}
+              errorMessage={workflow.errorMessage}
+              stepsCount={workflow.steps.length}
+              delivery={delivery}
+              transportStatus={workflow.transportStatus}
+              transportMessage={workflow.transportMessage}
+              onStop={isRunning ? onAbortWorkflow : undefined}
+              onReset={onResetWorkflow}
+            />
+          )}
+
           {/* Visual Step-by-Step Pipeline */}
           <div className="space-y-2">
             <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400 block px-1">

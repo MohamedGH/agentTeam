@@ -311,7 +311,7 @@ export function AdaptiveLLMDashboard() {
                 <div className="text-sm font-bold text-emerald-400 font-mono">
                   {typeof operationalDecision.confidence === 'number'
                     ? `${(operationalDecision.confidence * 100).toFixed(0)}%`
-                    : '100%'}
+                    : 'Non disponible'}
                 </div>
                 <div className="text-[11px] text-slate-400 mt-1 font-mono">
                   Invariants vérifiés
@@ -477,7 +477,9 @@ export function AdaptiveLLMDashboard() {
                   Confiance & Sécurité
                 </span>
                 <div className="text-sm font-bold text-emerald-400 font-mono">
-                  {(inspectionDecision.confidence * 100).toFixed(0)}%
+                  {typeof inspectionDecision.confidence === 'number'
+                    ? `${(inspectionDecision.confidence * 100).toFixed(0)}%`
+                    : 'Non disponible'}
                 </div>
                 <div className="text-[11px] mt-1 font-mono flex items-center gap-1">
                   {(inspectionDecision.isIdentityVerified ?? inspectionDecision.proof?.isIdentityVerified) === true ? (
@@ -497,19 +499,19 @@ export function AdaptiveLLMDashboard() {
               </div>
             </div>
 
-            {/* Contraintes respectées */}
+            {/* Contraintes détectées */}
             {inspectionDecision.classifiedProblem?.constraints?.length > 0 && (
               <div className="p-3 bg-slate-950/80 border border-slate-800 rounded-xl flex items-center gap-2 flex-wrap text-xs">
                 <span className="font-semibold text-slate-400 flex items-center gap-1">
                   <CheckSquare className="w-3.5 h-3.5 text-blue-400" />
-                  Contraintes respectées :
+                  Contraintes détectées :
                 </span>
                 {inspectionDecision.classifiedProblem.constraints.map((c: string) => (
                   <span
                     key={c}
                     className="px-2 py-0.5 text-[11px] font-medium bg-slate-900 border border-slate-800 text-slate-200 rounded font-mono"
                   >
-                    ✓ {c}
+                    {c}
                   </span>
                 ))}
               </div>

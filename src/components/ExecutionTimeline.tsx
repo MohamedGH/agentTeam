@@ -360,11 +360,11 @@ export const ExecutionTimeline: React.FC<ExecutionTimelineProps> = ({ steps, isR
 
               {/* Automatic Failover Telemetry */}
               {step.failoverHistory && step.failoverHistory.length > 0 && (
-                <div className="mb-3 bg-amber-950/30 border border-amber-500/30 rounded-lg p-2.5 text-xs">
-                  <div className="flex items-center gap-1.5 text-amber-400 font-semibold mb-1">
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-400" />
-                    <span>Automatic Model Failover Succeeded</span>
-                    <span className="text-[10px] font-mono text-amber-400/80">({step.failoverHistory.length} fallback{step.failoverHistory.length > 1 ? 's' : ''})</span>
+                <div className={`mb-3 ${step.status === 'COMPLETED' ? 'bg-amber-950/30 border-amber-500/30' : 'bg-rose-950/30 border-rose-500/30'} border rounded-lg p-2.5 text-xs`}>
+                  <div className={`flex items-center gap-1.5 ${step.status === 'COMPLETED' ? 'text-amber-400' : 'text-rose-400'} font-semibold mb-1`}>
+                    <RefreshCw className="w-3.5 h-3.5 text-amber-400" />
+                    <span>{step.status === 'COMPLETED' ? 'Automatic Model Failover Succeeded' : 'Model Failovers Attempted'}</span>
+                    <span className="text-[10px] font-mono opacity-80">({step.failoverHistory.length} fallback{step.failoverHistory.length > 1 ? 's' : ''})</span>
                   </div>
                   <div className="space-y-1 font-mono text-[11px]">
                     {step.failoverHistory.map((rec, idx) => (
@@ -375,10 +375,17 @@ export const ExecutionTimeline: React.FC<ExecutionTimelineProps> = ({ steps, isR
                         <span className="text-slate-300 truncate max-w-sm">{rec.error}</span>
                       </div>
                     ))}
-                    <div className="text-emerald-400 font-medium pt-0.5 flex items-center gap-1">
-                      <span>✓</span>
-                      <span>Primary model failed → fallback model succeeded ({step.provider || 'fallback'}{step.model ? `/${step.model}` : ''})</span>
-                    </div>
+                    {step.status === 'COMPLETED' ? (
+                      <div className="text-emerald-400 font-medium pt-0.5 flex items-center gap-1">
+                        <span>✓</span>
+                        <span>Primary model failed → fallback model succeeded ({step.provider || 'fallback'}{step.model ? `/${step.model}` : ''})</span>
+                      </div>
+                    ) : (
+                      <div className="text-rose-400 font-medium pt-0.5 flex items-center gap-1">
+                        <span>✕</span>
+                        <span>All fallback attempts exhausted</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

@@ -16,6 +16,7 @@ import { runWorkflowStateManagerUnitTests } from './workflowStateManager.test';
 import { runDeliveryStateManagerTests } from './deliveryStateManager.test';
 import { runApiAuthUnitTests } from './apiAuth.test';
 import { runUxRouteManagerUnitTests } from './uxRouteManager.test';
+import { runSseWorkflowResilienceUnitTests } from './sseWorkflowResilience.test';
 
 export async function runAllUnitTests() {
   console.log('====================================================');
@@ -40,6 +41,7 @@ export async function runAllUnitTests() {
   await runDeliveryStateManagerTests();
   await runApiAuthUnitTests();
   await runUxRouteManagerUnitTests();
+  await runSseWorkflowResilienceUnitTests();
 
   console.log('\n🎉 ALL UNIT TESTS PASSED (100%)\n');
 }

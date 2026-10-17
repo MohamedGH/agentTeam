@@ -62,6 +62,8 @@ export default function App() {
     steps,
     finalReport,
     errorMessage,
+    transportStatus,
+    transportMessage,
   } = workflowState;
 
   // Synchronize routeManager navigation
@@ -187,7 +189,12 @@ export default function App() {
   }, [selectedTier]);
 
   // Handle aborting in-flight workflow run
+  // Handle aborting in-flight workflow run
   const handleAbortWorkflow = () => {
+    const currentWfId = workflowStateManager.getState().workflowId;
+    if (currentWfId) {
+      apiFetch(`/api/workflows/${currentWfId}/cancel`, { method: 'POST' }).catch(() => {});
+    }
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
@@ -195,17 +202,113 @@ export default function App() {
     workflowStateManager.cancelExecution();
   };
 
+  // Resilient workflow report recovery when SSE stream is interrupted
+  const recoverWorkflowReport = async (wfId: string, signal: AbortSignal): Promise<boolean> => {
+    workflowStateManager.setTransportStatus('RECONNECTING', 'Reconnexion…');
+
+    const MAX_RETRIES = 60;
+    let notFoundStreak = 0;
+
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      if (signal.aborted) {
+        workflowStateManager.cancelExecution();
+        return false;
+      }
+
+      workflowStateManager.setTransportStatus(
+        attempt <= 2 ? 'RECONNECTING' : 'RECOVERING_REPORT',
+        attempt <= 2 ? 'Reconnexion…' : 'Récupération du rapport…'
+      );
+
+      try {
+        const res = await apiFetch(`/api/workflows/${wfId}`, { signal });
+
+        // Respect authentication and authorization errors immediately
+        if (res.status === 401 || res.status === 403) {
+          workflowStateManager.setTransportStatus('DISCONNECTED', 'Impossible de récupérer le rapport');
+          workflowStateManager.failExecution('Accès refusé: authentification requise pour récupérer le workflow.');
+          return false;
+        }
+
+        if (res.ok) {
+          notFoundStreak = 0;
+          const data = await res.json();
+          const wf = data.workflow;
+          if (wf) {
+            // Append any newly available steps from server so UI updates in recovery mode
+            if (Array.isArray(wf.steps)) {
+              const currentStepCount = workflowStateManager.getState().steps.length;
+              if (wf.steps.length > currentStepCount) {
+                for (let i = currentStepCount; i < wf.steps.length; i++) {
+                  workflowStateManager.addStep(wf.steps[i]);
+                }
+              }
+            }
+
+            if (wf.status === 'COMPLETED' || wf.stage === 'COMPLETED') {
+              if (
+                wf.finalReport &&
+                typeof wf.finalReport === 'object' &&
+                typeof wf.finalReport.tests === 'string' &&
+                typeof wf.finalReport.review === 'string'
+              ) {
+                workflowStateManager.recoverExecution(wf.finalReport);
+                return true;
+              } else {
+                workflowStateManager.setTransportStatus('DISCONNECTED', 'Impossible de récupérer le rapport');
+                workflowStateManager.failExecution('Le workflow s’est achevé sans rapport final valide.');
+                return false;
+              }
+            } else if (wf.status === 'FAILED' || wf.stage === 'FAILED') {
+              workflowStateManager.setTransportStatus('DISCONNECTED', 'Impossible de récupérer le rapport');
+              workflowStateManager.failExecution(wf.error || 'Le workflow a échoué côté serveur.');
+              return false;
+            } else if (wf.status === 'CANCELLED' || wf.stage === 'CANCELLED') {
+              workflowStateManager.cancelExecution();
+              return false;
+            }
+            // If still RUNNING / IN_PROGRESS, continue polling with backoff
+          }
+        } else if (res.status === 404) {
+          notFoundStreak++;
+          if (notFoundStreak >= 6) {
+            workflowStateManager.setTransportStatus('DISCONNECTED', 'Impossible de récupérer le rapport');
+            workflowStateManager.failExecution(`Workflow "${wfId}" introuvable sur le serveur.`);
+            return false;
+          }
+        }
+      } catch (err: any) {
+        if (err.name === 'AbortError' || signal.aborted) {
+          workflowStateManager.cancelExecution();
+          return false;
+        }
+      }
+
+      // Progressive backoff: 800ms up to 2000ms
+      const delay = Math.min(800 + attempt * 150, 2000);
+      await new Promise((r) => setTimeout(r, delay));
+    }
+
+    if (!signal.aborted && workflowStateManager.getState().executionState === 'RUNNING') {
+      workflowStateManager.setTransportStatus('DISCONNECTED', 'Impossible de récupérer le rapport');
+      workflowStateManager.failExecution('Impossible de récupérer le rapport de fin de workflow après interruption de la connexion.');
+    }
+    return false;
+  };
+
   // Run the Multi-Agent autonomous development workflow with Live SSE streaming
   const handleRunWorkflow = async () => {
     if (!taskPrompt.trim() || executionState === 'RUNNING') return;
 
-    // Start execution via state manager
-    workflowStateManager.startExecution(chosenModel, activeProvider);
+    const runWorkflowId = `wf_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    workflowStateManager.setWorkflowId(runWorkflowId);
+    workflowStateManager.startExecution(chosenModel, activeProvider, runWorkflowId);
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
     const requestPayload = {
+      workflowId: runWorkflowId,
       prompt: taskPrompt.trim(),
       tier: selectedTier,
       provider: activeProvider,
@@ -218,6 +321,53 @@ export default function App() {
     };
 
     let explicitCompletionReceived = false;
+
+    const parseSSELine = (line: string) => {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith('data: ')) return;
+      const jsonStr = trimmed.slice(6);
+      try {
+        const event = JSON.parse(jsonStr);
+        if (event.type === 'init' && event.workflowId) {
+          workflowStateManager.setWorkflowId(event.workflowId);
+        } else if (event.type === 'heartbeat') {
+          workflowStateManager.setTransportStatus('CONNECTED', null);
+        } else if (event.type === 'step' && event.step) {
+          workflowStateManager.addStep(event.step);
+        } else if (event.type === 'complete' && event.result) {
+          explicitCompletionReceived = true;
+          if (
+            event.result.finalReport &&
+            typeof event.result.finalReport === 'object' &&
+            typeof event.result.finalReport.tests === 'string' &&
+            typeof event.result.finalReport.review === 'string'
+          ) {
+            workflowStateManager.completeExecution(event.result.finalReport);
+          } else if (event.result.success === false) {
+            workflowStateManager.failExecution(
+              event.result.error || 'Le workflow a échoué sans rapport final valide.'
+            );
+          } else {
+            workflowStateManager.failExecution(
+              'Le workflow a terminé sans rapport final valide.'
+            );
+          }
+          if (event.result.virtualFiles) {
+            setFiles(event.result.virtualFiles);
+          }
+        } else if (event.type === 'cancelled') {
+          explicitCompletionReceived = true;
+          workflowStateManager.cancelExecution();
+        } else if (event.type === 'error') {
+          explicitCompletionReceived = true;
+          workflowStateManager.failExecution(
+            event.error || 'Une erreur est survenue pendant l’exécution de l’équipe d’agents.'
+          );
+        }
+      } catch (e) {
+        console.warn('Failed to parse SSE line:', line);
+      }
+    };
 
     try {
       // Attempt Server-Sent Events (SSE) streaming execution
@@ -233,44 +383,44 @@ export default function App() {
         const decoder = new TextDecoder('utf-8');
         let buffer = '';
 
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) {
+              // Flush any trailing characters from multi-byte streams
+              buffer += decoder.decode();
+              break;
+            }
 
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n\n');
-          buffer = lines.pop() || '';
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n\n');
+            buffer = lines.pop() || '';
 
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (trimmed.startsWith('data: ')) {
-              const jsonStr = trimmed.slice(6);
-              try {
-                const event = JSON.parse(jsonStr);
-                if (event.type === 'step' && event.step) {
-                  workflowStateManager.addStep(event.step);
-                } else if (event.type === 'complete' && event.result) {
-                  if (event.result.finalReport) {
-                    explicitCompletionReceived = true;
-                    workflowStateManager.completeExecution(event.result.finalReport);
-                  }
-                  if (event.result.virtualFiles) {
-                    setFiles(event.result.virtualFiles);
-                  }
-                } else if (event.type === 'error') {
-                  workflowStateManager.failExecution(
-                    event.error || 'Une erreur est survenue pendant l’exécution de l’équipe d’agents.'
-                  );
-                }
-              } catch (e) {
-                console.warn('Failed to parse SSE line:', line);
-              }
+            for (const line of lines) {
+              parseSSELine(line);
             }
           }
+        } catch (streamErr: any) {
+          if (streamErr.name === 'AbortError' || controller.signal.aborted) {
+            workflowStateManager.cancelExecution();
+            return;
+          }
+          console.warn('SSE stream transport interrupted:', streamErr?.message || streamErr);
         }
 
-        if (!explicitCompletionReceived && workflowStateManager.getState().executionState === 'RUNNING') {
-          workflowStateManager.handleStreamAborted();
+        // Flush and process any lingering events in buffer after stream ends
+        if (buffer.trim()) {
+          const trailingLines = buffer.split('\n\n');
+          for (const line of trailingLines) {
+            parseSSELine(line);
+          }
+          buffer = '';
+        }
+
+        // If stream ended without explicit terminal completion and wasn't cancelled:
+        // Recover state from server rather than failing immediately!
+        if (!explicitCompletionReceived && !controller.signal.aborted && workflowStateManager.getState().executionState === 'RUNNING') {
+          await recoverWorkflowReport(runWorkflowId, controller.signal);
         }
       } else {
         // Fallback to standard batch POST /api/team/run
@@ -307,10 +457,15 @@ export default function App() {
       await fetchWorkspace();
       await fetchQuotaStatus(selectedTier);
     } catch (err: any) {
-      if (err.name === 'AbortError') {
+      if (err.name === 'AbortError' || controller.signal.aborted) {
         workflowStateManager.cancelExecution();
       } else {
-        workflowStateManager.failExecution(err.message || 'Erreur lors de l’exécution du workflow agentTeam');
+        // If an initial stream fetch error occurs, attempt report recovery before failing
+        if (!controller.signal.aborted && workflowStateManager.getState().executionState === 'RUNNING') {
+          await recoverWorkflowReport(runWorkflowId, controller.signal);
+        } else {
+          workflowStateManager.failExecution(err.message || 'Erreur lors de l’exécution du workflow agentTeam');
+        }
       }
     } finally {
       abortControllerRef.current = null;
@@ -401,6 +556,8 @@ export default function App() {
             finalReport={finalReport}
             errorMessage={errorMessage}
             stepsCount={steps.length}
+            transportStatus={transportStatus}
+            transportMessage={transportMessage}
             onStop={isRunning ? handleAbortWorkflow : undefined}
             onReset={handleResetMission}
             onNavigateBuild={() => handleTabChange('build')}

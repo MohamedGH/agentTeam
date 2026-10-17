@@ -107,6 +107,14 @@ export const SelfImprovementDashboard: React.FC = () => {
         </span>
       );
     }
+    if (status === 'HALTED_GATE') {
+      return (
+        <span className="px-2.5 py-1 rounded-md bg-purple-500/20 text-purple-300 font-bold border border-purple-500/30 flex items-center gap-1.5 font-mono text-xs">
+          <AlertTriangle className="w-3.5 h-3.5 text-purple-400" />
+          ⚠ HALTED GATE
+        </span>
+      );
+    }
     return (
       <span className="px-2.5 py-1 rounded-md bg-slate-800 text-slate-400 border border-slate-700 flex items-center gap-1.5 font-mono text-xs">
         ○ PENDING
@@ -272,9 +280,15 @@ export const SelfImprovementDashboard: React.FC = () => {
                     )}
                   </>
                 ) : (
-                  <div className="text-emerald-400 flex items-center gap-1.5 pt-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                    <span>Aucune anomalie détectée (Système sain).</span>
+                  <div className="text-slate-400 flex items-center gap-1.5 pt-2">
+                    <Clock className="w-4 h-4 text-slate-500 shrink-0" />
+                    <span>
+                      {isRunning && (currentPhaseKey === 'OBSERVE' || currentPhaseKey === 'ANALYSE')
+                        ? 'Observation et analyse des anomalies en cours...'
+                        : displayCycle.status === 'FAILED'
+                        ? 'Cycle interrompu avant sélection d’anomalie.'
+                        : 'Aucune anomalie sélectionnée pour ce cycle.'}
+                    </span>
                   </div>
                 )}
               </div>
@@ -400,9 +414,21 @@ export const SelfImprovementDashboard: React.FC = () => {
                         </span>
                       </div>
                       <div className="mt-2">
-                        {isCurrent ? (
+                        {isCurrent && isRunning ? (
                           <span className="inline-block px-1.5 py-0.5 rounded text-[10px] bg-blue-500/20 text-blue-300 font-mono font-bold">
                             ● RUNNING
+                          </span>
+                        ) : isCurrent && displayCycle.status === 'COMPLETED' ? (
+                          <span className="inline-block px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-400 font-mono font-bold">
+                            ✓ COMPLETED
+                          </span>
+                        ) : isCurrent && (displayCycle.status === 'FAILED' || displayCycle.status === 'HALTED_GATE') ? (
+                          <span className="inline-block px-1.5 py-0.5 rounded text-[10px] bg-rose-500/20 text-rose-300 font-mono font-bold">
+                            ✕ FAILED
+                          </span>
+                        ) : isCurrent && displayCycle.status === 'ROLLED_BACK' ? (
+                          <span className="inline-block px-1.5 py-0.5 rounded text-[10px] bg-amber-500/20 text-amber-300 font-mono font-bold">
+                            ↩ ROLLED BACK
                           </span>
                         ) : isCompleted ? (
                           <span className="inline-block px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-400 font-mono font-bold">

@@ -79,7 +79,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   const hasCompleted = workflow.executionState === 'COMPLETED';
   const hasFailed = workflow.executionState === 'FAILED';
 
-  // 1. HERO / ÉTAT GLOBAL (Human Language First)
+  // 1. HERO / ÉTAT GLOBAL (Human Language First - Vérification réelle)
   const heroState = (() => {
     if (isRunning) {
       return {
@@ -92,28 +92,122 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         onAction: () => onNavigate('build'),
       };
     }
-    if (hasFailed) {
+
+    const report = workflow.finalReport;
+    const implOk = report?.implementation === 'PASS';
+    const testsOk = report?.tests === 'PASS';
+    const testsFailed = report?.tests === 'FAIL';
+    const reviewOk = report?.review === 'APPROVED';
+    const reviewRejected = report?.review === 'CHANGES_REQUIRED';
+    const localGateOk = Boolean(implOk && testsOk && reviewOk);
+    const hasExplicitFailure = testsFailed || reviewRejected || report?.implementation === 'FAIL';
+
+    const trackedSha = delivery.trackedSha || delivery.commitSha || null;
+    const ciConfirmed = Boolean(
+      delivery.ciStatus === 'TERMINAL_SUCCESS' &&
+        (!delivery.trackedSha || delivery.ciRun?.head_sha === delivery.trackedSha)
+    );
+    const ciInProgress = Boolean(
+      delivery.pushStatus === 'RUNNING' ||
+        (trackedSha &&
+          (delivery.ciStatus === 'QUEUED' ||
+            delivery.ciStatus === 'WAITING_WORKFLOW' ||
+            delivery.ciStatus === 'RUNNING'))
+    );
+    const ciFailed = Boolean(
+      delivery.pushStatus === 'FAILED' ||
+        delivery.ciStatus === 'TERMINAL_FAILURE' ||
+        delivery.ciStatus === 'RUN_NOT_FOUND_FOR_SHA' ||
+        delivery.ciStatus === 'NOT_FOUND' ||
+        delivery.ciStatus === 'POLLING_FAILED_TIMEOUT' ||
+        delivery.ciStatus === 'POLLING_FAILED_NETWORK'
+    );
+
+    if (hasFailed || (hasCompleted && hasExplicitFailure)) {
       return {
         badge: '✕ Action requise',
         badgeColor: 'bg-rose-500/15 text-rose-300 border-rose-500/30',
         title: 'La dernière mission n’a pas pu être validée',
-        description: workflow.errorMessage || 'Une étape de validation ou de test a échoué. Le code a été préservé sans publication.',
-        actionLabel: 'Voir le problème & Relancer',
+        description:
+          workflow.errorMessage ||
+          (testsFailed
+            ? 'Les tests QA automatisés ont échoué.'
+            : reviewRejected
+            ? 'La revue d’architecture a rejeté les modifications.'
+            : 'Une étape de validation du code a échoué.'),
+        actionLabel: 'Voir le problème dans Build',
         actionIcon: RotateCcw,
         onAction: () => onNavigate('build'),
       };
     }
+
     if (hasCompleted) {
+      if (localGateOk && ciConfirmed) {
+        return {
+          badge: '✓ Mission terminée',
+          badgeColor: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+          title: 'Mission terminée',
+          description: 'Le code a été développé, testé, revu et validé. La livraison est confirmée.',
+          actionLabel: 'Voir le résultat dans Build',
+          actionIcon: ArrowRight,
+          onAction: () => onNavigate('build'),
+        };
+      }
+      if (localGateOk && ciInProgress) {
+        return {
+          badge: '● Validation GitHub en cours',
+          badgeColor: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
+          title: 'Mission terminée — validation GitHub en cours',
+          description: 'Le travail local est terminé. GitHub vérifie encore le commit.',
+          actionLabel: 'Suivre la CI dans Build',
+          actionIcon: ArrowRight,
+          onAction: () => onNavigate('build'),
+        };
+      }
+      if (localGateOk && ciFailed) {
+        return {
+          badge: '✕ Action requise sur la livraison',
+          badgeColor: 'bg-rose-500/15 text-rose-300 border-rose-500/30',
+          title: 'Travail local validé, mais la vérification CI a échoué',
+          description: delivery.pushError || `La vérification GitHub Actions a échoué (${delivery.ciStatus}).`,
+          actionLabel: 'Examiner dans Build',
+          actionIcon: ArrowRight,
+          onAction: () => onNavigate('build'),
+        };
+      }
+      if (localGateOk && !trackedSha) {
+        return {
+          badge: '✓ Mission terminée (local)',
+          badgeColor: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+          title: 'Mission terminée — validation locale confirmée',
+          description: 'Le code a été développé, testé et revu localement. Aucune livraison GitHub lancée.',
+          actionLabel: 'Voir le résultat dans Build',
+          actionIcon: ArrowRight,
+          onAction: () => onNavigate('build'),
+        };
+      }
+      if (testsOk && !reviewOk) {
+        return {
+          badge: '● Validation partielle',
+          badgeColor: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
+          title: 'Mission terminée — validation partielle',
+          description: 'Les tests sont validés, mais certaines vérifications restent à confirmer.',
+          actionLabel: 'Consulter dans Build',
+          actionIcon: ArrowRight,
+          onAction: () => onNavigate('build'),
+        };
+      }
       return {
-        badge: '✓ Mission terminée',
-        badgeColor: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
-        title: 'Le code a été développé, testé et validé',
-        description: 'Toutes les vérifications d’architecture et de sécurité sont validées. Aucune action requise.',
-        actionLabel: 'Voir le résultat dans Build',
+        badge: '● Vérifications en attente',
+        badgeColor: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
+        title: 'Mission terminée — vérifications à confirmer',
+        description: 'Le travail est terminé mais le rapport de validation complet reste à confirmer.',
+        actionLabel: 'Consulter dans Build',
         actionIcon: ArrowRight,
         onAction: () => onNavigate('build'),
       };
     }
+
     return {
       badge: 'Prêt',
       badgeColor: 'bg-slate-800 text-slate-300 border-slate-700',
@@ -267,12 +361,27 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           </div>
 
           <p className="text-xs text-slate-400">
-            {delivery.ciStatus === 'TERMINAL_SUCCESS'
-              ? '✓ Livraison GitHub Actions validée avec succès.'
-              : delivery.ciStatus === 'RUNNING'
-              ? '● Vérification des tests CI en cours sur GitHub.'
+            {delivery.pushStatus === 'RUNNING'
+              ? '● Push Git en cours vers le dépôt distant...'
+              : delivery.pushStatus === 'FAILED'
+              ? `✕ Échec du push Git (${delivery.pushError || 'erreur'}).`
+              : delivery.ciStatus === 'TERMINAL_SUCCESS' &&
+                (!delivery.trackedSha || delivery.ciRun?.head_sha === delivery.trackedSha)
+              ? `✓ Livraison et CI validées${delivery.trackedSha ? ` (${delivery.trackedSha.slice(0, 7)})` : ''}.`
               : delivery.ciStatus === 'TERMINAL_FAILURE'
-              ? '✕ Échec de la CI GitHub — intervention requise.'
+              ? `✕ Échec de la CI GitHub${delivery.trackedSha ? ` (${delivery.trackedSha.slice(0, 7)})` : ''} — action requise.`
+              : delivery.ciStatus === 'RUNNING'
+              ? `● Vérification CI en cours sur GitHub${delivery.trackedSha ? ` (${delivery.trackedSha.slice(0, 7)})` : ''}.`
+              : delivery.ciStatus === 'QUEUED' || delivery.ciStatus === 'WAITING_WORKFLOW'
+              ? `● En attente du workflow GitHub${delivery.trackedSha ? ` (${delivery.trackedSha.slice(0, 7)})` : ''}.`
+              : delivery.ciStatus === 'RUN_NOT_FOUND_FOR_SHA' || delivery.ciStatus === 'NOT_FOUND'
+              ? `⚠ Aucun workflow CI trouvé pour le commit ${delivery.trackedSha ? delivery.trackedSha.slice(0, 7) : 'suivi'}.`
+              : delivery.ciStatus === 'POLLING_FAILED_TIMEOUT'
+              ? '⚠ Délai dépassé lors de la vérification CI GitHub.'
+              : delivery.ciStatus === 'POLLING_FAILED_NETWORK'
+              ? '✕ Erreur réseau lors de la vérification CI GitHub.'
+              : delivery.trackedSha
+              ? `Commit ${delivery.trackedSha.slice(0, 7)} en attente de vérification.`
               : 'Pipeline hermétique prêt pour l’exécution.'}
           </p>
         </button>
@@ -294,9 +403,13 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           <p className="text-xs text-slate-400">
             {selfImprovement.isRunning
               ? '● Boucle d’amélioration active en cours d’évaluation.'
+              : selfImprovement.currentCycle &&
+                (selfImprovement.currentCycle.status === 'FAILED' ||
+                  selfImprovement.currentCycle.status === 'ROLLED_BACK')
+              ? `⚠ Dernier cycle d’auto-amélioration : ${selfImprovement.currentCycle.status}.`
               : jules.activeSession
               ? `Session Google Jules (${jules.activeSession.state}).`
-              : 'Routage optimal actif avec isolation des quotas.'}
+              : `Modèle actif : ${chosenModel} (${activeProvider.toUpperCase()}).`}
           </p>
         </button>
       </div>
