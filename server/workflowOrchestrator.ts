@@ -1519,30 +1519,26 @@ export class WorkflowOrchestrator {
    * Helper to persist workflow state changes to SessionStore
    */
   public async persistWorkflow(state: WorkflowState): Promise<void> {
-    if (this.sessionStore.saveWorkflowState) {
-      await this.sessionStore.saveWorkflowState(state.sessionId, state).then(() => {
-        if (state.finalReport) {
-          console.log(`[WorkflowLog] [report_persisted] workflowId=${state.workflowId}`);
-        }
-      }).catch((err) => {
-        console.warn('[WorkflowOrchestrator] Failed to save workflow state to store:', err.message);
-      });
-    } else {
-      await this.sessionStore.updateSession(state.sessionId, {
-        status: state.status,
-        prUrl: state.prUrl,
-        gitBranch: state.gitBranch,
-        error: state.error,
-        summary: state.summary,
-        workflowState: state,
-        updatedAt: new Date().toISOString(),
-      }).then(() => {
-        if (state.finalReport) {
-          console.log(`[WorkflowLog] [report_persisted] workflowId=${state.workflowId}`);
-        }
-      }).catch((err) => {
-        console.warn('[WorkflowOrchestrator] Failed to update session in store:', err.message);
-      });
+    try {
+      if (this.sessionStore.saveWorkflowState) {
+        await this.sessionStore.saveWorkflowState(state.sessionId, state);
+      } else {
+        await this.sessionStore.updateSession(state.sessionId, {
+          status: state.status,
+          prUrl: state.prUrl,
+          gitBranch: state.gitBranch,
+          error: state.error,
+          summary: state.summary,
+          workflowState: state,
+          updatedAt: new Date().toISOString(),
+        });
+      }
+      if (state.finalReport) {
+        console.log(`[WorkflowLog] [report_persisted] workflowId=${state.workflowId}`);
+      }
+    } catch (err: any) {
+      console.error(`[WorkflowOrchestrator] [persist_failed] workflowId=${state.workflowId} error=${err.message}`);
+      throw err;
     }
   }
 }

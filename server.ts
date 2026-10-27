@@ -1796,6 +1796,52 @@ async function startServer() {
       }
     }
 
+    // Ensure workflow is registered and persisted BEFORE opening SSE stream or emitting init
+    try {
+      const existing = await workflowOrchestrator.getWorkflow(workflowId);
+      if (!existing) {
+        const repoTarget = repositoryName || repository || 'MohamedGH/agentTeam';
+        const repoCheck = validateAllowedRepository(repoTarget);
+        if (!repoCheck.valid) {
+          return res.status(400).json({ error: repoCheck.error, workflowId });
+        }
+        const branchCheck = validateGitBranch(branch || 'main');
+        if (!branchCheck.valid) {
+          return res.status(400).json({ error: branchCheck.error, workflowId });
+        }
+
+        const initialWorkflowState: WorkflowState = {
+          workflowId,
+          sessionId: workflowId.replace(/^wf_/, ''),
+          agentId: codingAgent || 'team',
+          repository: repoCheck.normalized,
+          branch: branchCheck.normalized,
+          task: prompt,
+          stage: codingAgent === 'jules' || codingAgent === 'mock' ? 'JULES_RUNNING' : 'TESTING',
+          status: 'IN_PROGRESS',
+          executionStatus: 'RUNNING',
+          options: {
+            workflowId,
+            taskPrompt: prompt,
+            repository: repoCheck.normalized,
+            branch: branchCheck.normalized,
+            agent: codingAgent,
+            tier: tierCheck.normalized,
+            model,
+            provider,
+          },
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          steps: [],
+        };
+        await workflowOrchestrator.registerWorkflow(initialWorkflowState);
+        console.log(`[WorkflowLog] [registered] workflowId=${workflowId}`);
+      }
+    } catch (err: any) {
+      console.error(`[WorkflowLog] [registration_failed] workflowId=${workflowId} error=${err.message}`);
+      return res.status(500).json({ error: `Failed to register workflow: ${err.message}`, workflowId });
+    }
+
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
@@ -1817,11 +1863,13 @@ async function startServer() {
     console.log(`[WorkflowLog] [created] workflowId=${workflowId}`);
 
     req.on('close', () => {
-      isClientConnected = false;
-      console.log(`[WorkflowLog] [sse_disconnected] workflowId=${workflowId}`);
+      if (!res.writableEnded) {
+        isClientConnected = false;
+        console.log(`[WorkflowLog] [sse_disconnected] workflowId=${workflowId}`);
+      }
     });
 
-    // 1. Emit init event immediately so client knows stable workflowId
+    // Emit init event only AFTER successful registration and header setup
     safeWrite(`data: ${JSON.stringify({ type: 'init', workflowId })}\n\n`);
 
     // 2. Start heartbeat timer every 8 seconds to prevent proxy/browser timeout during long steps
@@ -1983,33 +2031,6 @@ async function startServer() {
       };
       listeners.add(clientListener);
       req.on('close', () => listeners.delete(clientListener));
-
-      // Register initial WorkflowState in workflowOrchestrator
-      const initialWorkflowState: WorkflowState = {
-        workflowId,
-        sessionId: workflowId.replace(/^wf_/, ''),
-        agentId: codingAgent || 'team',
-        repository: repoCheck.normalized,
-        branch: branchCheck.normalized,
-        task: prompt,
-        stage: codingAgent === 'jules' || codingAgent === 'mock' ? 'JULES_RUNNING' : 'TESTING',
-        status: 'IN_PROGRESS',
-        executionStatus: 'RUNNING',
-        options: {
-          workflowId,
-          taskPrompt: prompt,
-          repository: repoCheck.normalized,
-          branch: branchCheck.normalized,
-          agent: codingAgent,
-          tier: tierCheck.normalized,
-          model,
-          provider,
-        },
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        steps: accumulatedSteps,
-      };
-      await workflowOrchestrator.registerWorkflow(initialWorkflowState);
 
       // Create execution promise based on agent type
       let runPromise: Promise<any>;
