@@ -12,6 +12,7 @@ import {
   WorkflowState,
   deriveExecutionStatus,
   isTerminalState,
+  normalizeWorkflowId,
 } from './codingAgents/types';
 import {
   ICodingAgentSessionStore,
@@ -1250,51 +1251,86 @@ export class WorkflowOrchestrator {
 
   public async getWorkflow(id: string): Promise<WorkflowState | null> {
     if (!id || typeof id !== 'string') return null;
-    const cleanId = id.replace(/^sessions\//, '').replace(/^wf_/, '');
-    const inMem = 
-      this.activeWorkflows.get(id) || 
-      this.activeWorkflows.get(cleanId) || 
-      this.activeWorkflows.get(`wf_${cleanId}`) ||
-      Array.from(this.activeWorkflows.values()).find(
-        (w) => w.workflowId === id || w.workflowId === cleanId || w.workflowId === `wf_${cleanId}` || w.sessionId === cleanId
-      );
+    const { canonicalWorkflowId, sessionId, rawId, prefixedSessionId } = normalizeWorkflowId(id);
+
+    // 1. Check in-memory active workflows
+    let inMem = 
+      this.activeWorkflows.get(canonicalWorkflowId) || 
+      this.activeWorkflows.get(sessionId) || 
+      this.activeWorkflows.get(rawId) ||
+      this.activeWorkflows.get(prefixedSessionId);
+
+    if (!inMem) {
+      const mappedWfId = this.sessionToWorkflowMap.get(sessionId);
+      if (mappedWfId) inMem = this.activeWorkflows.get(mappedWfId);
+      const mappedSessId = this.workflowToSessionMap.get(canonicalWorkflowId);
+      if (!inMem && mappedSessId) inMem = this.activeWorkflows.get(mappedSessId);
+    }
+
+    if (!inMem) {
+      inMem = Array.from(this.activeWorkflows.values()).find((w) => {
+        const wNorm = normalizeWorkflowId(w.workflowId);
+        return (
+          wNorm.canonicalWorkflowId === canonicalWorkflowId ||
+          w.workflowId === canonicalWorkflowId ||
+          w.sessionId === sessionId ||
+          w.sessionId === rawId
+        );
+      });
+    }
+
     if (inMem) return inMem;
 
+    // 2. Query persistent store
     const stored = 
-      await this.sessionStore.getSession(id) || 
-      await this.sessionStore.getSession(cleanId) || 
-      await this.sessionStore.getSession(`wf_${cleanId}`);
+      await this.sessionStore.getSession(canonicalWorkflowId) || 
+      await this.sessionStore.getSession(sessionId) || 
+      await this.sessionStore.getSession(rawId);
 
     if (stored) {
+      let resolved: WorkflowState;
       if (stored.workflowState) {
-        return stored.workflowState;
+        resolved = {
+          ...stored.workflowState,
+          workflowId: canonicalWorkflowId,
+          sessionId,
+        };
+      } else {
+        resolved = {
+          workflowId: canonicalWorkflowId,
+          sessionId: stored.sessionId || sessionId,
+          agentId: stored.agentId || 'team',
+          repository: stored.repository || 'MohamedGH/agentTeam',
+          branch: stored.branch || 'main',
+          task: stored.task || '',
+          stage: isTerminalState(stored.status) ? (stored.status === 'COMPLETED' ? 'COMPLETED' : 'FAILED') : 'TESTING',
+          status: stored.status,
+          executionStatus: stored.status === 'COMPLETED' ? 'COMPLETED' : stored.status === 'FAILED' ? 'FAILED' : 'RUNNING',
+          steps: stored.activities ? stored.activities.map((a: any, idx: number) => ({
+            id: a.id || `step_${idx}`,
+            phase: a.phase || 1,
+            agent: a.agent || 'developer',
+            action: a.action || a.description || 'Activity',
+            output: a.output || a.result,
+            timestamp: a.createTime ? new Date(a.createTime).getTime() : Date.now(),
+          })) : [],
+          finalReport: (stored as any).finalReport || (stored.workflowState as any)?.finalReport || null,
+          error: stored.error || null,
+          summary: stored.summary || null,
+          prUrl: stored.prUrl || undefined,
+          gitBranch: stored.gitBranch || undefined,
+          createdAt: stored.createdAt,
+          updatedAt: stored.updatedAt,
+        } as WorkflowState;
       }
-      return {
-        workflowId: stored.metadata?.workflowId || `wf_${stored.sessionId}`,
-        sessionId: stored.sessionId,
-        agentId: stored.agentId || 'team',
-        repository: stored.repository || 'MohamedGH/agentTeam',
-        branch: stored.branch || 'main',
-        task: stored.task || '',
-        stage: isTerminalState(stored.status) ? (stored.status === 'COMPLETED' ? 'COMPLETED' : 'FAILED') : 'TESTING',
-        status: stored.status,
-        executionStatus: stored.status === 'COMPLETED' ? 'COMPLETED' : stored.status === 'FAILED' ? 'FAILED' : 'RUNNING',
-        steps: stored.activities ? stored.activities.map((a: any, idx: number) => ({
-          id: a.id || `step_${idx}`,
-          phase: a.phase || 1,
-          agent: a.agent || 'developer',
-          action: a.action || a.description || 'Activity',
-          output: a.output || a.result,
-          timestamp: a.createTime ? new Date(a.createTime).getTime() : Date.now(),
-        })) : [],
-        finalReport: (stored as any).finalReport || null,
-        error: stored.error || null,
-        summary: stored.summary || null,
-        prUrl: stored.prUrl || undefined,
-        gitBranch: stored.gitBranch || undefined,
-        createdAt: stored.createdAt,
-        updatedAt: stored.updatedAt,
-      } as WorkflowState;
+
+      // Restore in-memory mappings and active workflows registry
+      this.workflowToSessionMap.set(canonicalWorkflowId, sessionId);
+      this.sessionToWorkflowMap.set(sessionId, canonicalWorkflowId);
+      this.activeWorkflows.set(canonicalWorkflowId, resolved);
+      this.activeWorkflows.set(sessionId, resolved);
+
+      return resolved;
     }
 
     return null;
@@ -1459,33 +1495,62 @@ export class WorkflowOrchestrator {
    * Register or persist an external workflow (e.g. multi-agent team execution)
    */
   public async registerWorkflow(state: WorkflowState): Promise<WorkflowState> {
-    const cleanId = state.workflowId.replace(/^wf_/, '');
-    const sessionId = state.sessionId || cleanId;
-    this.workflowToSessionMap.set(state.workflowId, sessionId);
-    this.sessionToWorkflowMap.set(sessionId, state.workflowId);
+    const { canonicalWorkflowId, sessionId } = normalizeWorkflowId(state.workflowId || state.sessionId);
+    state.workflowId = canonicalWorkflowId;
+    state.sessionId = sessionId;
 
-    this.activeWorkflows.set(state.workflowId, state);
+    // RULE: Terminal states are preserved upon reconnect or re-registration
+    const existing = await this.getWorkflow(canonicalWorkflowId);
+    if (existing && (isTerminalState(existing.status) || existing.stage === 'COMPLETED' || existing.stage === 'FAILED' || existing.stage === 'CANCELLED')) {
+      console.warn(`[WorkflowOrchestrator] Terminal state preservation: rejecting overwrite of completed workflow ${canonicalWorkflowId} (${existing.status})`);
+      return existing;
+    }
+
+    try {
+      await this.persistWorkflow(state);
+    } catch (err: any) {
+      this.activeWorkflows.delete(canonicalWorkflowId);
+      this.activeWorkflows.delete(sessionId);
+      this.workflowToSessionMap.delete(canonicalWorkflowId);
+      this.sessionToWorkflowMap.delete(sessionId);
+      throw new Error(`[WorkflowOrchestrator] Échec persistance lors de l'enregistrement du workflow ${canonicalWorkflowId}: ${err.message}`);
+    }
+
+    this.workflowToSessionMap.set(canonicalWorkflowId, sessionId);
+    this.sessionToWorkflowMap.set(sessionId, canonicalWorkflowId);
+    this.activeWorkflows.set(canonicalWorkflowId, state);
     this.activeWorkflows.set(sessionId, state);
-    await this.persistWorkflow(state);
-    return state;
+
+    // Verify registration was successful and retrievable
+    const verified = await this.getWorkflow(canonicalWorkflowId);
+    if (!verified) {
+      this.activeWorkflows.delete(canonicalWorkflowId);
+      this.activeWorkflows.delete(sessionId);
+      this.workflowToSessionMap.delete(canonicalWorkflowId);
+      this.sessionToWorkflowMap.delete(sessionId);
+      throw new Error(`Failed to verify persisted registration for workflow "${canonicalWorkflowId}"`);
+    }
+
+    return verified;
   }
 
   /**
    * Update and persist an existing workflow state
    */
   public async updateWorkflow(workflowId: string, updates: Partial<WorkflowState>): Promise<WorkflowState | null> {
-    const existing = await this.getWorkflow(workflowId);
+    const { canonicalWorkflowId, sessionId } = normalizeWorkflowId(workflowId);
+    const existing = await this.getWorkflow(canonicalWorkflowId);
     if (!existing) return null;
 
     const updated: WorkflowState = {
       ...existing,
       ...updates,
+      workflowId: canonicalWorkflowId,
+      sessionId: updates.sessionId || existing.sessionId || sessionId,
       updatedAt: new Date().toISOString(),
     };
 
-    const cleanId = updated.workflowId.replace(/^wf_/, '');
-    const sessionId = updated.sessionId || cleanId;
-    this.activeWorkflows.set(updated.workflowId, updated);
+    this.activeWorkflows.set(canonicalWorkflowId, updated);
     this.activeWorkflows.set(sessionId, updated);
     await this.persistWorkflow(updated);
     return updated;
@@ -1495,11 +1560,14 @@ export class WorkflowOrchestrator {
    * Explicitly cancel an active workflow
    */
   public async cancelWorkflow(id: string): Promise<WorkflowState | null> {
-    const existing = await this.getWorkflow(id);
+    const { canonicalWorkflowId, sessionId } = normalizeWorkflowId(id);
+    const existing = await this.getWorkflow(canonicalWorkflowId);
     if (!existing) return null;
 
     const updated: WorkflowState = {
       ...existing,
+      workflowId: canonicalWorkflowId,
+      sessionId: existing.sessionId || sessionId,
       status: 'CANCELLED',
       stage: 'CANCELLED',
       executionStatus: 'CANCELLED',
@@ -1507,9 +1575,7 @@ export class WorkflowOrchestrator {
       updatedAt: new Date().toISOString(),
     };
 
-    const cleanId = updated.workflowId.replace(/^wf_/, '');
-    const sessionId = updated.sessionId || cleanId;
-    this.activeWorkflows.set(updated.workflowId, updated);
+    this.activeWorkflows.set(canonicalWorkflowId, updated);
     this.activeWorkflows.set(sessionId, updated);
     await this.persistWorkflow(updated);
     return updated;
@@ -1519,11 +1585,15 @@ export class WorkflowOrchestrator {
    * Helper to persist workflow state changes to SessionStore
    */
   public async persistWorkflow(state: WorkflowState): Promise<void> {
+    const { canonicalWorkflowId, sessionId } = normalizeWorkflowId(state.workflowId || state.sessionId);
+    state.workflowId = canonicalWorkflowId;
+    state.sessionId = sessionId;
+
     try {
       if (this.sessionStore.saveWorkflowState) {
-        await this.sessionStore.saveWorkflowState(state.sessionId, state);
+        await this.sessionStore.saveWorkflowState(sessionId, state);
       } else {
-        await this.sessionStore.updateSession(state.sessionId, {
+        await this.sessionStore.updateSession(sessionId, {
           status: state.status,
           prUrl: state.prUrl,
           gitBranch: state.gitBranch,

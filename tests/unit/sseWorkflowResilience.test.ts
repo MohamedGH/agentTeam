@@ -1,4 +1,7 @@
 import assert from 'assert';
+import path from 'path';
+import os from 'os';
+import fs from 'fs';
 import {
   workflowReducer,
   WorkflowStateManager,
@@ -7,18 +10,20 @@ import {
 import { AgentStep, FinalReport } from '../../src/types';
 import { WorkflowOrchestrator } from '../../server/workflowOrchestrator';
 import { FileBackedCodingAgentSessionStore as MockSessionStore } from '../../server/codingAgents/sessionStore';
+import { normalizeWorkflowId } from '../../server/codingAgents/types';
 import { setInMemoryApiKey, apiFetch } from '../../src/utils/apiFetch';
 
 export async function runSseWorkflowResilienceUnitTests(): Promise<void> {
   console.log('\n--- Running SSE Workflow Resilience & Report Recovery Tests ---');
 
   // Helper to instantiate hermetic test orchestrator
-  function createTestOrchestrator() {
-    const sessionStore = new MockSessionStore();
+  function createTestOrchestrator(customPath?: string) {
+    const filePath = customPath || path.join(os.tmpdir(), `test_sse_store_${Date.now()}_${Math.random().toString(36).slice(2)}.json`);
+    const sessionStore = new MockSessionStore(filePath);
     const orchestrator = new WorkflowOrchestrator({
       sessionStore,
     });
-    return { orchestrator, sessionStore };
+    return { orchestrator, sessionStore, filePath };
   }
 
   const validMockReport: FinalReport = {
@@ -326,7 +331,239 @@ export async function runSseWorkflowResilienceUnitTests(): Promise<void> {
     }
   }
 
-  console.log('\n🎉 ALL 9 SSE WORKFLOW RESILIENCE SCENARIOS PASSED (100%)\n');
+  // Scenario 10: Enregistrer et retrouver immédiatement le workflow (wf_1793132802737_4erhe) avec vérification de présence
+  {
+    const { orchestrator } = createTestOrchestrator();
+    const wId = 'wf_1793132802737_4erhe';
+    const registered = await orchestrator.registerWorkflow({
+      workflowId: wId,
+      sessionId: 'sess_1793132802737_4erhe',
+      agentId: 'team',
+      repository: 'MohamedGH/agentTeam',
+      branch: 'main',
+      task: 'Verify verifiable registration of wf_1793132802737_4erhe',
+      stage: 'QUEUED',
+      status: 'QUEUED',
+      executionStatus: 'RUNNING',
+      options: {},
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      steps: [],
+    });
+    assert.ok(registered, 'Registration must return persisted workflow state');
+    assert.strictEqual(registered.workflowId, wId);
+
+    // Immediate lookup
+    const retrieved = await orchestrator.getWorkflow(wId);
+    assert.ok(retrieved, 'Immediate lookup must successfully find registered workflow');
+    assert.strictEqual(retrieved?.workflowId, wId);
+    assert.strictEqual(retrieved?.status, 'QUEUED');
+    console.log('✅ PASS [Scenario 10]: Workflow registered and immediately verified in state store');
+  }
+
+  // Scenario 11: Éviction du registre mémoire -> rechargement depuis le disque et rétablissement des mappings
+  {
+    const customFilePath = path.join(os.tmpdir(), `test_evict_${Date.now()}_${Math.random().toString(36).slice(2)}.json`);
+    const sessionStore = new MockSessionStore(customFilePath);
+    const orchestrator = new WorkflowOrchestrator({ sessionStore });
+    const wId = 'wf_1793132802737_evict';
+
+    await orchestrator.registerWorkflow({
+      workflowId: wId,
+      sessionId: 'sess_evict_11',
+      agentId: 'team',
+      repository: 'MohamedGH/agentTeam',
+      branch: 'main',
+      task: 'Memory eviction recovery test',
+      stage: 'QUEUED',
+      status: 'QUEUED',
+      executionStatus: 'RUNNING',
+      options: {},
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      steps: [],
+    });
+
+    // Wipe memory registry completely to simulate memory pressure / server restart
+    (orchestrator as any).activeWorkflows.clear();
+    (orchestrator as any).workflowToSessionMap.clear();
+    (orchestrator as any).sessionToWorkflowMap.clear();
+    assert.strictEqual((orchestrator as any).activeWorkflows.size, 0);
+
+    // Lookup from orchestrator: must transparently hit sessionStore disk and restore in-memory maps
+    const recovered = await orchestrator.getWorkflow(wId);
+    assert.ok(recovered, 'Workflow must be recovered from persistent store after memory wipe');
+    assert.strictEqual(recovered?.workflowId, wId);
+    assert.strictEqual((orchestrator as any).activeWorkflows.has(wId), true, 'In-memory activeWorkflows map restored');
+    assert.strictEqual((orchestrator as any).workflowToSessionMap.has(wId), true, 'In-memory workflowToSessionMap restored');
+
+    // Clean up temp file
+    try { fs.unlinkSync(customFilePath); } catch {}
+    console.log('✅ PASS [Scenario 11]: Memory cache eviction successfully restores from persistent store and re-indexes mappings');
+  }
+
+  // Scenario 12: Recherche canonique sous toutes les variantes d'identifiant
+  {
+    const { orchestrator } = createTestOrchestrator();
+    const rawId = '1793132802737_4erhe';
+    const canonicalWfId = `wf_${rawId}`;
+
+    await orchestrator.registerWorkflow({
+      workflowId: canonicalWfId,
+      sessionId: rawId,
+      agentId: 'team',
+      repository: 'MohamedGH/agentTeam',
+      branch: 'main',
+      task: 'Canonical identification test',
+      stage: 'IN_PROGRESS',
+      status: 'IN_PROGRESS',
+      executionStatus: 'RUNNING',
+      options: {},
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      steps: [],
+    });
+
+    const variants = [
+      canonicalWfId,                         // 'wf_1793132802737_4erhe'
+      rawId,                                 // '1793132802737_4erhe'
+      `sessions/${rawId}`,                   // 'sessions/1793132802737_4erhe'
+      `sessions/${canonicalWfId}`,           // 'sessions/wf_1793132802737_4erhe'
+    ];
+
+    for (const variant of variants) {
+      const found = await orchestrator.getWorkflow(variant);
+      assert.ok(found, `Variant "${variant}" must locate the workflow`);
+      assert.strictEqual(found?.workflowId, canonicalWfId, `Variant "${variant}" must resolve to canonical ID`);
+      assert.strictEqual(found?.task, 'Canonical identification test');
+    }
+    console.log('✅ PASS [Scenario 12]: All identifier representations resolve to consistent canonical workflow state');
+  }
+
+  // Scenario 13: Défaillance de persistance à l'enregistrement -> Erreur explicite, pas d'annonce erronée
+  {
+    const failingStore: any = {
+      saveWorkflowState: async () => {
+        throw new Error('Disk quota exceeded (EIO / ENOSPC)');
+      },
+      saveSession: async () => {
+        throw new Error('Disk quota exceeded (EIO / ENOSPC)');
+      },
+      getSession: async () => null,
+      listActiveWorkflows: async () => [],
+    };
+    const brokenOrchestrator = new WorkflowOrchestrator({ sessionStore: failingStore });
+
+    let threwError = false;
+    try {
+      await brokenOrchestrator.registerWorkflow({
+        workflowId: 'wf_fail_persist_13',
+        sessionId: 'fail_persist_13',
+        agentId: 'team',
+        repository: 'MohamedGH/agentTeam',
+        branch: 'main',
+        task: 'Persistence failure test',
+        stage: 'QUEUED',
+        status: 'QUEUED',
+        executionStatus: 'RUNNING',
+        options: {},
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        steps: [],
+      });
+    } catch (err: any) {
+      threwError = true;
+      assert.ok(err.message.includes('Disk quota exceeded') || err.message.includes('Échec persistance'), 'Error message must reflect persistence failure');
+    }
+
+    assert.strictEqual(threwError, true, 'registerWorkflow must strictly throw when persistent store fails');
+    // Ensure it is not left as an active available workflow
+    const checked = await brokenOrchestrator.getWorkflow('wf_fail_persist_13');
+    assert.strictEqual(checked, null, 'Workflow must not be announced or retrievable when persistence failed');
+    console.log('✅ PASS [Scenario 13]: Persistence failure raises explicit error and leaves no phantom active workflow');
+  }
+
+  // Scenario 14: Deux workflows distincts simultanés avec isolation stricte des états et rapports
+  {
+    const { orchestrator } = createTestOrchestrator();
+    const wId1 = 'wf_simul_alpha_1';
+    const wId2 = 'wf_simul_beta_2';
+
+    const reportAlpha: FinalReport = {
+      summary: 'Alpha completed perfectly',
+      tests: 'PASS',
+      review: 'APPROVED',
+      filesChanged: ['alpha.ts'],
+      nextSteps: ['Release alpha'],
+    };
+
+    // Register both
+    await orchestrator.registerWorkflow({
+      workflowId: wId1,
+      sessionId: 'sess_alpha',
+      agentId: 'team',
+      repository: 'MohamedGH/agentTeam',
+      branch: 'feature-alpha',
+      task: 'Alpha task',
+      stage: 'IN_PROGRESS',
+      status: 'IN_PROGRESS',
+      executionStatus: 'RUNNING',
+      options: {},
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      steps: [{ id: 's1', phase: 1, agent: 'manager', action: 'Alpha Plan', timestamp: Date.now() }],
+    });
+
+    await orchestrator.registerWorkflow({
+      workflowId: wId2,
+      sessionId: 'sess_beta',
+      agentId: 'team',
+      repository: 'MohamedGH/agentTeam',
+      branch: 'feature-beta',
+      task: 'Beta task',
+      stage: 'IN_PROGRESS',
+      status: 'IN_PROGRESS',
+      executionStatus: 'RUNNING',
+      options: {},
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      steps: [{ id: 's2', phase: 1, agent: 'manager', action: 'Beta Plan', timestamp: Date.now() }],
+    });
+
+    // Complete Alpha
+    await orchestrator.updateWorkflow(wId1, {
+      stage: 'COMPLETED',
+      status: 'COMPLETED',
+      executionStatus: 'COMPLETED',
+      finalReport: reportAlpha,
+    });
+
+    // Fail Beta
+    await orchestrator.updateWorkflow(wId2, {
+      stage: 'FAILED',
+      status: 'FAILED',
+      executionStatus: 'FAILED',
+      error: 'Type check failed in beta.ts',
+    });
+
+    // Retrieve Alpha
+    const alphaState = await orchestrator.getWorkflow(wId1);
+    assert.strictEqual(alphaState?.status, 'COMPLETED');
+    assert.strictEqual(alphaState?.branch, 'feature-alpha');
+    assert.strictEqual(alphaState?.finalReport?.summary, 'Alpha completed perfectly');
+    assert.strictEqual(alphaState?.error, undefined);
+
+    // Retrieve Beta
+    const betaState = await orchestrator.getWorkflow(wId2);
+    assert.strictEqual(betaState?.status, 'FAILED');
+    assert.strictEqual(betaState?.branch, 'feature-beta');
+    assert.strictEqual(betaState?.finalReport, undefined);
+    assert.strictEqual(betaState?.error, 'Type check failed in beta.ts');
+
+    console.log('✅ PASS [Scenario 14]: Concurrent workflows maintain complete isolation of states, branches, and reports');
+  }
+
+  console.log('\n🎉 ALL 14 SSE WORKFLOW RESILIENCE & PERSISTENCE SCENARIOS PASSED (100%)\n');
 }
 
 if (import.meta.url.endsWith(process.argv[1]) || process.argv[1]?.includes('sseWorkflowResilience')) {

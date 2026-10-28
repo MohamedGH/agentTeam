@@ -302,3 +302,45 @@ export interface WorkflowState {
   downstreamExecuting?: boolean;
 }
 
+/**
+ * Canonical Workflow ID Normalization
+ * 
+ * Ensures any variant (e.g. "wf_1793132802737_4erhe", "1793132802737_4erhe",
+ * "sessions/1793132802737_4erhe", "sessions/wf_1793132802737_4erhe")
+ * resolves deterministically to the identical canonical identity.
+ */
+export interface NormalizedWorkflowIdentity {
+  canonicalWorkflowId: string; // e.g. "wf_1793132802737_4erhe"
+  sessionId: string;           // e.g. "1793132802737_4erhe"
+  prefixedSessionId: string;   // e.g. "sessions/1793132802737_4erhe"
+  rawId: string;
+}
+
+export function normalizeWorkflowId(id: string | null | undefined): NormalizedWorkflowIdentity {
+  const rawId = (id || '').trim();
+  let stripped = rawId;
+  let changed = true;
+  while (changed && stripped.length > 0) {
+    changed = false;
+    if (stripped.startsWith('sessions/')) {
+      stripped = stripped.slice('sessions/'.length);
+      changed = true;
+    }
+    if (stripped.startsWith('wf_')) {
+      stripped = stripped.slice('wf_'.length);
+      changed = true;
+    }
+  }
+
+  const cleanSessionId = stripped || rawId;
+  const canonicalWorkflowId = stripped ? `wf_${stripped}` : (rawId.startsWith('wf_') ? rawId : `wf_${rawId}`);
+  const prefixedSessionId = `sessions/${cleanSessionId}`;
+
+  return {
+    canonicalWorkflowId,
+    sessionId: cleanSessionId,
+    prefixedSessionId,
+    rawId,
+  };
+}
+

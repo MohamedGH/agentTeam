@@ -9,7 +9,7 @@ import { quotaManager } from './server/quotaManager';
 import { workspace } from './server/virtualWorkspace';
 import { agentTeamEngine } from './server/agentTeam';
 import { codingAgentManager } from './server/codingAgents';
-import { WorkflowState, isTerminalState } from './server/codingAgents/types';
+import { WorkflowState, isTerminalState, normalizeWorkflowId } from './server/codingAgents/types';
 import { AgentStep } from './src/types';
 import { workflowOrchestrator } from './server/workflowOrchestrator';
 import { cloudMonitoringQuotaService } from './server/cloudMonitoring';
@@ -949,10 +949,10 @@ async function startServer() {
       if (!idCheck.valid) {
         return res.status(400).json({ error: idCheck.error });
       }
-      const id = idCheck.normalized;
-      const workflow = await workflowOrchestrator.getWorkflow(id);
+      const norm = normalizeWorkflowId(idCheck.normalized);
+      const workflow = await workflowOrchestrator.getWorkflow(norm.canonicalWorkflowId);
       if (!workflow) {
-        return res.status(404).json({ error: `Workflow "${id}" not found` });
+        return res.status(404).json({ error: `Workflow "${norm.canonicalWorkflowId}" not found` });
       }
       res.json({ success: true, workflow });
     } catch (err: any) {
@@ -966,14 +966,14 @@ async function startServer() {
       if (!idCheck.valid) {
         return res.status(400).json({ error: idCheck.error });
       }
-      const id = idCheck.normalized;
-      const workflow = await workflowOrchestrator.getWorkflow(id);
+      const norm = normalizeWorkflowId(idCheck.normalized);
+      const workflow = await workflowOrchestrator.getWorkflow(norm.canonicalWorkflowId);
       if (!workflow) {
-        return res.status(404).json({ error: `Workflow "${id}" not found` });
+        return res.status(404).json({ error: `Workflow "${norm.canonicalWorkflowId}" not found` });
       }
       res.json({
         success: true,
-        workflowId: id,
+        workflowId: workflow.workflowId,
         status: workflow.status,
         stage: workflow.stage,
         executionStatus: workflow.executionStatus,
@@ -992,8 +992,8 @@ async function startServer() {
       if (!idCheck.valid) {
         return res.status(400).json({ error: idCheck.error });
       }
-      const id = idCheck.normalized;
-      const workflow = await workflowOrchestrator.pollWorkflow(id);
+      const norm = normalizeWorkflowId(idCheck.normalized);
+      const workflow = await workflowOrchestrator.pollWorkflow(norm.canonicalWorkflowId);
       res.json({ success: true, workflow });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -1006,10 +1006,10 @@ async function startServer() {
       if (!idCheck.valid) {
         return res.status(400).json({ error: idCheck.error });
       }
-      const id = idCheck.normalized;
-      const workflow = await workflowOrchestrator.resumeWorkflow(id);
+      const norm = normalizeWorkflowId(idCheck.normalized);
+      const workflow = await workflowOrchestrator.resumeWorkflow(norm.canonicalWorkflowId);
       if (!workflow) {
-        return res.status(404).json({ error: `Workflow "${id}" not found` });
+        return res.status(404).json({ error: `Workflow "${norm.canonicalWorkflowId}" not found` });
       }
       res.json({ success: true, workflow });
     } catch (err: any) {
@@ -1023,19 +1023,25 @@ async function startServer() {
       if (!idCheck.valid) {
         return res.status(400).json({ error: idCheck.error });
       }
-      const id = idCheck.normalized;
-      const workflow = await workflowOrchestrator.cancelWorkflow(id);
-      if (!workflow) {
-        return res.status(404).json({ error: `Workflow "${id}" not found` });
+      const norm = normalizeWorkflowId(idCheck.normalized);
+      const cancelled = await workflowOrchestrator.cancelWorkflow(norm.canonicalWorkflowId);
+      if (!cancelled) {
+        return res.status(404).json({ error: `Workflow "${norm.canonicalWorkflowId}" not found` });
       }
-      // Broadcast cancellation to in-flight SSE stream listeners
-      const inFlight = inFlightWorkflowExecutions.get(id);
+
+      const inFlight = inFlightWorkflowExecutions.get(norm.canonicalWorkflowId);
       if (inFlight) {
-        for (const l of inFlight.listeners) {
-          l({ type: 'cancelled', workflowId: id, error: 'Workflow annulé par l’utilisateur.' });
+        const cancelEvent = {
+          type: 'cancelled',
+          workflowId: norm.canonicalWorkflowId,
+          error: 'Workflow cancelled by user',
+        };
+        for (const listener of inFlight.listeners) {
+          try { listener(cancelEvent); } catch {}
         }
       }
-      res.json({ success: true, workflow });
+
+      res.json({ success: true, workflow: cancelled });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -1796,50 +1802,56 @@ async function startServer() {
       }
     }
 
-    // Ensure workflow is registered and persisted BEFORE opening SSE stream or emitting init
-    try {
-      const existing = await workflowOrchestrator.getWorkflow(workflowId);
-      if (!existing) {
-        const repoTarget = repositoryName || repository || 'MohamedGH/agentTeam';
-        const repoCheck = validateAllowedRepository(repoTarget);
-        if (!repoCheck.valid) {
-          return res.status(400).json({ error: repoCheck.error, workflowId });
-        }
-        const branchCheck = validateGitBranch(branch || 'main');
-        if (!branchCheck.valid) {
-          return res.status(400).json({ error: branchCheck.error, workflowId });
-        }
+    const normId = normalizeWorkflowId(workflowId);
+    workflowId = normId.canonicalWorkflowId;
 
-        const initialWorkflowState: WorkflowState = {
-          workflowId,
-          sessionId: workflowId.replace(/^wf_/, ''),
-          agentId: codingAgent || 'team',
+    // Check if workflow ALREADY existed before this request (Reconnection scenario)
+    const existingBefore = await workflowOrchestrator.getWorkflow(workflowId);
+    const isReconnection = existingBefore !== null;
+
+    if (!isReconnection) {
+      const repoTarget = repositoryName || repository || 'MohamedGH/agentTeam';
+      const repoCheck = validateAllowedRepository(repoTarget);
+      if (!repoCheck.valid) {
+        return res.status(400).json({ error: repoCheck.error, workflowId });
+      }
+      const branchCheck = validateGitBranch(branch || 'main');
+      if (!branchCheck.valid) {
+        return res.status(400).json({ error: branchCheck.error, workflowId });
+      }
+
+      const initialWorkflowState: WorkflowState = {
+        workflowId: normId.canonicalWorkflowId,
+        sessionId: normId.sessionId,
+        agentId: codingAgent || 'team',
+        repository: repoCheck.normalized,
+        branch: branchCheck.normalized,
+        task: prompt,
+        stage: codingAgent === 'jules' || codingAgent === 'mock' ? 'JULES_RUNNING' : 'TESTING',
+        status: 'IN_PROGRESS',
+        executionStatus: 'RUNNING',
+        options: {
+          workflowId: normId.canonicalWorkflowId,
+          taskPrompt: prompt,
           repository: repoCheck.normalized,
           branch: branchCheck.normalized,
-          task: prompt,
-          stage: codingAgent === 'jules' || codingAgent === 'mock' ? 'JULES_RUNNING' : 'TESTING',
-          status: 'IN_PROGRESS',
-          executionStatus: 'RUNNING',
-          options: {
-            workflowId,
-            taskPrompt: prompt,
-            repository: repoCheck.normalized,
-            branch: branchCheck.normalized,
-            agent: codingAgent,
-            tier: tierCheck.normalized,
-            model,
-            provider,
-          },
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          steps: [],
-        };
+          agent: codingAgent,
+          tier: tierCheck.normalized,
+          model,
+          provider,
+        },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        steps: [],
+      };
+
+      try {
         await workflowOrchestrator.registerWorkflow(initialWorkflowState);
         console.log(`[WorkflowLog] [registered] workflowId=${workflowId}`);
+      } catch (err: any) {
+        console.error(`[WorkflowLog] [registration_failed] workflowId=${workflowId} error=${err.message}`);
+        return res.status(500).json({ error: `Failed to register workflow: ${err.message}`, workflowId });
       }
-    } catch (err: any) {
-      console.error(`[WorkflowLog] [registration_failed] workflowId=${workflowId} error=${err.message}`);
-      return res.status(500).json({ error: `Failed to register workflow: ${err.message}`, workflowId });
     }
 
     res.setHeader('Content-Type', 'text/event-stream');
@@ -1886,9 +1898,9 @@ async function startServer() {
     }
 
     try {
-      // 3. Check if workflow already completed or in-flight (Idempotent Reconnection)
-      const existing = await workflowOrchestrator.getWorkflow(workflowId);
-      if (existing) {
+      // 3. Handle Reconnection if workflow was already existing prior to request
+      if (isReconnection && existingBefore) {
+        const existing = await workflowOrchestrator.getWorkflow(workflowId) || existingBefore;
         console.log(`[WorkflowLog] [reconnected] workflowId=${workflowId} status=${existing.status}`);
         // Stream all accumulated steps first
         if (Array.isArray(existing.steps)) {

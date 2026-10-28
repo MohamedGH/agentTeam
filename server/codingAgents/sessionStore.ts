@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { JulesActivity, JulesSessionState, WorkflowState, isTerminalState, isValidStateTransition } from './types';
+import { JulesActivity, JulesSessionState, WorkflowState, isTerminalState, isValidStateTransition, normalizeWorkflowId } from './types';
 
 /**
  * StoredCodingSession
@@ -79,8 +79,8 @@ export class FileBackedCodingAgentSessionStore implements ICodingAgentSessionSto
     }
   }
 
-  private loadFromDisk(): void {
-    if (this.isLoaded) return;
+  private loadFromDisk(forceReload = false): void {
+    if (this.isLoaded && !forceReload) return;
     try {
       this.ensureDirectoryExists(this.storageFilePath);
       if (fs.existsSync(this.storageFilePath)) {
@@ -90,7 +90,17 @@ export class FileBackedCodingAgentSessionStore implements ICodingAgentSessionSto
           if (Array.isArray(sessions)) {
             for (const s of sessions) {
               if (s && s.sessionId) {
+                const norm = normalizeWorkflowId(s.sessionId);
                 this.cache.set(s.sessionId, s);
+                this.cache.set(norm.sessionId, s);
+                this.cache.set(norm.canonicalWorkflowId, s);
+
+                const wId = s.workflowState?.workflowId || s.metadata?.workflowId;
+                if (wId) {
+                  const wNorm = normalizeWorkflowId(wId);
+                  this.cache.set(wNorm.canonicalWorkflowId, s);
+                  this.cache.set(wNorm.sessionId, s);
+                }
               }
             }
           }
@@ -106,16 +116,24 @@ export class FileBackedCodingAgentSessionStore implements ICodingAgentSessionSto
   private flushToDisk(): void {
     try {
       this.ensureDirectoryExists(this.storageFilePath);
-      const allSessions = Array.from(this.cache.values());
-      fs.writeFileSync(this.storageFilePath, JSON.stringify(allSessions, null, 2), 'utf-8');
+      const uniqueSessions = new Map<string, StoredCodingSession>();
+      for (const session of this.cache.values()) {
+        if (session && session.sessionId) {
+          const norm = normalizeWorkflowId(session.sessionId);
+          uniqueSessions.set(norm.sessionId, session);
+        }
+      }
+      fs.writeFileSync(this.storageFilePath, JSON.stringify(Array.from(uniqueSessions.values()), null, 2), 'utf-8');
     } catch (err: any) {
-      console.warn(`[SessionStore] Failed to flush sessions to ${this.storageFilePath}:`, err.message);
+      console.error(`[SessionStore] Failed to flush sessions to ${this.storageFilePath}:`, err.message);
+      throw err;
     }
   }
 
   public async saveSession(session: StoredCodingSession): Promise<StoredCodingSession> {
     this.loadFromDisk();
-    const existing = this.cache.get(session.sessionId);
+    const norm = normalizeWorkflowId(session.sessionId);
+    const existing = this.cache.get(norm.sessionId) || this.cache.get(norm.canonicalWorkflowId) || this.cache.get(session.sessionId);
 
     let effectiveStatus = session.status;
     let effectiveError = session.error || existing?.error;
@@ -143,34 +161,75 @@ export class FileBackedCodingAgentSessionStore implements ICodingAgentSessionSto
     const merged: StoredCodingSession = {
       ...existing,
       ...session,
+      sessionId: norm.sessionId,
       status: effectiveStatus,
       error: effectiveError,
       updatedAt: new Date().toISOString(),
       activities: session.activities || existing?.activities || [],
     };
+    this.cache.set(norm.sessionId, merged);
+    this.cache.set(norm.canonicalWorkflowId, merged);
     this.cache.set(session.sessionId, merged);
     this.flushToDisk();
     return merged;
   }
 
   public async getSession(sessionIdOrWorkflowId: string): Promise<StoredCodingSession | null> {
+    if (!sessionIdOrWorkflowId) return null;
+    const norm = normalizeWorkflowId(sessionIdOrWorkflowId);
     this.loadFromDisk();
-    const cleanId = sessionIdOrWorkflowId.replace(/^sessions\//, '');
-    const direct = this.cache.get(cleanId) || this.cache.get(sessionIdOrWorkflowId);
-    if (direct) return direct;
 
-    // Resolve by workflowId (custom workflow ID or prefixed wf_*)
-    for (const session of this.cache.values()) {
-      if (
-        session.workflowState?.workflowId === sessionIdOrWorkflowId ||
-        session.workflowState?.workflowId === cleanId ||
-        session.metadata?.workflowId === sessionIdOrWorkflowId ||
-        session.metadata?.workflowId === cleanId
-      ) {
-        return session;
+    let direct = 
+      this.cache.get(norm.canonicalWorkflowId) || 
+      this.cache.get(norm.sessionId) || 
+      this.cache.get(norm.rawId) || 
+      this.cache.get(norm.prefixedSessionId);
+
+    if (!direct) {
+      for (const session of this.cache.values()) {
+        const sessWorkflowId = session.workflowState?.workflowId || session.metadata?.workflowId;
+        const normSess = sessWorkflowId ? normalizeWorkflowId(sessWorkflowId) : null;
+        const normSessId = normalizeWorkflowId(session.sessionId);
+        if (
+          normSessId.sessionId === norm.sessionId ||
+          (normSess && normSess.canonicalWorkflowId === norm.canonicalWorkflowId)
+        ) {
+          direct = session;
+          break;
+        }
       }
     }
-    return null;
+
+    if (!direct) {
+      // Force disk reload in case written by another process or earlier reboot
+      this.loadFromDisk(true);
+      direct = 
+        this.cache.get(norm.canonicalWorkflowId) || 
+        this.cache.get(norm.sessionId) || 
+        this.cache.get(norm.rawId) || 
+        this.cache.get(norm.prefixedSessionId);
+
+      if (!direct) {
+        for (const session of this.cache.values()) {
+          const sessWorkflowId = session.workflowState?.workflowId || session.metadata?.workflowId;
+          const normSess = sessWorkflowId ? normalizeWorkflowId(sessWorkflowId) : null;
+          const normSessId = normalizeWorkflowId(session.sessionId);
+          if (
+            normSessId.sessionId === norm.sessionId ||
+            (normSess && normSess.canonicalWorkflowId === norm.canonicalWorkflowId)
+          ) {
+            direct = session;
+            break;
+          }
+        }
+      }
+    }
+
+    if (direct) {
+      this.cache.set(norm.canonicalWorkflowId, direct);
+      this.cache.set(norm.sessionId, direct);
+    }
+    return direct || null;
   }
 
   public async getSessionByWorkflowId(workflowId: string): Promise<StoredCodingSession | null> {
@@ -182,8 +241,11 @@ export class FileBackedCodingAgentSessionStore implements ICodingAgentSessionSto
     updates: Partial<StoredCodingSession>
   ): Promise<StoredCodingSession | null> {
     this.loadFromDisk();
-    const cleanId = sessionId.replace(/^sessions\//, '');
-    const current = this.cache.get(cleanId) || this.cache.get(sessionId);
+    const norm = normalizeWorkflowId(sessionId);
+    const current = 
+      this.cache.get(norm.sessionId) || 
+      this.cache.get(norm.canonicalWorkflowId) || 
+      this.cache.get(sessionId);
     if (!current) {
       return null;
     }
@@ -213,6 +275,7 @@ export class FileBackedCodingAgentSessionStore implements ICodingAgentSessionSto
     const updated: StoredCodingSession = {
       ...current,
       ...updates,
+      sessionId: norm.sessionId,
       status: targetStatus,
       error: targetError,
       updatedAt: new Date().toISOString(),
@@ -223,14 +286,16 @@ export class FileBackedCodingAgentSessionStore implements ICodingAgentSessionSto
     }
 
     this.cache.set(current.sessionId, updated);
+    this.cache.set(norm.sessionId, updated);
+    this.cache.set(norm.canonicalWorkflowId, updated);
     this.flushToDisk();
     return updated;
   }
 
   public async listSessions(agentId?: string): Promise<StoredCodingSession[]> {
     this.loadFromDisk();
-    const all = Array.from(this.cache.values());
-    const filtered = agentId ? all.filter((s) => s.agentId === agentId) : all;
+    const unique = Array.from(new Set(this.cache.values()));
+    const filtered = agentId ? unique.filter((s) => s.agentId === agentId) : unique;
     return filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }
 
@@ -289,8 +354,8 @@ export class FileBackedCodingAgentSessionStore implements ICodingAgentSessionSto
 
   public async listActiveWorkflows(): Promise<StoredCodingSession[]> {
     this.loadFromDisk();
-    const all = Array.from(this.cache.values());
-    return all.filter((s) => {
+    const unique = Array.from(new Set(this.cache.values()));
+    return unique.filter((s) => {
       if (!s || !s.sessionId) return false;
       const isTerminal = isTerminalState(s.status);
       const isWorkflowTerminal = s.workflowState?.stage === 'COMPLETED' || s.workflowState?.stage === 'FAILED' || s.workflowState?.stage === 'CANCELLED';
@@ -301,11 +366,18 @@ export class FileBackedCodingAgentSessionStore implements ICodingAgentSessionSto
 
   public async saveWorkflowState(sessionId: string, workflowState: WorkflowState): Promise<StoredCodingSession | null> {
     this.loadFromDisk();
-    const cleanId = sessionId.replace(/^sessions\//, '');
-    let current = this.cache.get(cleanId) || this.cache.get(sessionId);
+    const norm = normalizeWorkflowId(sessionId || workflowState.workflowId);
+    workflowState.workflowId = norm.canonicalWorkflowId;
+    workflowState.sessionId = norm.sessionId;
+
+    let current = 
+      this.cache.get(norm.sessionId) || 
+      this.cache.get(norm.canonicalWorkflowId) || 
+      this.cache.get(sessionId);
+
     if (!current) {
       current = {
-        sessionId: cleanId,
+        sessionId: norm.sessionId,
         agentId: workflowState.agentId || 'team',
         repository: workflowState.repository || 'MohamedGH/agentTeam',
         branch: workflowState.branch || 'main',
@@ -314,11 +386,12 @@ export class FileBackedCodingAgentSessionStore implements ICodingAgentSessionSto
         createdAt: workflowState.createdAt || new Date().toISOString(),
         updatedAt: workflowState.updatedAt || new Date().toISOString(),
         metadata: {
-          workflowId: workflowState.workflowId,
+          workflowId: norm.canonicalWorkflowId,
         },
         workflowState,
       };
-      this.cache.set(cleanId, current);
+      this.cache.set(norm.sessionId, current);
+      this.cache.set(norm.canonicalWorkflowId, current);
       this.flushToDisk();
       return current;
     }
@@ -327,7 +400,7 @@ export class FileBackedCodingAgentSessionStore implements ICodingAgentSessionSto
       workflowState,
       metadata: {
         ...(current?.metadata || {}),
-        workflowId: workflowState.workflowId,
+        workflowId: norm.canonicalWorkflowId,
       },
       prUrl: workflowState.prUrl || undefined,
       gitBranch: workflowState.gitBranch || undefined,
@@ -337,13 +410,21 @@ export class FileBackedCodingAgentSessionStore implements ICodingAgentSessionSto
     if (current && !isTerminalState(current.status) && workflowState.status) {
       updates.status = workflowState.status;
     }
-    return this.updateSession(sessionId, updates);
+    const updated = await this.updateSession(norm.sessionId, updates);
+    if (updated) {
+      this.cache.set(norm.canonicalWorkflowId, updated);
+      this.cache.set(norm.sessionId, updated);
+    }
+    return updated;
   }
 
   public async deleteSession(sessionId: string): Promise<boolean> {
     this.loadFromDisk();
-    const cleanId = sessionId.replace(/^sessions\//, '');
-    const existed = this.cache.delete(cleanId) || this.cache.delete(sessionId);
+    const norm = normalizeWorkflowId(sessionId);
+    const existed = this.cache.delete(norm.sessionId) || this.cache.delete(norm.canonicalWorkflowId) || this.cache.delete(sessionId);
+    this.cache.delete(norm.sessionId);
+    this.cache.delete(norm.canonicalWorkflowId);
+    this.cache.delete(sessionId);
     if (existed) {
       this.flushToDisk();
     }
